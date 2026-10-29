@@ -1,0 +1,2302 @@
+[
+  {
+    "case_id": "zh-001",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "汉字“山”的汉语拼音是什么？只写不带声调的拼音。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "shan"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "1f1721302f5727400317d07f48c886e95fe7d3408b084df524e2989be7ddca9a"
+  },
+  {
+    "case_id": "zh-002",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "“明”的部首通常归为哪一部？只写一个汉字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "日"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "bbb4b18afa26ed4c5e3c0ea175600520ff83c5f73c0398b0d68e9a58c36a52cf"
+  },
+  {
+    "case_id": "zh-003",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "“温故而知新”出自《论语》还是《孟子》？只写书名，不加书名号。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "论语"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "123604cd30f8acb570f733b729b37fa9260b601ffa3e606a5cea25e202adbd1b"
+  },
+  {
+    "case_id": "zh-004",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "“春眠不觉晓”的作者是谁？只写姓名。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "孟浩然"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "7f7a0fc15c51168ba69333924b6c434f7085843f0c211fe022e25ecfd3d88788"
+  },
+  {
+    "case_id": "zh-005",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "一年四季中，紧接夏季的是哪个季节？只写季节名。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "秋季",
+        "秋天",
+        "秋"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "e47e0b6330c90b2ea3c00f052c592c58551e8d83b010b525378742b4ba96e617"
+  },
+  {
+    "case_id": "zh-006",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "十进制的一百用阿拉伯数字怎样写？只写数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "100"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "7d0804f442cb3f1507325951f4a4f9469f585ab214e1a8fcbadc6ebd8b9cbaee"
+  },
+  {
+    "case_id": "zh-007",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "液态水的化学式是什么？只用普通英文字母和数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "H2O"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "9cb16b4e63cb295b527215b196287c0353d51b0109369ca509a96b63fe1a6e47"
+  },
+  {
+    "case_id": "zh-008",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "地球唯一的天然卫星叫什么？只写中文名称。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "月球",
+        "月亮"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "efcfac1dbd596bf0107469054b11c01f5d3bdcda483149a1ab5e48d36251d25b"
+  },
+  {
+    "case_id": "zh-009",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "太阳系中距离太阳最近的行星叫什么？只写中文名称。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "水星"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "af9a5617be40a471a572a7eeb2089d52b078a625f10e75c4328242854e1e1d51"
+  },
+  {
+    "case_id": "zh-010",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "光合作用通常吸收空气中的哪种气体？只写中文名称。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "二氧化碳"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "04a3f2a3206579b3b62a59b006f5c83135f708b9cb4b56e2054597a659dac6db"
+  },
+  {
+    "case_id": "zh-011",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "国际单位制中，长度的基本单位叫什么？只写中文名称。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "米"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "05c58a28e5bab1745c3942f907deb4350c48583ca6c52a4885101ead2f074043"
+  },
+  {
+    "case_id": "zh-012",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "国际单位制中，时间的基本单位叫什么？只写中文名称。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "秒"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "eb7998a05a2b67e3796daffbbb0ebffdba09755b24153130e1be79db74d4bbae"
+  },
+  {
+    "case_id": "zh-013",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "将“开心”换成一个常用近义词，只写“快乐”或“高兴”中的一个。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "快乐",
+        "高兴"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "b112ea5920331ef2e0eb4e60d4dc56d15e6006555ab7345aaa14a7e021ff0162"
+  },
+  {
+    "case_id": "zh-014",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "“减少”的反义词是什么？只写一个双字词。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "增加",
+        "增多"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "c36144c5e51fae9580cbefdd7c1fac02b5cdbec456ff30941b5a4b1504486c03"
+  },
+  {
+    "case_id": "zh-015",
+    "dataset_version": 1,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "“先来后到”表示按什么先后顺序办事？只写“到达”或“年龄”。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "到达"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "e1a6f367f7eff95d7f96a54534ddb2afd0f12cecdbedd1898068ed89c15aa7e7"
+  },
+  {
+    "case_id": "math-001",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "计算37+58。只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 95
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "5f2d6cb1ecb3f291787cf8d0493257185efe1f22b657eefa3ad9d7af29af20c9"
+  },
+  {
+    "case_id": "math-002",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "计算144-79。只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 65
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "83b98a95234c5d431660766322800a7a1442b71a215557a4d8ce86143a4bf207"
+  },
+  {
+    "case_id": "math-003",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "计算17×6。只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 102
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "a9fc3e9049b94f76701518b2d24ecaf514da72274f3a8dee49bd91dc49ecf30f"
+  },
+  {
+    "case_id": "math-004",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "计算156÷12。只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 13
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "70db61540c6db6d8d97c7836abf514176c063c08f495aa918820a988c69670ef"
+  },
+  {
+    "case_id": "math-005",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "计算(8+7)×3-9。只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 36
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "13937789b997ba2e9ffaf7f83539c035e7cc82e64b4fe74e9f2718baa74a15a6"
+  },
+  {
+    "case_id": "math-006",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "数列2、5、8、11的下一项是多少？只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 14
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "40ff539331de0066b6e58558ddfa68cbbc2374247e2f3029022e680d4bca8533"
+  },
+  {
+    "case_id": "math-007",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "长方形长12厘米、宽7厘米，面积是多少平方厘米？只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 84
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "151f56a4c9c141579553462c577f6298e605e07233b6c137d91db24e7c56e35d"
+  },
+  {
+    "case_id": "math-008",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "一件商品原价200元，打八折，现价是多少元？只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 160
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "ba6b226c827e0de5e74f9a23276bfae44b0eb2acf7959f710195bf90a1116d68"
+  },
+  {
+    "case_id": "math-009",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "三个整数的平均数为18，其中两个数为12和20，第三个数是多少？只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 22
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "60043034914dfec63068384bb4ba57ff25459cb1f872cef2658b4479fe7c8c0f"
+  },
+  {
+    "case_id": "math-010",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "盒中有5个红球、3个蓝球、2个绿球，一共多少个球？只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 10
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "0727139e7c23035e44b8ce686de0aea45c405853b2b9876ca2f1017bad6f07b2"
+  },
+  {
+    "case_id": "math-011",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "甲比乙大4岁，两人年龄和30岁，甲多少岁？只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 17
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "b2eae4ddcd558e9a2e0561d9fbffe5193f57e876c5c8143c51ba75ec76c4771f"
+  },
+  {
+    "case_id": "math-012",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "集合A={1,2,3,4}，B={3,4,5}，交集有几个元素？只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 2
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "43b563f9ac318b54b1f533c4de59f4a8946bd252a24aa84c29b6b23b2c0bf3af"
+  },
+  {
+    "case_id": "math-013",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "上午9:40到当天11:15共多少分钟？只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 95
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "8b291236857f4a2b9221798852550580134601c4b43e7a19fab165e76d29d82a"
+  },
+  {
+    "case_id": "math-014",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "有12人，每人和其他人恰好握手一次，一共握手多少次？只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 66
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "e2a9521b0819bbe069e31e33ce03477ed955ac2d8e9b80e368a63f11ed35abea"
+  },
+  {
+    "case_id": "math-015",
+    "dataset_version": 1,
+    "category": "math_logic",
+    "input": {
+      "prompt": "有24个物品，每盒最多放5个，至少需要几个盒子？只返回最终整数，不加单位或解释。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 5
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "dd285f743ab1730c36e04761755558db824bd28e4a332a14aa417b48da50c0ef"
+  },
+  {
+    "case_id": "code-001",
+    "dataset_version": 1,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3实现纯函数 sum_numbers。xs 为整数列表，返回所有元素的和；空列表返回0。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "sum_numbers",
+      "tests": [
+        {
+          "args": [
+            []
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            [
+              1,
+              2,
+              3
+            ]
+          ],
+          "output": 6
+        },
+        {
+          "args": [
+            [
+              -3,
+              0,
+              2
+            ]
+          ],
+          "output": -1
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "29c55681532b60eac1d9fe6e14fc9ab4d12386af0ae3e1e7ac3a8df8d6150636"
+  },
+  {
+    "case_id": "code-002",
+    "dataset_version": 1,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3实现纯函数 count_even。xs 为整数列表，返回偶数个数，0也是偶数。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "count_even",
+      "tests": [
+        {
+          "args": [
+            []
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            [
+              0,
+              1,
+              2,
+              -4
+            ]
+          ],
+          "output": 3
+        },
+        {
+          "args": [
+            [
+              1,
+              3
+            ]
+          ],
+          "output": 0
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "990e1b6d6790d796cb9024327c443150fbaf9f1004ffb01804f9f8152fe8ae83"
+  },
+  {
+    "case_id": "code-003",
+    "dataset_version": 1,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3实现纯函数 reverse_text。s 为字符串，按Unicode字符逆序返回。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "reverse_text",
+      "tests": [
+        {
+          "args": [
+            ""
+          ],
+          "output": ""
+        },
+        {
+          "args": [
+            "abc"
+          ],
+          "output": "cba"
+        },
+        {
+          "args": [
+            "你好a"
+          ],
+          "output": "a好你"
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "c08941f44674155a7014aaa646e5d54205187ba66936cb2492b0470ee5bf9758"
+  },
+  {
+    "case_id": "code-004",
+    "dataset_version": 1,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3实现纯函数 dedupe。xs 为整数列表，按首次出现顺序去重并返回列表。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "dedupe",
+      "tests": [
+        {
+          "args": [
+            []
+          ],
+          "output": []
+        },
+        {
+          "args": [
+            [
+              2,
+              1,
+              2,
+              3,
+              1
+            ]
+          ],
+          "output": [
+            2,
+            1,
+            3
+          ]
+        },
+        {
+          "args": [
+            [
+              0,
+              0
+            ]
+          ],
+          "output": [
+            0
+          ]
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "d3fd4bbc59adb89631d8f020d68936d1010a3bdc8b1e307f994dbee33984cf64"
+  },
+  {
+    "case_id": "code-005",
+    "dataset_version": 1,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3实现纯函数 is_palindrome。s 为字符串，区分大小写，返回是否回文；空字符串为回文。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "is_palindrome",
+      "tests": [
+        {
+          "args": [
+            ""
+          ],
+          "output": true
+        },
+        {
+          "args": [
+            "上海海上"
+          ],
+          "output": true
+        },
+        {
+          "args": [
+            "Ab"
+          ],
+          "output": false
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "e70d8017302ca75197c35370e6b2f015c1ebd569310b5ab585c30574d6cc4e26"
+  },
+  {
+    "case_id": "code-006",
+    "dataset_version": 1,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3实现纯函数 clamp。参数x、low、high为整数，low<=high，将x限制在闭区间[low,high]。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "clamp",
+      "tests": [
+        {
+          "args": [
+            5,
+            0,
+            10
+          ],
+          "output": 5
+        },
+        {
+          "args": [
+            -1,
+            0,
+            10
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            12,
+            0,
+            10
+          ],
+          "output": 10
+        },
+        {
+          "args": [
+            4,
+            3,
+            3
+          ],
+          "output": 3
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "1d877637e38ef0f1b22a802b43ce6f8b2d72ab17cfc7dd2edaaf5fc8073ff58f"
+  },
+  {
+    "case_id": "code-007",
+    "dataset_version": 1,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3实现纯函数 factorial。n 为0到12之间的整数，返回阶乘。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "factorial",
+      "tests": [
+        {
+          "args": [
+            0
+          ],
+          "output": 1
+        },
+        {
+          "args": [
+            1
+          ],
+          "output": 1
+        },
+        {
+          "args": [
+            5
+          ],
+          "output": 120
+        },
+        {
+          "args": [
+            12
+          ],
+          "output": 479001600
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "a1cb47c2c1d75711a0677194301c4aa8d64c8e9a773df33fdcf0ea1ed51bbbd0"
+  },
+  {
+    "case_id": "code-008",
+    "dataset_version": 1,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3实现纯函数 word_count。s 为字符串，按任意连续空白分词，返回词数。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "word_count",
+      "tests": [
+        {
+          "args": [
+            ""
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            "  a\tb\n c  "
+          ],
+          "output": 3
+        },
+        {
+          "args": [
+            "你好 世界"
+          ],
+          "output": 2
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "5eac6d350f0f3ce7197867162480157d2b37168102fcb66135685056d6d66b6d"
+  },
+  {
+    "case_id": "code-009",
+    "dataset_version": 1,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3实现纯函数 merge_sorted。a、b是升序整数列表，返回合并后的升序列表，保留重复项。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "merge_sorted",
+      "tests": [
+        {
+          "args": [
+            [],
+            []
+          ],
+          "output": []
+        },
+        {
+          "args": [
+            [
+              1,
+              3
+            ],
+            [
+              2,
+              3
+            ]
+          ],
+          "output": [
+            1,
+            2,
+            3,
+            3
+          ]
+        },
+        {
+          "args": [
+            [],
+            [
+              -1,
+              0
+            ]
+          ],
+          "output": [
+            -1,
+            0
+          ]
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "8ae81f380ade6e97161d121e49c282eb5dbbe35f7b52ae310526ca9331f94eb0"
+  },
+  {
+    "case_id": "code-010",
+    "dataset_version": 1,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3实现纯函数 prefix_sums。xs为整数列表，返回与输入等长的前缀和列表。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "prefix_sums",
+      "tests": [
+        {
+          "args": [
+            []
+          ],
+          "output": []
+        },
+        {
+          "args": [
+            [
+              1,
+              2,
+              3
+            ]
+          ],
+          "output": [
+            1,
+            3,
+            6
+          ]
+        },
+        {
+          "args": [
+            [
+              -2,
+              2,
+              5
+            ]
+          ],
+          "output": [
+            -2,
+            0,
+            5
+          ]
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "2a77081ad52855b34cdcf65fc619b49b741cdb4ed67be36008e6be725d71b81e"
+  },
+  {
+    "case_id": "rag-001",
+    "dataset_version": 1,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "蓝杉站周一几点开放？只依据所附资料，返回JSON：{\"status\":\"answerable或unanswerable或conflict\",\"answer\":\"答案或说明\",\"citations\":[{\"source_id\":\"资料ID\",\"start\":1,\"end\":1}]}。没有依据时明确无法回答；相互冲突时不得擅选其一。行号从1开始。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "evidence",
+      "disposition": "answerable",
+      "answers": [
+        "09:00"
+      ],
+      "citations": [
+        {
+          "source_id": "notice",
+          "start": 1,
+          "end": 1
+        }
+      ]
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "notice",
+        "title": "notice",
+        "lines": [
+          "蓝杉站周一开放时间为09:00。",
+          "周日不开放。"
+        ]
+      }
+    ],
+    "content_hash": "0bfefa19046dfb851d7061928722b00d874a4ee4b87724a5d48253dac557b6a0"
+  },
+  {
+    "case_id": "rag-002",
+    "dataset_version": 1,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "青穗项目的负责人是谁？只依据所附资料，返回JSON：{\"status\":\"answerable或unanswerable或conflict\",\"answer\":\"答案或说明\",\"citations\":[{\"source_id\":\"资料ID\",\"start\":1,\"end\":1}]}。没有依据时明确无法回答；相互冲突时不得擅选其一。行号从1开始。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "evidence",
+      "disposition": "answerable",
+      "answers": [
+        "林澄"
+      ],
+      "citations": [
+        {
+          "source_id": "team",
+          "start": 1,
+          "end": 1
+        }
+      ]
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "team",
+        "title": "team",
+        "lines": [
+          "青穗项目负责人为林澄。",
+          "复核人为周禾。"
+        ]
+      }
+    ],
+    "content_hash": "eff62bb2831f247069541430ebe9b43b9d6a4f69cdf604926adcff441558cf2a"
+  },
+  {
+    "case_id": "rag-003",
+    "dataset_version": 1,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "北岸档案的保留期为多少天？只依据所附资料，返回JSON：{\"status\":\"answerable或unanswerable或conflict\",\"answer\":\"答案或说明\",\"citations\":[{\"source_id\":\"资料ID\",\"start\":1,\"end\":1}]}。没有依据时明确无法回答；相互冲突时不得擅选其一。行号从1开始。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "evidence",
+      "disposition": "answerable",
+      "answers": [
+        "30天"
+      ],
+      "citations": [
+        {
+          "source_id": "policy",
+          "start": 1,
+          "end": 1
+        }
+      ]
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "policy",
+        "title": "policy",
+        "lines": [
+          "北岸档案保留期为30天。",
+          "到期后由管理员审核归档。"
+        ]
+      }
+    ],
+    "content_hash": "85a92083fecef8baec2563706c85c790f3708ceda36826e5d48b42744f797025"
+  },
+  {
+    "case_id": "rag-004",
+    "dataset_version": 1,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "松丘展厅周六门票多少元？只依据所附资料，返回JSON：{\"status\":\"answerable或unanswerable或conflict\",\"answer\":\"答案或说明\",\"citations\":[{\"source_id\":\"资料ID\",\"start\":1,\"end\":1}]}。没有依据时明确无法回答；相互冲突时不得擅选其一。行号从1开始。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "evidence",
+      "disposition": "unanswerable",
+      "answers": [],
+      "citations": []
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "venue",
+        "title": "venue",
+        "lines": [
+          "松丘展厅周六开放。",
+          "工作日门票为20元。"
+        ]
+      }
+    ],
+    "content_hash": "56ca49f51e25c275deecc2c0655a700abe31139a9d0e7bc7ac595e26f1c48b82"
+  },
+  {
+    "case_id": "rag-005",
+    "dataset_version": 1,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "白鹭计划是哪一年启动的？只依据所附资料，返回JSON：{\"status\":\"answerable或unanswerable或conflict\",\"answer\":\"答案或说明\",\"citations\":[{\"source_id\":\"资料ID\",\"start\":1,\"end\":1}]}。没有依据时明确无法回答；相互冲突时不得擅选其一。行号从1开始。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "evidence",
+      "disposition": "unanswerable",
+      "answers": [],
+      "citations": []
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "plan",
+        "title": "plan",
+        "lines": [
+          "白鹭计划已完成第一阶段。",
+          "下一阶段安排尚未公布。"
+        ]
+      }
+    ],
+    "content_hash": "ac6b2830cf9ffab55ff7736d2beb428fc1b1079679753addb7c2b7c5832f2f30"
+  },
+  {
+    "case_id": "rag-006",
+    "dataset_version": 1,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "同一日期的两份简报对岚谷预算是否一致？只依据所附资料，返回JSON：{\"status\":\"answerable或unanswerable或conflict\",\"answer\":\"答案或说明\",\"citations\":[{\"source_id\":\"资料ID\",\"start\":1,\"end\":1}]}。没有依据时明确无法回答；相互冲突时不得擅选其一。行号从1开始。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "evidence",
+      "disposition": "conflict",
+      "answers": [
+        "不一致",
+        "冲突"
+      ],
+      "citations": [
+        {
+          "source_id": "a",
+          "start": 1,
+          "end": 1
+        },
+        {
+          "source_id": "b",
+          "start": 1,
+          "end": 1
+        }
+      ]
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "a",
+        "title": "a",
+        "lines": [
+          "2026年4月1日：岚谷预算为80万元。"
+        ]
+      },
+      {
+        "id": "b",
+        "title": "b",
+        "lines": [
+          "2026年4月1日：岚谷预算为95万元。"
+        ]
+      }
+    ],
+    "content_hash": "3eba8dd4f5bf039955761fe5249ccb674589d3cdbcc7053ad57fa3b063ecec82"
+  },
+  {
+    "case_id": "rag-007",
+    "dataset_version": 1,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "同一生效日的两份清单对云舟限额是否一致？只依据所附资料，返回JSON：{\"status\":\"answerable或unanswerable或conflict\",\"answer\":\"答案或说明\",\"citations\":[{\"source_id\":\"资料ID\",\"start\":1,\"end\":1}]}。没有依据时明确无法回答；相互冲突时不得擅选其一。行号从1开始。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "evidence",
+      "disposition": "conflict",
+      "answers": [
+        "不一致",
+        "冲突"
+      ],
+      "citations": [
+        {
+          "source_id": "a",
+          "start": 1,
+          "end": 1
+        },
+        {
+          "source_id": "b",
+          "start": 1,
+          "end": 1
+        }
+      ]
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "a",
+        "title": "a",
+        "lines": [
+          "生效日2026年5月1日：云舟每人限领2份。"
+        ]
+      },
+      {
+        "id": "b",
+        "title": "b",
+        "lines": [
+          "生效日2026年5月1日：云舟每人限领3份。"
+        ]
+      }
+    ],
+    "content_hash": "e86e3c796851657564b8fee40492edadef247982142d0462d8f0469a8d69243e"
+  },
+  {
+    "case_id": "rag-008",
+    "dataset_version": 1,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "柳汀馆服务台位于几层？只依据所附资料，返回JSON：{\"status\":\"answerable或unanswerable或conflict\",\"answer\":\"答案或说明\",\"citations\":[{\"source_id\":\"资料ID\",\"start\":1,\"end\":1}]}。没有依据时明确无法回答；相互冲突时不得擅选其一。行号从1开始。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "evidence",
+      "disposition": "answerable",
+      "answers": [
+        "二层",
+        "2层"
+      ],
+      "citations": [
+        {
+          "source_id": "map",
+          "start": 2,
+          "end": 2
+        }
+      ]
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "map",
+        "title": "map",
+        "lines": [
+          "柳汀馆入口在一层。",
+          "服务台位于二层。",
+          "阅览区位于三层。"
+        ]
+      }
+    ],
+    "content_hash": "8a7cf2b10b5339372d41a07dba654e7b84baf104b0b0a0b78040aa11d323d151"
+  },
+  {
+    "case_id": "rag-009",
+    "dataset_version": 1,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "星桥任务的交付日期是什么？只依据所附资料，返回JSON：{\"status\":\"answerable或unanswerable或conflict\",\"answer\":\"答案或说明\",\"citations\":[{\"source_id\":\"资料ID\",\"start\":1,\"end\":1}]}。没有依据时明确无法回答；相互冲突时不得擅选其一。行号从1开始。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "evidence",
+      "disposition": "answerable",
+      "answers": [
+        "2026年6月18日",
+        "2026-06-18"
+      ],
+      "citations": [
+        {
+          "source_id": "task",
+          "start": 2,
+          "end": 2
+        }
+      ]
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "task",
+        "title": "task",
+        "lines": [
+          "星桥任务编号为SB-7。",
+          "交付日期为2026年6月18日。",
+          "复盘日期为2026年6月20日。"
+        ]
+      }
+    ],
+    "content_hash": "2df2b63659dd00d9b5790dcf2c843168e5c580a5b319fe5111501f4faa2857e6"
+  },
+  {
+    "case_id": "rag-010",
+    "dataset_version": 1,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "按照最新生效通知，石溪站每周几休息？只依据所附资料，返回JSON：{\"status\":\"answerable或unanswerable或conflict\",\"answer\":\"答案或说明\",\"citations\":[{\"source_id\":\"资料ID\",\"start\":1,\"end\":1}]}。没有依据时明确无法回答；相互冲突时不得擅选其一。行号从1开始。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "evidence",
+      "disposition": "answerable",
+      "answers": [
+        "周二",
+        "星期二"
+      ],
+      "citations": [
+        {
+          "source_id": "new",
+          "start": 1,
+          "end": 1
+        }
+      ]
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 1
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "old",
+        "title": "old",
+        "lines": [
+          "2026年1月1日生效：石溪站每周一休息。"
+        ]
+      },
+      {
+        "id": "new",
+        "title": "new",
+        "lines": [
+          "2026年7月1日生效：石溪站改为每周二休息，取代旧安排。"
+        ]
+      }
+    ],
+    "content_hash": "5b98fe6712928b905a3edea5deb7b16994266f4beb5c36d8c75b6a1648ca2cac"
+  },
+  {
+    "case_id": "schema-001",
+    "dataset_version": 1,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "将记录转为JSON：姓名林禾，年龄28。字段为name和age。只返回符合指定schema的JSON，不加围栏。",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "age": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "name",
+          "age"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "name": "林禾",
+        "age": 28
+      }
+    },
+    "scoring": {
+      "id": "schema_semantic",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "json",
+    "requirements": [
+      "completion",
+      "json_schema"
+    ],
+    "fixture": [],
+    "content_hash": "5337ca4c8864aa7c813009766a8c0f3ef7fcd864c2b59e359edbbadc2e5726ff"
+  },
+  {
+    "case_id": "schema-002",
+    "dataset_version": 1,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "记录转为JSON：任务已完成，耗时12秒。字段为done和seconds。只返回符合指定schema的JSON，不加围栏。",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "seconds": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "done",
+          "seconds"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "done": true,
+        "seconds": 12
+      }
+    },
+    "scoring": {
+      "id": "schema_semantic",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "json",
+    "requirements": [
+      "completion",
+      "json_schema"
+    ],
+    "fixture": [],
+    "content_hash": "c0f69b93eaeebc2d6c932ba163b1d0b261d383077a4a352b95a62c380ecb918e"
+  },
+  {
+    "case_id": "schema-003",
+    "dataset_version": 1,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "将红、蓝、绿按给定顺序放入JSON字段colors数组。只返回符合指定schema的JSON，不加围栏。",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "colors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "colors"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "colors": [
+          "红",
+          "蓝",
+          "绿"
+        ]
+      }
+    },
+    "scoring": {
+      "id": "schema_semantic",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "json",
+    "requirements": [
+      "completion",
+      "json_schema"
+    ],
+    "fixture": [],
+    "content_hash": "51785b8bd5ee35b3e2d12906d2258b683b3e9efb408b12746bcab491b7eff61b"
+  },
+  {
+    "case_id": "schema-004",
+    "dataset_version": 1,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "从“会议日期2026-08-09，城市杭州”提取date与city。只返回符合指定schema的JSON，不加围栏。",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "city"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "date": "2026-08-09",
+        "city": "杭州"
+      }
+    },
+    "scoring": {
+      "id": "schema_semantic",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "json",
+    "requirements": [
+      "completion",
+      "json_schema"
+    ],
+    "fixture": [],
+    "content_hash": "5801b2ff8e7011cc098a57fcd4bec98b061d69a13991b9cfcfd2735f6e85d565"
+  },
+  {
+    "case_id": "schema-005",
+    "dataset_version": 1,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "将零库存记录为JSON：sku为A-17，stock为0，note为空值。只返回符合指定schema的JSON，不加围栏。",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "stock": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "note": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "sku",
+          "stock",
+          "note"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "sku": "A-17",
+        "stock": 0,
+        "note": null
+      }
+    },
+    "scoring": {
+      "id": "schema_semantic",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "json",
+    "requirements": [
+      "completion",
+      "json_schema"
+    ],
+    "fixture": [],
+    "content_hash": "ee64ba1d5166181af27ece38cefa1e1e6b8f09cccbe981a1ecb65b875474f664"
+  },
+  {
+    "case_id": "tool-001",
+    "dataset_version": 1,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "查询杭州当天温度，请调用get_temperature，city为杭州。请使用提供的工具调用字段，不用普通文本代替。不实际执行工具。",
+      "response_schema": null,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "get_temperature",
+            "description": "用于评测的受控工具声明；不执行外部操作。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "city"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "kind": "tool",
+      "name": "get_temperature",
+      "arguments": {
+        "city": "杭州"
+      }
+    },
+    "scoring": {
+      "id": "native_tool_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "tool_calls",
+    "requirements": [
+      "completion",
+      "tool_calls"
+    ],
+    "fixture": [],
+    "content_hash": "2a18f050e3b2258429097b6eb32ae46b6e33a55634b154e3c465ce9035db0ecd"
+  },
+  {
+    "case_id": "tool-002",
+    "dataset_version": 1,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "查找关键字“发布清单”，最多3条，请调用search_notes。请使用提供的工具调用字段，不用普通文本代替。不实际执行工具。",
+      "response_schema": null,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "search_notes",
+            "description": "用于评测的受控工具声明；不执行外部操作。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10
+                }
+              },
+              "required": [
+                "query",
+                "limit"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "kind": "tool",
+      "name": "search_notes",
+      "arguments": {
+        "query": "发布清单",
+        "limit": 3
+      }
+    },
+    "scoring": {
+      "id": "native_tool_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "tool_calls",
+    "requirements": [
+      "completion",
+      "tool_calls"
+    ],
+    "fixture": [],
+    "content_hash": "796037f51a73febdd5f32b7b443c837773491224a46285cf2119c4a2177441e8"
+  },
+  {
+    "case_id": "tool-003",
+    "dataset_version": 1,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "创建标题“检查报告”、优先级2的待办，请调用create_todo。请使用提供的工具调用字段，不用普通文本代替。不实际执行工具。",
+      "response_schema": null,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "create_todo",
+            "description": "用于评测的受控工具声明；不执行外部操作。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "priority": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3
+                }
+              },
+              "required": [
+                "title",
+                "priority"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "kind": "tool",
+      "name": "create_todo",
+      "arguments": {
+        "title": "检查报告",
+        "priority": 2
+      }
+    },
+    "scoring": {
+      "id": "native_tool_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "tool_calls",
+    "requirements": [
+      "completion",
+      "tool_calls"
+    ],
+    "fixture": [],
+    "content_hash": "19ff7808bc84f1066f288df12585e5ede12705720c21df308fa31d196db5f199"
+  },
+  {
+    "case_id": "tool-004",
+    "dataset_version": 1,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "将长度5米转换为厘米，请调用convert_length，value为5、from_unit为m、to_unit为cm。请使用提供的工具调用字段，不用普通文本代替。不实际执行工具。",
+      "response_schema": null,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "convert_length",
+            "description": "用于评测的受控工具声明；不执行外部操作。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "integer"
+                },
+                "from_unit": {
+                  "type": "string",
+                  "enum": [
+                    "m",
+                    "cm"
+                  ]
+                },
+                "to_unit": {
+                  "type": "string",
+                  "enum": [
+                    "m",
+                    "cm"
+                  ]
+                }
+              },
+              "required": [
+                "value",
+                "from_unit",
+                "to_unit"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "kind": "tool",
+      "name": "convert_length",
+      "arguments": {
+        "value": 5,
+        "from_unit": "m",
+        "to_unit": "cm"
+      }
+    },
+    "scoring": {
+      "id": "native_tool_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "tool_calls",
+    "requirements": [
+      "completion",
+      "tool_calls"
+    ],
+    "fixture": [],
+    "content_hash": "0e30741cdd3a0ed187350116f07c5a16ee13d123777833c8a03e45832bb269aa"
+  },
+  {
+    "case_id": "tool-005",
+    "dataset_version": 1,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "查询编号DOC-12的文档，请调用get_document。请使用提供的工具调用字段，不用普通文本代替。不实际执行工具。",
+      "response_schema": null,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "get_document",
+            "description": "用于评测的受控工具声明；不执行外部操作。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "document_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "document_id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "kind": "tool",
+      "name": "get_document",
+      "arguments": {
+        "document_id": "DOC-12"
+      }
+    },
+    "scoring": {
+      "id": "native_tool_equal",
+      "version": 1
+    },
+    "difficulty": "easy",
+    "output_format": "tool_calls",
+    "requirements": [
+      "completion",
+      "tool_calls"
+    ],
+    "fixture": [],
+    "content_hash": "230722ce1912d0196c8466091e3beab6f589a0d157f0a909072399e4e05e0fce"
+  }
+]

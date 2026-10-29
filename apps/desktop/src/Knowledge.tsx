@@ -1,3 +1,4 @@
+import { AppDialog, openDialog } from "./components/AppDialog";
 import { SelectMenu } from "./components/SelectMenu";
 import {
   SourceBrowser,
@@ -16,7 +17,7 @@ import {
   Plus,
   Search,
   X,
-  PanelLeft,
+  ListTree,
   History,
 } from "lucide-react";
 import { navigate, useNavigation } from "./navigation";
@@ -148,14 +149,17 @@ export function KnowledgePage({
       <header className="page-heading">
         <div className="knowledge-page-location">
           <button
-            className="icon-button"
+            className="button secondary"
             aria-label={listOpen ? "收起知识列表" : "展开知识列表"}
+            title={listOpen ? "收起知识列表" : "展开知识列表"}
             aria-expanded={listOpen}
+            aria-controls="knowledge-list-sidebar"
             onClick={() => setListOpen(!listOpen)}
           >
-            <PanelLeft size={18} />
+            <ListTree size={16} aria-hidden="true" />
+            知识列表
           </button>
-          <h1 id="page-title">知识</h1>
+          <h1 id="page-title" className="sr-only">知识</h1>
         </div>
         <div className="source-actions">
           <button
@@ -189,7 +193,7 @@ export function KnowledgePage({
       <div
         className={`knowledge-workbench ${selected ? "has-selection" : ""} ${listOpen ? "" : "list-collapsed"}`}
       >
-        <aside className="knowledge-sidebar">
+        <aside id="knowledge-list-sidebar" className="knowledge-sidebar">
           <section className="knowledge-list-pane" aria-label="知识列表">
             <div className="knowledge-filters">
               <label className="search-field">
@@ -495,7 +499,7 @@ export function KnowledgeInspector({
                   <button
                     ref={historyButton}
                     className="button secondary"
-                    onClick={() => historyDialog.current?.show()}
+                    onClick={() => openDialog(historyDialog.current)}
                     aria-haspopup="dialog"
                   >
                     <History size={16} />
@@ -533,7 +537,7 @@ export function KnowledgeInspector({
                 <span>最新草稿 v{detail.node.latestVersion}</span>
                 <button
                   className="button primary"
-                  onClick={() => approval.current?.showModal()}
+                  onClick={() => openDialog(approval.current)}
                 >
                   <Check size={16} />
                   检查并确认
@@ -550,7 +554,7 @@ export function KnowledgeInspector({
             )}
             {route.page === "knowledge" ? (
               createPortal(
-              <dialog
+              <AppDialog
                 ref={historyDialog}
                 className="knowledge-history-drawer panel-dialog"
                 aria-labelledby="knowledge-history-title"
@@ -575,7 +579,7 @@ export function KnowledgeInspector({
                   <p className="history-document-title">{detail.node.title}</p>
                   {history}
                 </div>
-              </dialog>, document.body)
+              </AppDialog>, document.body)
             ) : (
               history
             )}
@@ -650,7 +654,7 @@ export function KnowledgeInspector({
                 </p>
               )}
             </details>
-            <dialog
+            <AppDialog
               ref={approval}
               className="form-dialog approval-dialog"
               aria-labelledby="approval-title"
@@ -700,7 +704,7 @@ export function KnowledgeInspector({
                   {approving ? "正在确认…" : "确认此版本"}
                 </button>
               </div>
-            </dialog>
+            </AppDialog>
           </>
         ) : (
           !loadingDetail && (
@@ -781,11 +785,11 @@ export function KnowledgeEditor({
   const askClose = (window = false) => {
     if (busy.current) return;
     exitWindow.current = window;
-    if (dirty.current) leaving.current?.showModal();
+    if (dirty.current) openDialog(leaving.current);
     else void finishClose().catch((e) => setError(errorText(e)));
   };
   useEffect(() => {
-    dialog.current?.showModal();
+    openDialog(dialog.current);
     listener.current = getCurrentWindow().onCloseRequested((event) => {
       event.preventDefault();
       askClose(true);
@@ -838,7 +842,7 @@ export function KnowledgeEditor({
   };
   return (
     <>
-      <dialog
+      <AppDialog
         ref={dialog}
         className="knowledge-editor form-dialog panel-dialog"
         aria-labelledby="knowledge-edit-title"
@@ -1011,8 +1015,8 @@ export function KnowledgeEditor({
             </button>
           </footer>
         </form>
-      </dialog>
-      <dialog
+      </AppDialog>
+      <AppDialog
         ref={leaving}
         className="form-dialog"
         aria-labelledby="leave-knowledge-title"
@@ -1051,7 +1055,7 @@ export function KnowledgeEditor({
             保存草稿
           </button>
         </div>
-      </dialog>
+      </AppDialog>
     </>
   );
 }

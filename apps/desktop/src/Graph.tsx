@@ -1,3 +1,4 @@
+import { AppDialog, openDialog } from "./components/AppDialog";
 import { SelectMenu } from "./components/SelectMenu";
 import { invoke } from "@tauri-apps/api/core";
 import { notify } from "./components/Toast";
@@ -87,7 +88,7 @@ export const GraphPage = memo(function GraphPage({
   return (
     <section className="standard-page graph-page" aria-labelledby="page-title">
       <header className="page-heading">
-        <h1 id="page-title">图谱</h1>
+        <h1 id="page-title" className="sr-only">图谱</h1>
         <fieldset className="segmented-control">
           <legend className="sr-only">图谱类型</legend>
           <label>
@@ -1168,7 +1169,7 @@ export function RelationshipEditor({
   const askClose = (window = false) => {
     if (busy.current) return;
     exitWindow.current = window;
-    if (dirty.current) leaving.current?.showModal();
+    if (dirty.current) openDialog(leaving.current);
     else void finishClose().catch((e) => setError(errorText(e)));
   };
   useEffect(() => {
@@ -1192,7 +1193,7 @@ export function RelationshipEditor({
     };
   }, [request.workspaceId, optionsRetry]);
   useEffect(() => {
-    dialog.current?.showModal();
+    openDialog(dialog.current);
     listener.current = getCurrentWindow().onCloseRequested((event) => {
       event.preventDefault();
       askClose(true);
@@ -1245,7 +1246,7 @@ export function RelationshipEditor({
   };
   return (
     <>
-      <dialog
+      <AppDialog
         ref={dialog}
         className="form-dialog relation-editor panel-dialog"
         aria-labelledby="edge-edit-title"
@@ -1443,8 +1444,8 @@ export function RelationshipEditor({
             </button>
           </footer>
         </form>
-      </dialog>
-      <dialog
+      </AppDialog>
+      <AppDialog
         ref={leaving}
         className="form-dialog"
         aria-labelledby="leave-edge-title"
@@ -1482,7 +1483,7 @@ export function RelationshipEditor({
             保存关系
           </button>
         </div>
-      </dialog>
+      </AppDialog>
     </>
   );
 }

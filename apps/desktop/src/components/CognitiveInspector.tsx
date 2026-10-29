@@ -1,3 +1,4 @@
+import { AppDialog, openDialog } from "./AppDialog";
 import { RetrievalSummary } from "./RetrievalSummary";
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
@@ -47,7 +48,7 @@ export function CognitiveInspector({
     let current = true;
     setDetail(null);
     setError(null);
-    dialog.current?.showModal();
+    openDialog(dialog.current);
     const load = () =>
       studio
         .getRun(runId)
@@ -67,7 +68,7 @@ export function CognitiveInspector({
     };
   }, [runId, studio.getRun]);
   return (
-    <dialog
+    <AppDialog
       ref={dialog}
       className="side-drawer run-drawer panel-dialog"
       aria-labelledby="run-title"
@@ -221,6 +222,6 @@ export function CognitiveInspector({
         </>
       )}
       </div>
-    </dialog>
+    </AppDialog>
   );
 }

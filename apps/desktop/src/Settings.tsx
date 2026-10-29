@@ -28,11 +28,7 @@ export function SettingsPage({ studio }: { studio: Studio }) {
   };
   return (
     <section className="standard-page" aria-labelledby="page-title">
-      <header className="page-heading">
-        <div>
-          <h1 id="page-title">设置</h1>
-        </div>
-      </header>
+      <h1 id="page-title" className="sr-only">设置</h1>
       <div className="page-content settings-content">
         <nav className="settings-navigation" aria-label="设置分类">
           {[

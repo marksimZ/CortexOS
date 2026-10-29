@@ -1,0 +1,4876 @@
+[
+  {
+    "case_id": "zh-001",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "汉字“山”的汉语拼音是什么？只写不带声调的拼音。使用小写ASCII字母。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "shan"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "6236f1da13ac7261fd31ce63ea95d44627f1471dc782131afaa1e880eec61294"
+  },
+  {
+    "case_id": "zh-002",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "按教育部《重编国语辞典修订本》的部首分类，“明”的部首是哪一部？只写一个汉字。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "日"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "1d8ace50175401e77d56d9aa162a696f5b2455c3d89a285a3e9a879b09fdca92"
+  },
+  {
+    "case_id": "zh-003",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "“温故而知新”出自《论语》还是《孟子》？只写书名，不加书名号。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "论语",
+        "論語"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "e6d48fbc3c88d3dfd2ebdf7bdbffc67fdc2c8edcd3d19f70c74d097f2550b338"
+  },
+  {
+    "case_id": "zh-004",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "“春眠不觉晓”的作者是谁？只写姓名。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "孟浩然"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "125d098a9d88f1e9f88ac704169cdeb4538c4b25879856a7891d5a0a39e50a55"
+  },
+  {
+    "case_id": "zh-005",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "按通常春夏秋冬四季顺序，紧接夏季的是哪个季节？只写季节名。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "秋季",
+        "秋天",
+        "秋"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "c646099f41a968714d545f08ffa35b42a5cc38b52b331cf52cc317967bb05b95"
+  },
+  {
+    "case_id": "zh-006",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "十进制的一百用阿拉伯数字怎样写？只写数字。使用半角ASCII数字，不加前导零。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "100"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "014f4744fc39d07fef5d2c931fbb40076210b68eafedd8a05f2d8caa33f3ea15"
+  },
+  {
+    "case_id": "zh-007",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "液态水的化学式是什么？只用普通英文字母和数字。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "H2O"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "f5814efb4fa4bbc878fc0d2b8a71a08762fb85f93a39cf638b1dfd29d26a4330"
+  },
+  {
+    "case_id": "zh-008",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "地球长期稳定的天然卫星叫什么？只写中文名称。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "月球",
+        "月亮"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "374735d7ca7e38d349b299847ecaa760f2d57a7fe952946027827b6fe2bc686c"
+  },
+  {
+    "case_id": "zh-009",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "太阳系中距离太阳最近的行星叫什么？只写中文名称。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "水星"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "5ad18c6ff45f0fb2462bfdf40d1233604c1a690af0189f19b5902f5e0496b589"
+  },
+  {
+    "case_id": "zh-010",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "光合作用通常吸收空气中的哪种气体？只写中文名称。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "二氧化碳"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "4134e2c7fd19c5624f8bbb45e055c0c091bd9db1051cfdfad20098a25726d744"
+  },
+  {
+    "case_id": "zh-011",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "国际单位制中，长度的基本单位叫什么？只写中文名称。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "米",
+        "公尺"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "43af08b477af36365285d2ca552da829659da386db7a841796c0c47454b7c336"
+  },
+  {
+    "case_id": "zh-012",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "国际单位制中，时间的基本单位叫什么？只写中文名称。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "秒",
+        "秒钟"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "1225662e28aa180559c0f3c460ac9ee36da61375dfaca50948260007c5683232"
+  },
+  {
+    "case_id": "zh-013",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "将“开心”换成一个常用近义词，只写“快乐”或“高兴”中的一个。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "快乐",
+        "高兴"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "2ecb325c96f47738b6797e535b2ee36a1a1aa06f4ce8cc9b972a5f9249093b85"
+  },
+  {
+    "case_id": "zh-014",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "从“增加、增多、增添”中选一个“减少”的反义词，只返回所选双字词。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "增加",
+        "增多",
+        "增添"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "3c7c6f46a1e3a508b9c15aadda397e28c5f5b7c4520f8fa3560a08818f414304"
+  },
+  {
+    "case_id": "zh-015",
+    "dataset_version": 2,
+    "category": "zh_knowledge",
+    "input": {
+      "prompt": "“先来后到”表示按什么先后顺序办事？只写“到达”或“年龄”。中文使用简体字（无简繁差异的字照常书写）。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "aliases",
+      "answers": [
+        "到达"
+      ]
+    },
+    "scoring": {
+      "id": "exact_alias",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "case_sensitive": true,
+        "unicode_folding": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "text",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "18b2681d323c500da838be1017696593fd5382692ee38e850b1e495e6d81d341"
+  },
+  {
+    "case_id": "math-001",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "计算37+58。只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 95
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "f89797e63f87fe919d877ccf7a08d8d8e0264a49a64e88ca4906da56d09f2f13"
+  },
+  {
+    "case_id": "math-002",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "计算144-79。只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 65
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "1035e09c613c184b77cfbac0938642f5a007bcbaebbc1bcfd4b1e49be56d02cc"
+  },
+  {
+    "case_id": "math-003",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "计算17×6。只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 102
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "00fe572a1b82d4e2016c0d1f432c0b5c77a0c3054a361c31b240aa155ec9ef7c"
+  },
+  {
+    "case_id": "math-004",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "计算156÷12。只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 13
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "33d425426a70a962a3e9fbc35e44f6e2cc657055f22addba646a14f1ccf8fa74"
+  },
+  {
+    "case_id": "math-005",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "计算(8+7)×3-9。只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 36
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "e7b8a4c2ebb92a101abca157c04f1f4a1d4c5667b8cae5b586241dea954b6983"
+  },
+  {
+    "case_id": "math-006",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "等差数列2、5、8、11的下一项是多少？只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 14
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "41436c07f26b0aa78f95383085cc83c7eae70fa74c2626840c27e1d550688cc6"
+  },
+  {
+    "case_id": "math-007",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "长方形长12厘米、宽7厘米，面积是多少平方厘米？只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 84
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "b69ffd0029165a3b397bc6d2e0da9f6e01192bc9a2c94aa266589d195de77d2c"
+  },
+  {
+    "case_id": "math-008",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "一件商品原价200元，打八折，现价是多少元？只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 160
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "5e14efb6e1055b1d76ae61d0f76b0fd1702a422f779fffb3bec923ae553929ab"
+  },
+  {
+    "case_id": "math-009",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "三个整数的平均数为18，其中两个数为12和20，第三个数是多少？只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 22
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "d21faa802953486db62eda0d1eae05e0a526c2f628972c0f14daee35b9ed5cf2"
+  },
+  {
+    "case_id": "math-010",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "盒中有5个红球、3个蓝球、2个绿球，一共多少个球？只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 10
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "a5aa2aced5bb671b51b2aff46a95c70e30725b85048861b3d6fdefa8b3f2b0b7"
+  },
+  {
+    "case_id": "math-011",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "甲比乙大4岁，两人年龄和30岁，甲多少岁？只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 17
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "905222aa6f5d18f7bc96212127d21777d2f3950d1690c55069c471daff7916e5"
+  },
+  {
+    "case_id": "math-012",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "集合A={1,2,3,4}，B={3,4,5}，交集有几个元素？只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 2
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "13315c07a1de0360b3c94d4e156105afc7f3e8bab45c59e51e4b20a92d88a8e0"
+  },
+  {
+    "case_id": "math-013",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "上午9:40到当天11:15共多少分钟？只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 95
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "cf18008e6215dc8a0ad61a33247cedf153eb8e4fa0519b367092026874834f30"
+  },
+  {
+    "case_id": "math-014",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "有12人，每人和其他人恰好握手一次，一共握手多少次？只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 66
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "8fecd522b4f9bba600eb08df8fcfb9272c77a4a52df29ec99a27ca457e6188a7"
+  },
+  {
+    "case_id": "math-015",
+    "dataset_version": 2,
+    "category": "math_logic",
+    "input": {
+      "prompt": "有24个物品，每盒最多放5个，至少需要几个盒子？只返回最终整数，不加单位或解释。格式为可选ASCII负号及半角十进制数字；不用加号、小数点或中文数字。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "integer",
+      "answer": 5
+    },
+    "scoring": {
+      "id": "integer_equal",
+      "version": 2,
+      "contract": {
+        "normalization": "trim_unicode_whitespace",
+        "syntax": "ascii_minus_optional_digits",
+        "integer_range": "i64"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "integer",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [],
+    "content_hash": "b639852b6b61350acbd44799372614616cfc4c0d327b84257fb173eefdf26901"
+  },
+  {
+    "case_id": "code-001",
+    "dataset_version": 2,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3.13实现纯函数 sum_numbers。xs 为整数列表，返回所有元素的和；空列表返回0。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。 不得修改任何输入参数；整数返回必须为int（不接受bool或float），布尔返回必须为bool，列表返回必须为list且整数元素为int；不允许用tuple代替list。整数输入绝对值不超过10^9，每个输入列表或字符串长度不超过64；阶乘仍只接收0到12。只测试题目定义域内输入。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "sum_numbers",
+      "tests": [
+        {
+          "args": [
+            []
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            [
+              1,
+              2,
+              3
+            ]
+          ],
+          "output": 6
+        },
+        {
+          "args": [
+            [
+              -3,
+              0,
+              2
+            ]
+          ],
+          "output": -1
+        },
+        {
+          "args": [
+            [
+              7
+            ]
+          ],
+          "output": 7
+        },
+        {
+          "args": [
+            [
+              -5,
+              -2
+            ]
+          ],
+          "output": -7
+        },
+        {
+          "args": [
+            [
+              2,
+              2,
+              2
+            ]
+          ],
+          "output": 6
+        },
+        {
+          "args": [
+            [
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000
+            ]
+          ],
+          "output": 64000000000
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 2,
+      "contract": {
+        "python_version": "3.13",
+        "parameter_schemas": [
+          {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -1000000000,
+              "maximum": 1000000000
+            },
+            "maxItems": 64
+          }
+        ],
+        "return_schema": {
+          "type": "integer"
+        },
+        "strict_python_types": true,
+        "input_mutation": "forbidden",
+        "preconditions": []
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "e98468d528afb52da18f7f8f24bb2081aaf3302611e0d8993f4184cd4aa158b5"
+  },
+  {
+    "case_id": "code-002",
+    "dataset_version": 2,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3.13实现纯函数 count_even。xs 为整数列表，返回偶数个数，0也是偶数。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。 不得修改任何输入参数；整数返回必须为int（不接受bool或float），布尔返回必须为bool，列表返回必须为list且整数元素为int；不允许用tuple代替list。整数输入绝对值不超过10^9，每个输入列表或字符串长度不超过64；阶乘仍只接收0到12。只测试题目定义域内输入。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "count_even",
+      "tests": [
+        {
+          "args": [
+            []
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            [
+              0,
+              1,
+              2,
+              -4
+            ]
+          ],
+          "output": 3
+        },
+        {
+          "args": [
+            [
+              1,
+              3
+            ]
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            [
+              2,
+              2,
+              2
+            ]
+          ],
+          "output": 3
+        },
+        {
+          "args": [
+            [
+              2
+            ]
+          ],
+          "output": 1
+        },
+        {
+          "args": [
+            [
+              -3
+            ]
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            [
+              -2,
+              0,
+              4
+            ]
+          ],
+          "output": 3
+        },
+        {
+          "args": [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "output": 64
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 2,
+      "contract": {
+        "python_version": "3.13",
+        "parameter_schemas": [
+          {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -1000000000,
+              "maximum": 1000000000
+            },
+            "maxItems": 64
+          }
+        ],
+        "return_schema": {
+          "type": "integer"
+        },
+        "strict_python_types": true,
+        "input_mutation": "forbidden",
+        "preconditions": []
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "c57846c5ac04bb70ff4220f2d2933478fd176ca29b35999ba8b2218ce724abeb"
+  },
+  {
+    "case_id": "code-003",
+    "dataset_version": 2,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3.13实现纯函数 reverse_text。s 为字符串，按Unicode码点逆序返回，不做规范化，不按字素簇合并；组合符和ZWJ也独立逆序。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。 不得修改任何输入参数；整数返回必须为int（不接受bool或float），布尔返回必须为bool，列表返回必须为list且整数元素为int；不允许用tuple代替list。整数输入绝对值不超过10^9，每个输入列表或字符串长度不超过64；阶乘仍只接收0到12。只测试题目定义域内输入。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "reverse_text",
+      "tests": [
+        {
+          "args": [
+            ""
+          ],
+          "output": ""
+        },
+        {
+          "args": [
+            "abc"
+          ],
+          "output": "cba"
+        },
+        {
+          "args": [
+            "你好a"
+          ],
+          "output": "a好你"
+        },
+        {
+          "args": [
+            "a"
+          ],
+          "output": "a"
+        },
+        {
+          "args": [
+            " a\t"
+          ],
+          "output": "\ta "
+        },
+        {
+          "args": [
+            "aa"
+          ],
+          "output": "aa"
+        },
+        {
+          "args": [
+            "😀a"
+          ],
+          "output": "a😀"
+        },
+        {
+          "args": [
+            "é"
+          ],
+          "output": "́e"
+        },
+        {
+          "args": [
+            "👩‍💻"
+          ],
+          "output": "💻‍👩"
+        },
+        {
+          "args": [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          "output": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 2,
+      "contract": {
+        "python_version": "3.13",
+        "parameter_schemas": [
+          {
+            "type": "string",
+            "maxLength": 64
+          }
+        ],
+        "return_schema": {
+          "type": "string"
+        },
+        "strict_python_types": true,
+        "input_mutation": "forbidden",
+        "preconditions": [],
+        "text_units": "unicode_codepoints"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "d39cea077e078733ead89a82e2c30e98e7fd686fe9fabc9031e0434279e7fc08"
+  },
+  {
+    "case_id": "code-004",
+    "dataset_version": 2,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3.13实现纯函数 dedupe。xs 为整数列表，按首次出现顺序去重并返回列表。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。 不得修改任何输入参数；整数返回必须为int（不接受bool或float），布尔返回必须为bool，列表返回必须为list且整数元素为int；不允许用tuple代替list。整数输入绝对值不超过10^9，每个输入列表或字符串长度不超过64；阶乘仍只接收0到12。只测试题目定义域内输入。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "dedupe",
+      "tests": [
+        {
+          "args": [
+            []
+          ],
+          "output": []
+        },
+        {
+          "args": [
+            [
+              2,
+              1,
+              2,
+              3,
+              1
+            ]
+          ],
+          "output": [
+            2,
+            1,
+            3
+          ]
+        },
+        {
+          "args": [
+            [
+              0,
+              0
+            ]
+          ],
+          "output": [
+            0
+          ]
+        },
+        {
+          "args": [
+            [
+              -2,
+              -2,
+              1,
+              -2
+            ]
+          ],
+          "output": [
+            -2,
+            1
+          ]
+        },
+        {
+          "args": [
+            [
+              4
+            ]
+          ],
+          "output": [
+            4
+          ]
+        },
+        {
+          "args": [
+            [
+              3,
+              2,
+              1
+            ]
+          ],
+          "output": [
+            3,
+            2,
+            1
+          ]
+        },
+        {
+          "args": [
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "output": [
+            1
+          ]
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 2,
+      "contract": {
+        "python_version": "3.13",
+        "parameter_schemas": [
+          {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -1000000000,
+              "maximum": 1000000000
+            },
+            "maxItems": 64
+          }
+        ],
+        "return_schema": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "strict_python_types": true,
+        "input_mutation": "forbidden",
+        "preconditions": []
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "fef62359b534f8dfb3ece00e7737f8f70e34ea31dd438cff31a4f4e4829a315f"
+  },
+  {
+    "case_id": "code-005",
+    "dataset_version": 2,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3.13实现纯函数 is_palindrome。s 为字符串，区分大小写，返回是否回文；空字符串为回文。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。 不得修改任何输入参数；整数返回必须为int（不接受bool或float），布尔返回必须为bool，列表返回必须为list且整数元素为int；不允许用tuple代替list。整数输入绝对值不超过10^9，每个输入列表或字符串长度不超过64；阶乘仍只接收0到12。只测试题目定义域内输入。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "is_palindrome",
+      "tests": [
+        {
+          "args": [
+            ""
+          ],
+          "output": true
+        },
+        {
+          "args": [
+            "上海海上"
+          ],
+          "output": true
+        },
+        {
+          "args": [
+            "Ab"
+          ],
+          "output": false
+        },
+        {
+          "args": [
+            "Aa"
+          ],
+          "output": false
+        },
+        {
+          "args": [
+            "abba"
+          ],
+          "output": true
+        },
+        {
+          "args": [
+            "x"
+          ],
+          "output": true
+        },
+        {
+          "args": [
+            " a"
+          ],
+          "output": false
+        },
+        {
+          "args": [
+            "a,a"
+          ],
+          "output": true
+        },
+        {
+          "args": [
+            "😀a😀"
+          ],
+          "output": true
+        },
+        {
+          "args": [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          "output": true
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 2,
+      "contract": {
+        "python_version": "3.13",
+        "parameter_schemas": [
+          {
+            "type": "string",
+            "maxLength": 64
+          }
+        ],
+        "return_schema": {
+          "type": "boolean"
+        },
+        "strict_python_types": true,
+        "input_mutation": "forbidden",
+        "preconditions": []
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "6f8cc69ae5715a587f3c8b6d9e45939b5e771a33c69f17ee1c780a68e9e2d221"
+  },
+  {
+    "case_id": "code-006",
+    "dataset_version": 2,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3.13实现纯函数 clamp。参数x、low、high为整数，low<=high，将x限制在闭区间[low,high]。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。 不得修改任何输入参数；整数返回必须为int（不接受bool或float），布尔返回必须为bool，列表返回必须为list且整数元素为int；不允许用tuple代替list。整数输入绝对值不超过10^9，每个输入列表或字符串长度不超过64；阶乘仍只接收0到12。只测试题目定义域内输入。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "clamp",
+      "tests": [
+        {
+          "args": [
+            5,
+            0,
+            10
+          ],
+          "output": 5
+        },
+        {
+          "args": [
+            -1,
+            0,
+            10
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            12,
+            0,
+            10
+          ],
+          "output": 10
+        },
+        {
+          "args": [
+            4,
+            3,
+            3
+          ],
+          "output": 3
+        },
+        {
+          "args": [
+            0,
+            0,
+            10
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            10,
+            0,
+            10
+          ],
+          "output": 10
+        },
+        {
+          "args": [
+            -3,
+            -5,
+            -1
+          ],
+          "output": -3
+        },
+        {
+          "args": [
+            3,
+            3,
+            3
+          ],
+          "output": 3
+        },
+        {
+          "args": [
+            -1000000000,
+            -5,
+            5
+          ],
+          "output": -5
+        },
+        {
+          "args": [
+            1000000000,
+            -5,
+            5
+          ],
+          "output": 5
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 2,
+      "contract": {
+        "python_version": "3.13",
+        "parameter_schemas": [
+          {
+            "type": "integer",
+            "minimum": -1000000000,
+            "maximum": 1000000000
+          },
+          {
+            "type": "integer",
+            "minimum": -1000000000,
+            "maximum": 1000000000
+          },
+          {
+            "type": "integer",
+            "minimum": -1000000000,
+            "maximum": 1000000000
+          }
+        ],
+        "return_schema": {
+          "type": "integer"
+        },
+        "strict_python_types": true,
+        "input_mutation": "forbidden",
+        "preconditions": [
+          "low<=high"
+        ]
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "e3502371a19afa8406950c20ae724ffe08b4cb2bc8771b1f927f659d541d09e4"
+  },
+  {
+    "case_id": "code-007",
+    "dataset_version": 2,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3.13实现纯函数 factorial。n 为0到12之间的整数，返回阶乘。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。 不得修改任何输入参数；整数返回必须为int（不接受bool或float），布尔返回必须为bool，列表返回必须为list且整数元素为int；不允许用tuple代替list。整数输入绝对值不超过10^9，每个输入列表或字符串长度不超过64；阶乘仍只接收0到12。只测试题目定义域内输入。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "factorial",
+      "tests": [
+        {
+          "args": [
+            0
+          ],
+          "output": 1
+        },
+        {
+          "args": [
+            1
+          ],
+          "output": 1
+        },
+        {
+          "args": [
+            5
+          ],
+          "output": 120
+        },
+        {
+          "args": [
+            12
+          ],
+          "output": 479001600
+        },
+        {
+          "args": [
+            2
+          ],
+          "output": 2
+        },
+        {
+          "args": [
+            3
+          ],
+          "output": 6
+        },
+        {
+          "args": [
+            4
+          ],
+          "output": 24
+        },
+        {
+          "args": [
+            6
+          ],
+          "output": 720
+        },
+        {
+          "args": [
+            7
+          ],
+          "output": 5040
+        },
+        {
+          "args": [
+            8
+          ],
+          "output": 40320
+        },
+        {
+          "args": [
+            9
+          ],
+          "output": 362880
+        },
+        {
+          "args": [
+            10
+          ],
+          "output": 3628800
+        },
+        {
+          "args": [
+            11
+          ],
+          "output": 39916800
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 2,
+      "contract": {
+        "python_version": "3.13",
+        "parameter_schemas": [
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12
+          }
+        ],
+        "return_schema": {
+          "type": "integer"
+        },
+        "strict_python_types": true,
+        "input_mutation": "forbidden",
+        "preconditions": []
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "505f8de76c24e418e63ec110ef3184b99eb1c8634df0819ac4faaaa1d65150a3"
+  },
+  {
+    "case_id": "code-008",
+    "dataset_version": 2,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3.13实现纯函数 word_count。s 为字符串，按Python 3.13 str.split()无参数的连续空白规则分词（包括U+3000和U+00A0；U+200B不算空白），返回词数。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。 不得修改任何输入参数；整数返回必须为int（不接受bool或float），布尔返回必须为bool，列表返回必须为list且整数元素为int；不允许用tuple代替list。整数输入绝对值不超过10^9，每个输入列表或字符串长度不超过64；阶乘仍只接收0到12。只测试题目定义域内输入。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "word_count",
+      "tests": [
+        {
+          "args": [
+            ""
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            "  a\tb\n c  "
+          ],
+          "output": 3
+        },
+        {
+          "args": [
+            "你好 世界"
+          ],
+          "output": 2
+        },
+        {
+          "args": [
+            " \t\n"
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            "你好世界"
+          ],
+          "output": 1
+        },
+        {
+          "args": [
+            "word"
+          ],
+          "output": 1
+        },
+        {
+          "args": [
+            "a　b"
+          ],
+          "output": 2
+        },
+        {
+          "args": [
+            "a b"
+          ],
+          "output": 2
+        },
+        {
+          "args": [
+            "\t\n\u000b\f\r\u001c\u001d\u001e\u001f                  　"
+          ],
+          "output": 0
+        },
+        {
+          "args": [
+            "​"
+          ],
+          "output": 1
+        },
+        {
+          "args": [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          "output": 1
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 2,
+      "contract": {
+        "python_version": "3.13",
+        "parameter_schemas": [
+          {
+            "type": "string",
+            "maxLength": 64
+          }
+        ],
+        "return_schema": {
+          "type": "integer"
+        },
+        "strict_python_types": true,
+        "input_mutation": "forbidden",
+        "preconditions": [],
+        "whitespace_codepoints": [
+          9,
+          10,
+          11,
+          12,
+          13,
+          28,
+          29,
+          30,
+          31,
+          32,
+          133,
+          160,
+          5760,
+          8192,
+          8193,
+          8194,
+          8195,
+          8196,
+          8197,
+          8198,
+          8199,
+          8200,
+          8201,
+          8202,
+          8232,
+          8233,
+          8239,
+          8287,
+          12288
+        ]
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "70e6d17ad62158a00496a6727df035dc31bacf7674494b2c258cd59ba957e6f5"
+  },
+  {
+    "case_id": "code-009",
+    "dataset_version": 2,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3.13实现纯函数 merge_sorted。a、b是升序整数列表，返回合并后的升序列表，保留重复项。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。 不得修改任何输入参数；整数返回必须为int（不接受bool或float），布尔返回必须为bool，列表返回必须为list且整数元素为int；不允许用tuple代替list。整数输入绝对值不超过10^9，每个输入列表或字符串长度不超过64；阶乘仍只接收0到12。只测试题目定义域内输入。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "merge_sorted",
+      "tests": [
+        {
+          "args": [
+            [],
+            []
+          ],
+          "output": []
+        },
+        {
+          "args": [
+            [
+              1,
+              3
+            ],
+            [
+              2,
+              3
+            ]
+          ],
+          "output": [
+            1,
+            2,
+            3,
+            3
+          ]
+        },
+        {
+          "args": [
+            [],
+            [
+              -1,
+              0
+            ]
+          ],
+          "output": [
+            -1,
+            0
+          ]
+        },
+        {
+          "args": [
+            [
+              -1,
+              0
+            ],
+            []
+          ],
+          "output": [
+            -1,
+            0
+          ]
+        },
+        {
+          "args": [
+            [
+              -2,
+              -2
+            ],
+            [
+              -2
+            ]
+          ],
+          "output": [
+            -2,
+            -2,
+            -2
+          ]
+        },
+        {
+          "args": [
+            [
+              1
+            ],
+            [
+              2,
+              3,
+              4,
+              5
+            ]
+          ],
+          "output": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "args": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "output": [
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "args": [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "output": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 2,
+      "contract": {
+        "python_version": "3.13",
+        "parameter_schemas": [
+          {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -1000000000,
+              "maximum": 1000000000
+            },
+            "maxItems": 64
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -1000000000,
+              "maximum": 1000000000
+            },
+            "maxItems": 64
+          }
+        ],
+        "return_schema": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "strict_python_types": true,
+        "input_mutation": "forbidden",
+        "preconditions": [
+          "a_and_b_sorted_ascending"
+        ]
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "f37c0f57412ea4c56319aea6eec502ff9cf09ca484f654ffe14f63840e71fbe6"
+  },
+  {
+    "case_id": "code-010",
+    "dataset_version": 2,
+    "category": "coding",
+    "input": {
+      "prompt": "用Python 3.13实现纯函数 prefix_sums。xs为整数列表，返回与输入等长的前缀和列表。 只返回函数定义及必要的标准库导入，不加Markdown围栏，不读写文件、不联网、不使用全局可变状态。 不得修改任何输入参数；整数返回必须为int（不接受bool或float），布尔返回必须为bool，列表返回必须为list且整数元素为int；不允许用tuple代替list。整数输入绝对值不超过10^9，每个输入列表或字符串长度不超过64；阶乘仍只接收0到12。只测试题目定义域内输入。",
+      "response_schema": null,
+      "tools": []
+    },
+    "expected": {
+      "kind": "python",
+      "function": "prefix_sums",
+      "tests": [
+        {
+          "args": [
+            []
+          ],
+          "output": []
+        },
+        {
+          "args": [
+            [
+              1,
+              2,
+              3
+            ]
+          ],
+          "output": [
+            1,
+            3,
+            6
+          ]
+        },
+        {
+          "args": [
+            [
+              -2,
+              2,
+              5
+            ]
+          ],
+          "output": [
+            -2,
+            0,
+            5
+          ]
+        },
+        {
+          "args": [
+            [
+              0
+            ]
+          ],
+          "output": [
+            0
+          ]
+        },
+        {
+          "args": [
+            [
+              -4
+            ]
+          ],
+          "output": [
+            -4
+          ]
+        },
+        {
+          "args": [
+            [
+              -1,
+              -2,
+              -3
+            ]
+          ],
+          "output": [
+            -1,
+            -3,
+            -6
+          ]
+        },
+        {
+          "args": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "output": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "args": [
+            [
+              2,
+              2,
+              2
+            ]
+          ],
+          "output": [
+            2,
+            4,
+            6
+          ]
+        },
+        {
+          "args": [
+            [
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000,
+              1000000000
+            ]
+          ],
+          "output": [
+            1000000000,
+            2000000000,
+            3000000000,
+            4000000000,
+            5000000000,
+            6000000000,
+            7000000000,
+            8000000000,
+            9000000000,
+            10000000000,
+            11000000000,
+            12000000000,
+            13000000000,
+            14000000000,
+            15000000000,
+            16000000000,
+            17000000000,
+            18000000000,
+            19000000000,
+            20000000000,
+            21000000000,
+            22000000000,
+            23000000000,
+            24000000000,
+            25000000000,
+            26000000000,
+            27000000000,
+            28000000000,
+            29000000000,
+            30000000000,
+            31000000000,
+            32000000000,
+            33000000000,
+            34000000000,
+            35000000000,
+            36000000000,
+            37000000000,
+            38000000000,
+            39000000000,
+            40000000000,
+            41000000000,
+            42000000000,
+            43000000000,
+            44000000000,
+            45000000000,
+            46000000000,
+            47000000000,
+            48000000000,
+            49000000000,
+            50000000000,
+            51000000000,
+            52000000000,
+            53000000000,
+            54000000000,
+            55000000000,
+            56000000000,
+            57000000000,
+            58000000000,
+            59000000000,
+            60000000000,
+            61000000000,
+            62000000000,
+            63000000000,
+            64000000000
+          ]
+        }
+      ]
+    },
+    "scoring": {
+      "id": "python_assertions",
+      "version": 2,
+      "contract": {
+        "python_version": "3.13",
+        "parameter_schemas": [
+          {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -1000000000,
+              "maximum": 1000000000
+            },
+            "maxItems": 64
+          }
+        ],
+        "return_schema": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "strict_python_types": true,
+        "input_mutation": "forbidden",
+        "preconditions": []
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "python",
+    "requirements": [
+      "completion",
+      "python_sandbox"
+    ],
+    "fixture": [],
+    "content_hash": "8662e351e8678d7c548b31cab71722fe6d485152ad836d5b7c4ae856f58c1c56"
+  },
+  {
+    "case_id": "rag-001",
+    "dataset_version": 2,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "蓝杉站周一几点开放？只依据所附资料，返回单个JSON对象，字段为status、facts、reason、citations，不加围栏或额外字段。facts使用以下事实字段：{\"opening_time\": {\"type\": \"string\"}}。只在可答时填写事实值，不写解释句；资料不足时status=unanswerable、facts={}、reason=insufficient_evidence、citations=[]；同条件证据冲突时status=conflict，填写双方事实，reason=conflicting_evidence，引用双方；可答时status=answerable、reason=null。引用格式为{\"claim_id\":\"对应事实字段\",\"source_id\":\"资料ID\",\"start\":1,\"end\":1}，行号从1开始且首尾包含。每条引用须完整支持该事实，可包含相邻无冲突行；不得引用无关行冒充支持。场景时刻固定为2026-07-02T12:00:00+08:00，不使用机器当前时间。同条件冲突材料无额外权威优先级。",
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "answerable",
+              "unanswerable",
+              "conflict"
+            ]
+          },
+          "facts": {
+            "type": "object",
+            "properties": {
+              "opening_time": {
+                "type": "string"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "insufficient_evidence",
+              "conflicting_evidence"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claim_id": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "claim_id",
+                "source_id",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status",
+          "facts",
+          "reason",
+          "citations"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "status": "answerable",
+        "facts": {
+          "opening_time": "09:00"
+        },
+        "reason": null,
+        "citations": [
+          {
+            "claim_id": "opening_time",
+            "source_id": "notice",
+            "start": 1,
+            "end": 1
+          }
+        ]
+      }
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 2,
+      "contract": {
+        "as_of": "2026-07-02T12:00:00+08:00",
+        "fact_aliases": {
+          "opening_time": [
+            "09:00",
+            "9:00",
+            "9点",
+            "上午九点"
+          ]
+        },
+        "evidence": {
+          "opening_time": [
+            {
+              "source_id": "notice",
+              "start": 1,
+              "end": 1
+            },
+            {
+              "source_id": "notice",
+              "start": 1,
+              "end": 2
+            }
+          ]
+        },
+        "citation_policy": "enumerated_supporting_spans",
+        "duplicate_citations": "reject",
+        "extra_facts": "reject",
+        "answer_and_citations": "score_separately",
+        "full_pass_requires": "all_dimensions",
+        "format_assertion": true,
+        "source_policy": {},
+        "schema_use": "grading_only"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "notice",
+        "title": "notice",
+        "lines": [
+          "蓝杉站周一开放时间为09:00。",
+          "周日不开放。"
+        ]
+      }
+    ],
+    "content_hash": "1d64721ada84a1e288c0e625fb21a4f40ddb69e64dbb4462db35cf3d1a5a3e53"
+  },
+  {
+    "case_id": "rag-002",
+    "dataset_version": 2,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "青穗项目的负责人是谁？只依据所附资料，返回单个JSON对象，字段为status、facts、reason、citations，不加围栏或额外字段。facts使用以下事实字段：{\"owner\": {\"type\": \"string\"}}。只在可答时填写事实值，不写解释句；资料不足时status=unanswerable、facts={}、reason=insufficient_evidence、citations=[]；同条件证据冲突时status=conflict，填写双方事实，reason=conflicting_evidence，引用双方；可答时status=answerable、reason=null。引用格式为{\"claim_id\":\"对应事实字段\",\"source_id\":\"资料ID\",\"start\":1,\"end\":1}，行号从1开始且首尾包含。每条引用须完整支持该事实，可包含相邻无冲突行；不得引用无关行冒充支持。场景时刻固定为2026-07-02T12:00:00+08:00，不使用机器当前时间。同条件冲突材料无额外权威优先级。",
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "answerable",
+              "unanswerable",
+              "conflict"
+            ]
+          },
+          "facts": {
+            "type": "object",
+            "properties": {
+              "owner": {
+                "type": "string"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "insufficient_evidence",
+              "conflicting_evidence"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claim_id": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "claim_id",
+                "source_id",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status",
+          "facts",
+          "reason",
+          "citations"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "status": "answerable",
+        "facts": {
+          "owner": "林澄"
+        },
+        "reason": null,
+        "citations": [
+          {
+            "claim_id": "owner",
+            "source_id": "team",
+            "start": 1,
+            "end": 1
+          }
+        ]
+      }
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 2,
+      "contract": {
+        "as_of": "2026-07-02T12:00:00+08:00",
+        "fact_aliases": {},
+        "evidence": {
+          "owner": [
+            {
+              "source_id": "team",
+              "start": 1,
+              "end": 1
+            },
+            {
+              "source_id": "team",
+              "start": 1,
+              "end": 2
+            }
+          ]
+        },
+        "citation_policy": "enumerated_supporting_spans",
+        "duplicate_citations": "reject",
+        "extra_facts": "reject",
+        "answer_and_citations": "score_separately",
+        "full_pass_requires": "all_dimensions",
+        "format_assertion": true,
+        "source_policy": {},
+        "schema_use": "grading_only"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "team",
+        "title": "team",
+        "lines": [
+          "青穗项目负责人为林澄。",
+          "复核人为周禾。"
+        ]
+      }
+    ],
+    "content_hash": "71b1e8141b5dc3c6bc4dce2efcdc7ae9a06929984d63d2877af78b01e954e62c"
+  },
+  {
+    "case_id": "rag-003",
+    "dataset_version": 2,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "北岸档案的保留期为多少天？只依据所附资料，返回单个JSON对象，字段为status、facts、reason、citations，不加围栏或额外字段。facts使用以下事实字段：{\"retention_days\": {\"type\": \"integer\"}}。只在可答时填写事实值，不写解释句；资料不足时status=unanswerable、facts={}、reason=insufficient_evidence、citations=[]；同条件证据冲突时status=conflict，填写双方事实，reason=conflicting_evidence，引用双方；可答时status=answerable、reason=null。引用格式为{\"claim_id\":\"对应事实字段\",\"source_id\":\"资料ID\",\"start\":1,\"end\":1}，行号从1开始且首尾包含。每条引用须完整支持该事实，可包含相邻无冲突行；不得引用无关行冒充支持。场景时刻固定为2026-07-02T12:00:00+08:00，不使用机器当前时间。同条件冲突材料无额外权威优先级。",
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "answerable",
+              "unanswerable",
+              "conflict"
+            ]
+          },
+          "facts": {
+            "type": "object",
+            "properties": {
+              "retention_days": {
+                "type": "integer"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "insufficient_evidence",
+              "conflicting_evidence"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claim_id": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "claim_id",
+                "source_id",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status",
+          "facts",
+          "reason",
+          "citations"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "status": "answerable",
+        "facts": {
+          "retention_days": 30
+        },
+        "reason": null,
+        "citations": [
+          {
+            "claim_id": "retention_days",
+            "source_id": "policy",
+            "start": 1,
+            "end": 1
+          }
+        ]
+      }
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 2,
+      "contract": {
+        "as_of": "2026-07-02T12:00:00+08:00",
+        "fact_aliases": {},
+        "evidence": {
+          "retention_days": [
+            {
+              "source_id": "policy",
+              "start": 1,
+              "end": 1
+            },
+            {
+              "source_id": "policy",
+              "start": 1,
+              "end": 2
+            }
+          ]
+        },
+        "citation_policy": "enumerated_supporting_spans",
+        "duplicate_citations": "reject",
+        "extra_facts": "reject",
+        "answer_and_citations": "score_separately",
+        "full_pass_requires": "all_dimensions",
+        "format_assertion": true,
+        "source_policy": {},
+        "schema_use": "grading_only"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "policy",
+        "title": "policy",
+        "lines": [
+          "北岸档案保留期为30天。",
+          "到期后由管理员审核归档。"
+        ]
+      }
+    ],
+    "content_hash": "ce01b9be38a7fbf9fdcedee987cf610bea3a3af9591d0ab9d6eedb38891a09bb"
+  },
+  {
+    "case_id": "rag-004",
+    "dataset_version": 2,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "松丘展厅周六门票多少元？只依据所附资料，返回单个JSON对象，字段为status、facts、reason、citations，不加围栏或额外字段。facts使用以下事实字段：{\"saturday_price_yuan\": {\"type\": \"integer\"}}。只在可答时填写事实值，不写解释句；资料不足时status=unanswerable、facts={}、reason=insufficient_evidence、citations=[]；同条件证据冲突时status=conflict，填写双方事实，reason=conflicting_evidence，引用双方；可答时status=answerable、reason=null。引用格式为{\"claim_id\":\"对应事实字段\",\"source_id\":\"资料ID\",\"start\":1,\"end\":1}，行号从1开始且首尾包含。每条引用须完整支持该事实，可包含相邻无冲突行；不得引用无关行冒充支持。场景时刻固定为2026-07-02T12:00:00+08:00，不使用机器当前时间。同条件冲突材料无额外权威优先级。",
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "answerable",
+              "unanswerable",
+              "conflict"
+            ]
+          },
+          "facts": {
+            "type": "object",
+            "properties": {
+              "saturday_price_yuan": {
+                "type": "integer"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "insufficient_evidence",
+              "conflicting_evidence"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claim_id": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "claim_id",
+                "source_id",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status",
+          "facts",
+          "reason",
+          "citations"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "status": "unanswerable",
+        "facts": {},
+        "reason": "insufficient_evidence",
+        "citations": []
+      }
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 2,
+      "contract": {
+        "as_of": "2026-07-02T12:00:00+08:00",
+        "fact_aliases": {},
+        "evidence": {},
+        "citation_policy": "enumerated_supporting_spans",
+        "duplicate_citations": "reject",
+        "extra_facts": "reject",
+        "answer_and_citations": "score_separately",
+        "full_pass_requires": "all_dimensions",
+        "format_assertion": true,
+        "source_policy": {},
+        "schema_use": "grading_only"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "venue",
+        "title": "venue",
+        "lines": [
+          "松丘展厅周六开放。",
+          "工作日门票为20元。"
+        ]
+      }
+    ],
+    "content_hash": "0c0432f71f36d1e62db7e9205c3a58bfedff3e90cfaa5722313556941d142536"
+  },
+  {
+    "case_id": "rag-005",
+    "dataset_version": 2,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "白鹭计划是哪一年启动的？只依据所附资料，返回单个JSON对象，字段为status、facts、reason、citations，不加围栏或额外字段。facts使用以下事实字段：{\"start_year\": {\"type\": \"integer\"}}。只在可答时填写事实值，不写解释句；资料不足时status=unanswerable、facts={}、reason=insufficient_evidence、citations=[]；同条件证据冲突时status=conflict，填写双方事实，reason=conflicting_evidence，引用双方；可答时status=answerable、reason=null。引用格式为{\"claim_id\":\"对应事实字段\",\"source_id\":\"资料ID\",\"start\":1,\"end\":1}，行号从1开始且首尾包含。每条引用须完整支持该事实，可包含相邻无冲突行；不得引用无关行冒充支持。场景时刻固定为2026-07-02T12:00:00+08:00，不使用机器当前时间。同条件冲突材料无额外权威优先级。",
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "answerable",
+              "unanswerable",
+              "conflict"
+            ]
+          },
+          "facts": {
+            "type": "object",
+            "properties": {
+              "start_year": {
+                "type": "integer"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "insufficient_evidence",
+              "conflicting_evidence"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claim_id": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "claim_id",
+                "source_id",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status",
+          "facts",
+          "reason",
+          "citations"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "status": "unanswerable",
+        "facts": {},
+        "reason": "insufficient_evidence",
+        "citations": []
+      }
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 2,
+      "contract": {
+        "as_of": "2026-07-02T12:00:00+08:00",
+        "fact_aliases": {},
+        "evidence": {},
+        "citation_policy": "enumerated_supporting_spans",
+        "duplicate_citations": "reject",
+        "extra_facts": "reject",
+        "answer_and_citations": "score_separately",
+        "full_pass_requires": "all_dimensions",
+        "format_assertion": true,
+        "source_policy": {},
+        "schema_use": "grading_only"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "plan",
+        "title": "plan",
+        "lines": [
+          "白鹭计划已完成第一阶段。",
+          "下一阶段安排尚未公布。"
+        ]
+      }
+    ],
+    "content_hash": "78e26831dd090be3b0ba2cc2a8e3ecdca1bbed894349c25e015caf4817889bc2"
+  },
+  {
+    "case_id": "rag-006",
+    "dataset_version": 2,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "同一日期的两份简报对岚谷预算是否一致？只依据所附资料，返回单个JSON对象，字段为status、facts、reason、citations，不加围栏或额外字段。facts使用以下事实字段：{\"budget_a_wan_yuan\": {\"type\": \"integer\"}, \"budget_b_wan_yuan\": {\"type\": \"integer\"}}。只在可答时填写事实值，不写解释句；资料不足时status=unanswerable、facts={}、reason=insufficient_evidence、citations=[]；同条件证据冲突时status=conflict，填写双方事实，reason=conflicting_evidence，引用双方；可答时status=answerable、reason=null。引用格式为{\"claim_id\":\"对应事实字段\",\"source_id\":\"资料ID\",\"start\":1,\"end\":1}，行号从1开始且首尾包含。每条引用须完整支持该事实，可包含相邻无冲突行；不得引用无关行冒充支持。场景时刻固定为2026-07-02T12:00:00+08:00，不使用机器当前时间。同条件冲突材料无额外权威优先级。",
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "answerable",
+              "unanswerable",
+              "conflict"
+            ]
+          },
+          "facts": {
+            "type": "object",
+            "properties": {
+              "budget_a_wan_yuan": {
+                "type": "integer"
+              },
+              "budget_b_wan_yuan": {
+                "type": "integer"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "insufficient_evidence",
+              "conflicting_evidence"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claim_id": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "claim_id",
+                "source_id",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status",
+          "facts",
+          "reason",
+          "citations"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "status": "conflict",
+        "facts": {
+          "budget_a_wan_yuan": 80,
+          "budget_b_wan_yuan": 95
+        },
+        "reason": "conflicting_evidence",
+        "citations": [
+          {
+            "claim_id": "budget_a_wan_yuan",
+            "source_id": "a",
+            "start": 1,
+            "end": 1
+          },
+          {
+            "claim_id": "budget_b_wan_yuan",
+            "source_id": "b",
+            "start": 1,
+            "end": 1
+          }
+        ]
+      }
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 2,
+      "contract": {
+        "as_of": "2026-07-02T12:00:00+08:00",
+        "fact_aliases": {},
+        "evidence": {
+          "budget_a_wan_yuan": [
+            {
+              "source_id": "a",
+              "start": 1,
+              "end": 1
+            }
+          ],
+          "budget_b_wan_yuan": [
+            {
+              "source_id": "b",
+              "start": 1,
+              "end": 1
+            }
+          ]
+        },
+        "citation_policy": "enumerated_supporting_spans",
+        "duplicate_citations": "reject",
+        "extra_facts": "reject",
+        "answer_and_citations": "score_separately",
+        "full_pass_requires": "all_dimensions",
+        "format_assertion": true,
+        "source_policy": {},
+        "schema_use": "grading_only"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "a",
+        "title": "a",
+        "lines": [
+          "2026年4月1日：岚谷预算为80万元。"
+        ]
+      },
+      {
+        "id": "b",
+        "title": "b",
+        "lines": [
+          "2026年4月1日：岚谷预算为95万元。"
+        ]
+      }
+    ],
+    "content_hash": "fa38a407e2fdbeb506d2122700020ee076586d61226aef2cc3bf8a0be564d66b"
+  },
+  {
+    "case_id": "rag-007",
+    "dataset_version": 2,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "同一生效日的两份清单对云舟限额是否一致？只依据所附资料，返回单个JSON对象，字段为status、facts、reason、citations，不加围栏或额外字段。facts使用以下事实字段：{\"quota_a\": {\"type\": \"integer\"}, \"quota_b\": {\"type\": \"integer\"}}。只在可答时填写事实值，不写解释句；资料不足时status=unanswerable、facts={}、reason=insufficient_evidence、citations=[]；同条件证据冲突时status=conflict，填写双方事实，reason=conflicting_evidence，引用双方；可答时status=answerable、reason=null。引用格式为{\"claim_id\":\"对应事实字段\",\"source_id\":\"资料ID\",\"start\":1,\"end\":1}，行号从1开始且首尾包含。每条引用须完整支持该事实，可包含相邻无冲突行；不得引用无关行冒充支持。场景时刻固定为2026-07-02T12:00:00+08:00，不使用机器当前时间。同条件冲突材料无额外权威优先级。",
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "answerable",
+              "unanswerable",
+              "conflict"
+            ]
+          },
+          "facts": {
+            "type": "object",
+            "properties": {
+              "quota_a": {
+                "type": "integer"
+              },
+              "quota_b": {
+                "type": "integer"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "insufficient_evidence",
+              "conflicting_evidence"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claim_id": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "claim_id",
+                "source_id",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status",
+          "facts",
+          "reason",
+          "citations"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "status": "conflict",
+        "facts": {
+          "quota_a": 2,
+          "quota_b": 3
+        },
+        "reason": "conflicting_evidence",
+        "citations": [
+          {
+            "claim_id": "quota_a",
+            "source_id": "a",
+            "start": 1,
+            "end": 1
+          },
+          {
+            "claim_id": "quota_b",
+            "source_id": "b",
+            "start": 1,
+            "end": 1
+          }
+        ]
+      }
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 2,
+      "contract": {
+        "as_of": "2026-07-02T12:00:00+08:00",
+        "fact_aliases": {},
+        "evidence": {
+          "quota_a": [
+            {
+              "source_id": "a",
+              "start": 1,
+              "end": 1
+            }
+          ],
+          "quota_b": [
+            {
+              "source_id": "b",
+              "start": 1,
+              "end": 1
+            }
+          ]
+        },
+        "citation_policy": "enumerated_supporting_spans",
+        "duplicate_citations": "reject",
+        "extra_facts": "reject",
+        "answer_and_citations": "score_separately",
+        "full_pass_requires": "all_dimensions",
+        "format_assertion": true,
+        "source_policy": {},
+        "schema_use": "grading_only"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "a",
+        "title": "a",
+        "lines": [
+          "生效日2026年5月1日：云舟每人限领2份。"
+        ]
+      },
+      {
+        "id": "b",
+        "title": "b",
+        "lines": [
+          "生效日2026年5月1日：云舟每人限领3份。"
+        ]
+      }
+    ],
+    "content_hash": "d205f603d224113a844876b24a415ed5055afb0c987c7008de8e851a5d62d8a0"
+  },
+  {
+    "case_id": "rag-008",
+    "dataset_version": 2,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "柳汀馆服务台位于几层？只依据所附资料，返回单个JSON对象，字段为status、facts、reason、citations，不加围栏或额外字段。facts使用以下事实字段：{\"floor\": {\"type\": \"integer\"}}。只在可答时填写事实值，不写解释句；资料不足时status=unanswerable、facts={}、reason=insufficient_evidence、citations=[]；同条件证据冲突时status=conflict，填写双方事实，reason=conflicting_evidence，引用双方；可答时status=answerable、reason=null。引用格式为{\"claim_id\":\"对应事实字段\",\"source_id\":\"资料ID\",\"start\":1,\"end\":1}，行号从1开始且首尾包含。每条引用须完整支持该事实，可包含相邻无冲突行；不得引用无关行冒充支持。场景时刻固定为2026-07-02T12:00:00+08:00，不使用机器当前时间。同条件冲突材料无额外权威优先级。",
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "answerable",
+              "unanswerable",
+              "conflict"
+            ]
+          },
+          "facts": {
+            "type": "object",
+            "properties": {
+              "floor": {
+                "type": "integer"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "insufficient_evidence",
+              "conflicting_evidence"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claim_id": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "claim_id",
+                "source_id",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status",
+          "facts",
+          "reason",
+          "citations"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "status": "answerable",
+        "facts": {
+          "floor": 2
+        },
+        "reason": null,
+        "citations": [
+          {
+            "claim_id": "floor",
+            "source_id": "map",
+            "start": 2,
+            "end": 2
+          }
+        ]
+      }
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 2,
+      "contract": {
+        "as_of": "2026-07-02T12:00:00+08:00",
+        "fact_aliases": {},
+        "evidence": {
+          "floor": [
+            {
+              "source_id": "map",
+              "start": 1,
+              "end": 2
+            },
+            {
+              "source_id": "map",
+              "start": 1,
+              "end": 3
+            },
+            {
+              "source_id": "map",
+              "start": 2,
+              "end": 2
+            },
+            {
+              "source_id": "map",
+              "start": 2,
+              "end": 3
+            }
+          ]
+        },
+        "citation_policy": "enumerated_supporting_spans",
+        "duplicate_citations": "reject",
+        "extra_facts": "reject",
+        "answer_and_citations": "score_separately",
+        "full_pass_requires": "all_dimensions",
+        "format_assertion": true,
+        "source_policy": {},
+        "schema_use": "grading_only"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "map",
+        "title": "map",
+        "lines": [
+          "柳汀馆入口在一层。",
+          "服务台位于二层。",
+          "阅览区位于三层。"
+        ]
+      }
+    ],
+    "content_hash": "6200e5f64e4a1e0f4fd1201189c9fce8ac4ce1e356261df2d1a18402da286214"
+  },
+  {
+    "case_id": "rag-009",
+    "dataset_version": 2,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "星桥任务的交付日期是什么？只依据所附资料，返回单个JSON对象，字段为status、facts、reason、citations，不加围栏或额外字段。facts使用以下事实字段：{\"delivery_date\": {\"type\": \"string\", \"format\": \"date\"}}。只在可答时填写事实值，不写解释句；资料不足时status=unanswerable、facts={}、reason=insufficient_evidence、citations=[]；同条件证据冲突时status=conflict，填写双方事实，reason=conflicting_evidence，引用双方；可答时status=answerable、reason=null。引用格式为{\"claim_id\":\"对应事实字段\",\"source_id\":\"资料ID\",\"start\":1,\"end\":1}，行号从1开始且首尾包含。每条引用须完整支持该事实，可包含相邻无冲突行；不得引用无关行冒充支持。场景时刻固定为2026-07-02T12:00:00+08:00，不使用机器当前时间。同条件冲突材料无额外权威优先级。",
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "answerable",
+              "unanswerable",
+              "conflict"
+            ]
+          },
+          "facts": {
+            "type": "object",
+            "properties": {
+              "delivery_date": {
+                "type": "string",
+                "format": "date"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "insufficient_evidence",
+              "conflicting_evidence"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claim_id": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "claim_id",
+                "source_id",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status",
+          "facts",
+          "reason",
+          "citations"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "status": "answerable",
+        "facts": {
+          "delivery_date": "2026-06-18"
+        },
+        "reason": null,
+        "citations": [
+          {
+            "claim_id": "delivery_date",
+            "source_id": "task",
+            "start": 2,
+            "end": 2
+          }
+        ]
+      }
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 2,
+      "contract": {
+        "as_of": "2026-07-02T12:00:00+08:00",
+        "fact_aliases": {},
+        "evidence": {
+          "delivery_date": [
+            {
+              "source_id": "task",
+              "start": 1,
+              "end": 2
+            },
+            {
+              "source_id": "task",
+              "start": 1,
+              "end": 3
+            },
+            {
+              "source_id": "task",
+              "start": 2,
+              "end": 2
+            },
+            {
+              "source_id": "task",
+              "start": 2,
+              "end": 3
+            }
+          ]
+        },
+        "citation_policy": "enumerated_supporting_spans",
+        "duplicate_citations": "reject",
+        "extra_facts": "reject",
+        "answer_and_citations": "score_separately",
+        "full_pass_requires": "all_dimensions",
+        "format_assertion": true,
+        "source_policy": {},
+        "schema_use": "grading_only"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "task",
+        "title": "task",
+        "lines": [
+          "星桥任务编号为SB-7。",
+          "交付日期为2026年6月18日。",
+          "复盘日期为2026年6月20日。"
+        ]
+      }
+    ],
+    "content_hash": "06d0cbbc03c57ea154b982a6e3f9bd997b52fc142ee7e53c8452bf554b0dee10"
+  },
+  {
+    "case_id": "rag-010",
+    "dataset_version": 2,
+    "category": "rag_citation",
+    "input": {
+      "prompt": "以2026-07-02T12:00:00+08:00为场景时刻，按照当时最新生效通知，石溪站每周几休息？只依据所附资料，返回单个JSON对象，字段为status、facts、reason、citations，不加围栏或额外字段。facts使用以下事实字段：{\"rest_weekday\": {\"type\": \"string\"}}。只在可答时填写事实值，不写解释句；资料不足时status=unanswerable、facts={}、reason=insufficient_evidence、citations=[]；同条件证据冲突时status=conflict，填写双方事实，reason=conflicting_evidence，引用双方；可答时status=answerable、reason=null。引用格式为{\"claim_id\":\"对应事实字段\",\"source_id\":\"资料ID\",\"start\":1,\"end\":1}，行号从1开始且首尾包含。每条引用须完整支持该事实，可包含相邻无冲突行；不得引用无关行冒充支持。场景时刻固定为2026-07-02T12:00:00+08:00，不使用机器当前时间。同条件冲突材料无额外权威优先级。",
+      "response_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "answerable",
+              "unanswerable",
+              "conflict"
+            ]
+          },
+          "facts": {
+            "type": "object",
+            "properties": {
+              "rest_weekday": {
+                "type": "string"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "insufficient_evidence",
+              "conflicting_evidence"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claim_id": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "claim_id",
+                "source_id",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status",
+          "facts",
+          "reason",
+          "citations"
+        ],
+        "additionalProperties": false
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "status": "answerable",
+        "facts": {
+          "rest_weekday": "周二"
+        },
+        "reason": null,
+        "citations": [
+          {
+            "claim_id": "rest_weekday",
+            "source_id": "new",
+            "start": 1,
+            "end": 1
+          }
+        ]
+      }
+    },
+    "scoring": {
+      "id": "evidence_match",
+      "version": 2,
+      "contract": {
+        "as_of": "2026-07-02T12:00:00+08:00",
+        "fact_aliases": {
+          "rest_weekday": [
+            "周二",
+            "星期二"
+          ]
+        },
+        "evidence": {
+          "rest_weekday": [
+            {
+              "source_id": "new",
+              "start": 1,
+              "end": 1
+            }
+          ]
+        },
+        "citation_policy": "enumerated_supporting_spans",
+        "duplicate_citations": "reject",
+        "extra_facts": "reject",
+        "answer_and_citations": "score_separately",
+        "full_pass_requires": "all_dimensions",
+        "format_assertion": true,
+        "source_policy": {
+          "old": {
+            "effective_from": "2026-01-01T00:00:00+08:00"
+          },
+          "new": {
+            "effective_from": "2026-07-01T00:00:00+08:00",
+            "supersedes": "old"
+          }
+        },
+        "schema_use": "grading_only"
+      }
+    },
+    "difficulty": "medium",
+    "output_format": "json",
+    "requirements": [
+      "completion"
+    ],
+    "fixture": [
+      {
+        "id": "old",
+        "title": "old",
+        "lines": [
+          "2026年1月1日生效：石溪站每周一休息。"
+        ]
+      },
+      {
+        "id": "new",
+        "title": "new",
+        "lines": [
+          "2026年7月1日生效：石溪站改为每周二休息，取代旧安排。"
+        ]
+      }
+    ],
+    "content_hash": "ab73e79bb7f3fa74d22c6bcdaf68faf316a5c99c34003c033473f111810c605b"
+  },
+  {
+    "case_id": "schema-001",
+    "dataset_version": 2,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "将记录转为JSON：姓名林禾，年龄28。字段为name和age。只返回符合指定schema的JSON，不加围栏。对象键顺序不限，数组顺序必须符合题意；禁止重复键和额外字段。整数允许数学等价的整数表示（如28与28.0），不得用布尔或字符串代替数值；所有声明字段必填，null不能省略。日期须为真实日历日期的YYYY-MM-DD格式。",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "age": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "name",
+          "age"
+        ],
+        "additionalProperties": false,
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "name": "林禾",
+        "age": 28
+      }
+    },
+    "scoring": {
+      "id": "schema_semantic",
+      "version": 2,
+      "contract": {
+        "dialect": "https://json-schema.org/draft/2020-12/schema",
+        "duplicate_keys": "reject",
+        "comparison": "typed_json",
+        "array_order": "significant",
+        "format_assertion": true
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "json",
+    "requirements": [
+      "completion",
+      "json_schema"
+    ],
+    "fixture": [],
+    "content_hash": "88177e9b30611425becdd22c8b491f0f49936ee036933a04048e4ec94ab42e48"
+  },
+  {
+    "case_id": "schema-002",
+    "dataset_version": 2,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "记录转为JSON：任务已完成，耗时12秒。字段为done和seconds。只返回符合指定schema的JSON，不加围栏。对象键顺序不限，数组顺序必须符合题意；禁止重复键和额外字段。整数允许数学等价的整数表示（如28与28.0），不得用布尔或字符串代替数值；所有声明字段必填，null不能省略。日期须为真实日历日期的YYYY-MM-DD格式。",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "seconds": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "done",
+          "seconds"
+        ],
+        "additionalProperties": false,
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "done": true,
+        "seconds": 12
+      }
+    },
+    "scoring": {
+      "id": "schema_semantic",
+      "version": 2,
+      "contract": {
+        "dialect": "https://json-schema.org/draft/2020-12/schema",
+        "duplicate_keys": "reject",
+        "comparison": "typed_json",
+        "array_order": "significant",
+        "format_assertion": true
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "json",
+    "requirements": [
+      "completion",
+      "json_schema"
+    ],
+    "fixture": [],
+    "content_hash": "ab4690e82daaced34c59ef022d7b8cafd313520e78e5b145bf6ce729b73fbb2b"
+  },
+  {
+    "case_id": "schema-003",
+    "dataset_version": 2,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "将红、蓝、绿按给定顺序放入JSON字段colors数组。只返回符合指定schema的JSON，不加围栏。对象键顺序不限，数组顺序必须符合题意；禁止重复键和额外字段。整数允许数学等价的整数表示（如28与28.0），不得用布尔或字符串代替数值；所有声明字段必填，null不能省略。日期须为真实日历日期的YYYY-MM-DD格式。",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "colors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "colors"
+        ],
+        "additionalProperties": false,
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "colors": [
+          "红",
+          "蓝",
+          "绿"
+        ]
+      }
+    },
+    "scoring": {
+      "id": "schema_semantic",
+      "version": 2,
+      "contract": {
+        "dialect": "https://json-schema.org/draft/2020-12/schema",
+        "duplicate_keys": "reject",
+        "comparison": "typed_json",
+        "array_order": "significant",
+        "format_assertion": true
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "json",
+    "requirements": [
+      "completion",
+      "json_schema"
+    ],
+    "fixture": [],
+    "content_hash": "4535f07fddd2c61b8935a8ec98d668349e8f7afc0d4943a7c3584cccf3f8b751"
+  },
+  {
+    "case_id": "schema-004",
+    "dataset_version": 2,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "从“会议日期2026-08-09，城市杭州”提取date与city。只返回符合指定schema的JSON，不加围栏。对象键顺序不限，数组顺序必须符合题意；禁止重复键和额外字段。整数允许数学等价的整数表示（如28与28.0），不得用布尔或字符串代替数值；所有声明字段必填，null不能省略。日期须为真实日历日期的YYYY-MM-DD格式。",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "city": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "city"
+        ],
+        "additionalProperties": false,
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "date": "2026-08-09",
+        "city": "杭州"
+      }
+    },
+    "scoring": {
+      "id": "schema_semantic",
+      "version": 2,
+      "contract": {
+        "dialect": "https://json-schema.org/draft/2020-12/schema",
+        "duplicate_keys": "reject",
+        "comparison": "typed_json",
+        "array_order": "significant",
+        "format_assertion": true
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "json",
+    "requirements": [
+      "completion",
+      "json_schema"
+    ],
+    "fixture": [],
+    "content_hash": "ced30d7872bb654e432228eda73426c9b9e9f08ae51399564ac8b6ca1efd9578"
+  },
+  {
+    "case_id": "schema-005",
+    "dataset_version": 2,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "将零库存记录为JSON：sku为A-17，stock为0，note为空值。只返回符合指定schema的JSON，不加围栏。对象键顺序不限，数组顺序必须符合题意；禁止重复键和额外字段。整数允许数学等价的整数表示（如28与28.0），不得用布尔或字符串代替数值；所有声明字段必填，null不能省略。日期须为真实日历日期的YYYY-MM-DD格式。",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "stock": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "note": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "sku",
+          "stock",
+          "note"
+        ],
+        "additionalProperties": false,
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "tools": []
+    },
+    "expected": {
+      "kind": "json",
+      "answer": {
+        "sku": "A-17",
+        "stock": 0,
+        "note": null
+      }
+    },
+    "scoring": {
+      "id": "schema_semantic",
+      "version": 2,
+      "contract": {
+        "dialect": "https://json-schema.org/draft/2020-12/schema",
+        "duplicate_keys": "reject",
+        "comparison": "typed_json",
+        "array_order": "significant",
+        "format_assertion": true
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "json",
+    "requirements": [
+      "completion",
+      "json_schema"
+    ],
+    "fixture": [],
+    "content_hash": "567b1f89cd6797f3fad4ebc8cb21006a70585b1618ed40466eef3168b3c1714a"
+  },
+  {
+    "case_id": "tool-001",
+    "dataset_version": 2,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "查询杭州（场景日期2026-07-02）的温度，请调用get_temperature，city为杭州。请使用提供的工具调用字段，不用普通文本代替。不实际执行工具。必须恰好产生一个原生调用；参数名称和值按题意，所有声明参数必填且禁止额外参数。参数对象键顺序不限，整数参数接受数学等价的整数表示。这里只验证调用对象，不执行工具，也不要求查询结果。",
+      "response_schema": null,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "get_temperature",
+            "description": "用于评测的受控工具声明；不执行外部操作。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "city"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "kind": "tool",
+      "name": "get_temperature",
+      "arguments": {
+        "city": "杭州"
+      }
+    },
+    "scoring": {
+      "id": "native_tool_equal",
+      "version": 2,
+      "contract": {
+        "dialect": "https://json-schema.org/draft/2020-12/schema",
+        "duplicate_keys": "reject",
+        "comparison": "typed_json",
+        "call_count": 1,
+        "native_only": true,
+        "execute": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "tool_calls",
+    "requirements": [
+      "completion",
+      "tool_calls"
+    ],
+    "fixture": [],
+    "content_hash": "d69009d0682f3c805cda8e18e75bcb03ae284a78bd6980fdacd79ac268141a27"
+  },
+  {
+    "case_id": "tool-002",
+    "dataset_version": 2,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "查找关键字“发布清单”，将limit明确设为3（请求上限3条），请调用search_notes。请使用提供的工具调用字段，不用普通文本代替。不实际执行工具。必须恰好产生一个原生调用；参数名称和值按题意，所有声明参数必填且禁止额外参数。参数对象键顺序不限，整数参数接受数学等价的整数表示。这里只验证调用对象，不执行工具，也不要求查询结果。",
+      "response_schema": null,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "search_notes",
+            "description": "用于评测的受控工具声明；不执行外部操作。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10
+                }
+              },
+              "required": [
+                "query",
+                "limit"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "kind": "tool",
+      "name": "search_notes",
+      "arguments": {
+        "query": "发布清单",
+        "limit": 3
+      }
+    },
+    "scoring": {
+      "id": "native_tool_equal",
+      "version": 2,
+      "contract": {
+        "dialect": "https://json-schema.org/draft/2020-12/schema",
+        "duplicate_keys": "reject",
+        "comparison": "typed_json",
+        "call_count": 1,
+        "native_only": true,
+        "execute": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "tool_calls",
+    "requirements": [
+      "completion",
+      "tool_calls"
+    ],
+    "fixture": [],
+    "content_hash": "119b1e55e12271b7702f7ef2a493627ec70bc48a94fc383f5ecb6a76cc47e183"
+  },
+  {
+    "case_id": "tool-003",
+    "dataset_version": 2,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "创建标题“检查报告”、优先级2的待办，请调用create_todo。请使用提供的工具调用字段，不用普通文本代替。不实际执行工具。必须恰好产生一个原生调用；参数名称和值按题意，所有声明参数必填且禁止额外参数。参数对象键顺序不限，整数参数接受数学等价的整数表示。这里只验证调用对象，不执行工具，也不要求查询结果。",
+      "response_schema": null,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "create_todo",
+            "description": "用于评测的受控工具声明；不执行外部操作。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "priority": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3
+                }
+              },
+              "required": [
+                "title",
+                "priority"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "kind": "tool",
+      "name": "create_todo",
+      "arguments": {
+        "title": "检查报告",
+        "priority": 2
+      }
+    },
+    "scoring": {
+      "id": "native_tool_equal",
+      "version": 2,
+      "contract": {
+        "dialect": "https://json-schema.org/draft/2020-12/schema",
+        "duplicate_keys": "reject",
+        "comparison": "typed_json",
+        "call_count": 1,
+        "native_only": true,
+        "execute": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "tool_calls",
+    "requirements": [
+      "completion",
+      "tool_calls"
+    ],
+    "fixture": [],
+    "content_hash": "0a41b8efd7e71852e97b9ad63047a080df3bc6dd883596319b4e9619a93d51d1"
+  },
+  {
+    "case_id": "tool-004",
+    "dataset_version": 2,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "将长度5米转换为厘米，请调用convert_length，value为5、from_unit为m、to_unit为cm。请使用提供的工具调用字段，不用普通文本代替。不实际执行工具。必须恰好产生一个原生调用；参数名称和值按题意，所有声明参数必填且禁止额外参数。参数对象键顺序不限，整数参数接受数学等价的整数表示。这里只验证调用对象，不执行工具，也不要求查询结果。",
+      "response_schema": null,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "convert_length",
+            "description": "用于评测的受控工具声明；不执行外部操作。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "integer"
+                },
+                "from_unit": {
+                  "type": "string",
+                  "enum": [
+                    "m",
+                    "cm"
+                  ]
+                },
+                "to_unit": {
+                  "type": "string",
+                  "enum": [
+                    "m",
+                    "cm"
+                  ]
+                }
+              },
+              "required": [
+                "value",
+                "from_unit",
+                "to_unit"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "kind": "tool",
+      "name": "convert_length",
+      "arguments": {
+        "value": 5,
+        "from_unit": "m",
+        "to_unit": "cm"
+      }
+    },
+    "scoring": {
+      "id": "native_tool_equal",
+      "version": 2,
+      "contract": {
+        "dialect": "https://json-schema.org/draft/2020-12/schema",
+        "duplicate_keys": "reject",
+        "comparison": "typed_json",
+        "call_count": 1,
+        "native_only": true,
+        "execute": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "tool_calls",
+    "requirements": [
+      "completion",
+      "tool_calls"
+    ],
+    "fixture": [],
+    "content_hash": "f7f50b3ab72250ae52aac4dc187df9ef00d20c9514832236606bd4dbca36486a"
+  },
+  {
+    "case_id": "tool-005",
+    "dataset_version": 2,
+    "category": "structured_tools",
+    "input": {
+      "prompt": "查询编号DOC-12的文档，请调用get_document。请使用提供的工具调用字段，不用普通文本代替。不实际执行工具。必须恰好产生一个原生调用；参数名称和值按题意，所有声明参数必填且禁止额外参数。参数对象键顺序不限，整数参数接受数学等价的整数表示。这里只验证调用对象，不执行工具，也不要求查询结果。",
+      "response_schema": null,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "get_document",
+            "description": "用于评测的受控工具声明；不执行外部操作。",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "document_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "document_id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "kind": "tool",
+      "name": "get_document",
+      "arguments": {
+        "document_id": "DOC-12"
+      }
+    },
+    "scoring": {
+      "id": "native_tool_equal",
+      "version": 2,
+      "contract": {
+        "dialect": "https://json-schema.org/draft/2020-12/schema",
+        "duplicate_keys": "reject",
+        "comparison": "typed_json",
+        "call_count": 1,
+        "native_only": true,
+        "execute": false
+      }
+    },
+    "difficulty": "easy",
+    "output_format": "tool_calls",
+    "requirements": [
+      "completion",
+      "tool_calls"
+    ],
+    "fixture": [],
+    "content_hash": "18e1fc667a33ea3d85d9222a4759755690d36c86caca8466e8005fbc29abd68c"
+  }
+]

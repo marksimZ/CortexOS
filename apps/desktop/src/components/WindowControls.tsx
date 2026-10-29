@@ -1,18 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Copy, Minus, Square, X } from "lucide-react";
+
+export function handleWindowDrag(event: MouseEvent<HTMLElement>, onError: (error: unknown) => void) {
+  if (event.defaultPrevented || event.button !== 0) return;
+  const target = event.target;
+  if (!(target instanceof Element) || target.closest('button,a,input,select,textarea,label,summary,[role="button"],[role="combobox"],[role="option"],[role="switch"],[role="slider"],[role="tab"],[role="menuitem"],[role="textbox"],[contenteditable]:not([contenteditable="false"])')) return;
+  event.preventDefault();
+  const window = getCurrentWindow();
+  void (event.detail === 2 ? window.toggleMaximize() : window.startDragging()).catch(onError);
+}
 
 export function WindowDragRegion({ onError }: { onError: (error: unknown) => void }) {
   return (
     <div
       className="window-drag-region"
       aria-hidden="true"
-      onMouseDown={(event) => {
-        if (event.button !== 0) return;
-        event.preventDefault();
-        const window = getCurrentWindow();
-        void (event.detail === 2 ? window.toggleMaximize() : window.startDragging()).catch(onError);
-      }}
+      onMouseDown={event => handleWindowDrag(event, onError)}
     />
   );
 }

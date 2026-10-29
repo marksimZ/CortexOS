@@ -1,3 +1,4 @@
+import { AppDialog, openDialog } from "./components/AppDialog";
 import { SelectMenu } from "./components/SelectMenu";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
@@ -5,6 +6,8 @@ import { notify } from "./components/Toast";
 import { FileText, Plus, X } from "lucide-react";
 import { errorText } from "./studio";
 import type { EditKnowledge } from "./Knowledge";
+import { FileName } from "./components/FileName";
+import { PaneDivider, splitStyle } from "./components/PaneDivider";
 export interface SourceRef {
   sourceId: string;
   version: number;
@@ -51,6 +54,10 @@ export function SourceBrowser({
   onDraft?: (request: EditKnowledge) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const splitRoot = useRef<HTMLDivElement>(null);
+  const readerToggle = useRef<HTMLButtonElement>(null);
+  const [splitRatio, setSplitRatio] = useState<number | null>(null);
+  const [readerCollapsed, setReaderCollapsed] = useState(false);
   const revoke = useRef<HTMLDialogElement>(null);
   const [items, setItems] = useState<SourceDocument[]>([]);
   const [selected, setSelected] = useState<Snapshot | null>(null);
@@ -75,6 +82,7 @@ export function SourceBrowser({
       });
       if (live.current && task === generation.current) {
         setSelected(next);
+        setReaderCollapsed(false);
         setLinePage(Math.floor(((range?.startLine ?? 1) - 1) / 200) * 200);
         setStart(range?.startLine ?? 1);
         setEnd(range?.endLine ?? Math.min(10, next.content.split("\n").length));
@@ -94,7 +102,7 @@ export function SourceBrowser({
     return list;
   };
   useEffect(() => {
-    dialog.current?.showModal();
+    openDialog(dialog.current);
     live.current = true;
     void refresh()
       .then(() =>
@@ -151,7 +159,7 @@ export function SourceBrowser({
   const excerpt = valid ? lines.slice(start - 1, end).join("\n") : "";
   return (
     <>
-      <dialog
+      <AppDialog
         ref={dialog}
         className="source-browser form-dialog panel-dialog"
         aria-labelledby="sources-title"
@@ -163,6 +171,10 @@ export function SourceBrowser({
         <header className="source-toolbar panel-header">
           <h2 id="sources-title">资料文件</h2>
           <div className="source-actions">
+            {readerCollapsed && <button ref={readerToggle} className="button secondary" onClick={() => {
+              setReaderCollapsed(false);
+              requestAnimationFrame(() => splitRoot.current?.querySelector<HTMLElement>('[role="separator"]')?.focus());
+            }}>显示文件预览</button>}
             <button
               className="button secondary"
               disabled={busy}
@@ -196,7 +208,7 @@ export function SourceBrowser({
         )}
         {preview ? (
           <section className="source-preview">
-            <h3>{preview.name}</h3>
+            <h3><FileName name={preview.name} /></h3>
             <p>
               {preview.previousVersion
                 ? `已保存版本 v${preview.previousVersion}。内容有变化会另存一个版本；文件已停用时，会恢复使用。`
@@ -214,7 +226,7 @@ export function SourceBrowser({
 
           </section>
         ) : (
-          <div className="source-workbench">
+          <div ref={splitRoot} className={`source-workbench ${readerCollapsed ? "preview-collapsed" : ""}`} style={!readerCollapsed ? splitStyle(splitRatio, 20) : undefined}>
             <aside className="source-list" aria-label="已添加的文件">
               {items.map((item) => (
                 <button
@@ -228,7 +240,7 @@ export function SourceBrowser({
                 >
                   <FileText size={16} />
                   <span>
-                    {item.name}
+                    <FileName name={item.name} />
                     <span>
                       v{item.latestVersion}
                       {item.enabled ? "" : "，已停用"}
@@ -240,14 +252,14 @@ export function SourceBrowser({
                 <p>还没有文件，点击“添加文件”选择 TXT 或 Markdown 文件。</p>
               )}
             </aside>
-            <section className="source-reader" aria-label="文件内容">
+            <section hidden={readerCollapsed} className="source-reader" aria-label="文件内容">
               {loading ? (
                 <p role="status">正在读取文件…</p>
               ) : selected ? (
                 <>
                   <header className="source-toolbar">
                     <h3>
-                      {selected.document.name}
+                      <FileName name={selected.document.name} />
                       {!selected.document.enabled && "，已停用"}
                     </h3>
                     <label>
@@ -400,7 +412,7 @@ export function SourceBrowser({
                       <button
                         className="button secondary"
                         disabled={busy}
-                        onClick={() => revoke.current?.showModal()}
+                        onClick={() => openDialog(revoke.current)}
                       >
                         停用文件
                       </button>
@@ -411,6 +423,10 @@ export function SourceBrowser({
                 <p>选择一个文件，查看内容和以前保存的版本。</p>
               )}
             </section>
+            {!readerCollapsed && <PaneDivider root={splitRoot} ratio={splitRatio} onChange={setSplitRatio} onCollapse={() => {
+              setReaderCollapsed(true);
+              requestAnimationFrame(() => readerToggle.current?.focus());
+            }} label="调整文件预览宽度" />}
           </div>
         )}
         </div>
@@ -444,8 +460,8 @@ export function SourceBrowser({
               </button>
             </footer>
         )}
-      </dialog>
-      <dialog
+      </AppDialog>
+      <AppDialog
         ref={revoke}
         className="form-dialog"
         aria-labelledby="revoke-source-title"
@@ -485,7 +501,7 @@ export function SourceBrowser({
             确认停用
           </button>
         </div>
-      </dialog>
+      </AppDialog>
     </>
   );
 }

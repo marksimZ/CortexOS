@@ -1,3 +1,4 @@
+import { BrandMark } from "./BrandMark";
 import { BookOpen, MessageSquare, Network, Settings } from "lucide-react";
 import type { PageName } from "../navigation";
 import type { Studio } from "../studio";
@@ -22,7 +23,7 @@ export function Sidebar({
         aria-label="CortexOS 首页"
         onClick={onSelect}
       >
-        <span className="brand-glyph">C</span>CortexOS
+        <BrandMark />CortexOS
       </a>
       <nav className="reference-navigation" aria-label="主导航">
         <a

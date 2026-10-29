@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CortexOS 3D: Full Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--e:cubic-bezier(.22,1,.36,1);--ink:#1B2230;--ink2:#3A4456;--mut:#566073;--acc:#4F5BD5;--tealt:#1B5F57;--ambt:#6E470B;--glass:rgba(255,255,255,.58);--gb:rgba(255,255,255,.75);--line:rgba(27,34,48,.1);--bg1:#DAE2FB;--bg2:#D4EEE8;--bg:#EEF1F7;--chip:rgba(79,182,168,.18);--ambbg:rgba(227,168,79,.16);--user:rgba(79,91,213,.09);--card:rgba(255,255,255,.55);--hov:rgba(255,255,255,.85);--pill:rgba(255,255,255,.55);--g2:rgba(255,255,255,.88)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--ink:#E8ECF5;--ink2:#C3CCDC;--mut:#9AA6BC;--acc:#5560E0;--tealt:#7FE0D1;--ambt:#F1C777;--glass:rgba(30,36,52,.6);--gb:rgba(255,255,255,.1);--line:rgba(255,255,255,.14);--bg1:#1B2347;--bg2:#12302F;--bg:#0E121C;--chip:rgba(79,182,168,.22);--user:rgba(120,130,255,.16);--card:rgba(255,255,255,.06);--hov:rgba(255,255,255,.12);--pill:rgba(255,255,255,.07);--g2:rgba(24,30,46,.92)}}
+:root[data-theme="dark"]{--ink:#E8ECF5;--ink2:#C3CCDC;--mut:#9AA6BC;--acc:#5560E0;--tealt:#7FE0D1;--ambt:#F1C777;--glass:rgba(30,36,52,.6);--gb:rgba(255,255,255,.1);--line:rgba(255,255,255,.14);--bg1:#1B2347;--bg2:#12302F;--bg:#0E121C;--chip:rgba(79,182,168,.22);--user:rgba(120,130,255,.16);--card:rgba(255,255,255,.06);--hov:rgba(255,255,255,.12);--pill:rgba(255,255,255,.07);--g2:rgba(24,30,46,.92)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0}
+body{font:400 15px/1.5 Inter,system-ui,sans-serif;color:var(--ink);overflow:hidden;background:radial-gradient(900px 620px at 12% 8%,var(--bg1),transparent 62%),radial-gradient(820px 620px at 92% 92%,var(--bg2),transparent 60%),var(--bg)}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.app{display:flex;gap:16px;height:100%;padding:16px}
+.app>*{animation:up .7s var(--e) both}.app>:nth-child(2){animation-delay:.08s}.app>:nth-child(3){animation-delay:.16s}
+.glass{background:var(--glass);backdrop-filter:blur(24px) saturate(140%);border:1px solid var(--gb);border-radius:20px;box-shadow:0 8px 32px rgba(40,50,90,.08),inset 0 1px 0 var(--gb)}
+.pill{padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--pill);font-size:12.5px;font-weight:500;transition:background .2s,transform .2s}
+.pill:hover{background:var(--hov)}.pill:active{transform:scale(.97)}
+.side{width:252px;flex:none;padding:18px 14px;display:flex;flex-direction:column;gap:16px;overflow:hidden}
+.logo{display:flex;align-items:center;gap:10px;padding:0 6px;font-weight:600;font-size:15px}
+.it{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:10px;font-size:13.5px;color:var(--ink2);text-align:left;transition:background .25s,transform .25s var(--e);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it:hover{background:var(--hov);transform:translateX(2px)}.it.on{background:var(--hov);color:var(--ink);font-weight:500}
+.lb{padding:12px 12px 4px;font-size:11.5px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--mut)}
+main{flex:1;min-width:0;display:flex;flex-direction:column}
+.hd{display:flex;align-items:center;justify-content:space-between;padding:6px 8px 0}
+.scroll{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin}
+.col{max-width:720px;margin:0 auto;padding:32px 8px 16px;display:flex;flex-direction:column;gap:28px}
+.u{align-self:flex-end;max-width:78%;padding:12px 16px;border-radius:18px 18px 6px 18px;background:var(--user)}
+.a{display:flex;flex-direction:column;gap:12px;font-size:15.5px;line-height:1.7}
+.chip{display:inline-flex;margin:0 2px;padding:1px 8px;border-radius:999px;background:var(--chip);color:var(--tealt);font-size:12px;font-weight:500;transition:transform .2s var(--e)}
+.chip:hover{transform:translateY(-1px) scale(1.04)}.am{background:var(--ambbg);color:var(--ambt)}
+.warn{padding:12px 14px;border-radius:14px;background:var(--ambbg);border:1px solid rgba(190,128,30,.3);color:var(--ambt);font-size:14px;line-height:1.6}
+.warn button{text-decoration:underline;font-weight:500}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.mt{font:400 11.5px 'JetBrains Mono',monospace;color:var(--mut)}
+.tr{max-height:0;opacity:0;overflow:hidden;transition:max-height .5s var(--e),opacity .35s}.tr.open{max-height:220px;opacity:1}
+.st{display:flex;gap:8px;align-items:center;padding:2px 0;font:400 12px 'JetBrains Mono',monospace;color:var(--mut);animation:up .4s var(--e) both}
+.ok{color:var(--tealt);width:10px}
+.sp{width:10px;height:10px;border:1.5px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite}
+.cmpw{padding:0 8px 4px;text-align:center}
+.cmp{max-width:720px;margin:0 auto 10px;padding:14px 14px 12px 18px;border-radius:22px;transition:box-shadow .35s var(--e),transform .35s var(--e)}
+.cmp:focus-within{box-shadow:0 14px 44px rgba(79,91,213,.22),0 0 0 1px var(--acc);transform:translateY(-2px)}
+textarea{width:100%;resize:none;border:0;outline:0;background:none;font:inherit;line-height:1.5;color:var(--ink)}
+.send{width:36px;height:36px;border-radius:50%;background:var(--acc);color:#fff;display:grid;place-items:center;transition:transform .25s var(--e)}
+.send:hover{transform:scale(1.08)}.send:active{transform:scale(.94)}
+.ev{width:336px;flex:none;padding:18px;display:flex;flex-direction:column;gap:16px;overflow-y:auto}
+.gc{position:relative;border-radius:16px;background:var(--card);border:1px solid var(--line);overflow:hidden}
+.n{cursor:pointer;transition:opacity .4s}.n text{fill:var(--ink2);font-size:10px;pointer-events:none}.n .dd{transition:transform .3s var(--e);transform-box:fill-box;transform-origin:center}.n:hover .dd{transform:scale(1.18)}
+.n .h{fill:#4FB6A8;opacity:0;transform-box:fill-box;transform-origin:center}.pulse .h{animation:pulse .9s ease-out}
+.det{position:absolute;left:10px;right:10px;bottom:10px;padding:12px;border-radius:14px;background:var(--g2);backdrop-filter:blur(16px);border:1px solid var(--line);transform:translateY(130%);opacity:0;transition:transform .55s var(--e),opacity .3s;display:flex;flex-direction:column;gap:6px}
+.det.show{transform:none;opacity:1}
+.det p{margin:0;font-size:12.5px;line-height:1.5;color:var(--ink2);outline:0;border-radius:6px;padding:2px 4px;margin:0 -4px}.det p:focus{background:var(--card)}
+.bar{display:flex;height:8px;border-radius:999px;overflow:hidden;background:var(--line)}.bar i{display:block;transition:width .7s var(--e)}
+.rows{display:flex;flex-direction:column}
+.r{display:flex;align-items:center;gap:10px;max-height:64px;margin-bottom:6px;padding:10px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line);overflow:hidden;transition:max-height .5s var(--e),opacity .3s,padding .5s var(--e),margin .5s var(--e),transform .5s var(--e)}
+.r.gone{max-height:0;opacity:0;padding-top:0;padding-bottom:0;margin-bottom:0;transform:translateX(18px)}
+.r.cf{background:var(--ambbg)}
+.r .t{flex:1;min-width:0;text-align:left}.r small{display:block;font-size:11.5px;color:var(--mut)}
+.x{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;color:var(--mut);transition:background .2s}.x:hover{background:var(--hov)}
+.emp{margin:80px 0;text-align:center;color:var(--mut);animation:up .5s var(--e) both}
+.up{animation:up .5s var(--e) both}.pop{animation:pop .4s var(--e) both}
+@keyframes up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%{opacity:0;transform:scale(.6)}35%{opacity:.5}100%{opacity:0;transform:scale(2.2)}}
+@media(max-width:1100px){.ev{display:none}}
+@media(max-width:760px){.side{display:none}.app{padding:12px}}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+[hidden]{display:none!important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.fx{flex:1}
+.out{animation:outk .13s ease forwards!important}.in{animation:up .45s var(--e) both!important}
+.in>*{animation:up .45s var(--e) both}.in>:nth-child(2){animation-delay:.05s}.in>:nth-child(3){animation-delay:.1s}.in>:nth-child(4){animation-delay:.15s}
+@keyframes outk{to{opacity:0;transform:translateY(-6px)}}
+.pgx{flex:1;min-width:0;padding:22px 26px;display:flex;flex-direction:column;gap:14px;overflow:auto}
+.phx,.tbx{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.tbx label{font-size:13px;color:var(--ink2)}
+.h1x{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em;outline:0}h2.h2x{margin:0 0 4px;font-size:15px;font-weight:600}
+.pbtn{padding:7px 16px;border-radius:999px;background:var(--acc);color:#fff;font-size:12.5px;font-weight:500;transition:transform .2s,box-shadow .2s}.pbtn:hover:not(:disabled){box-shadow:0 4px 14px rgba(79,91,213,.35)}.pbtn:active:not(:disabled){transform:scale(.97)}.pbtn:disabled,.pill:disabled{opacity:.5;cursor:default}
+.fi{padding:8px 14px;min-height:38px;border:1px solid var(--line);border-radius:12px;background:var(--card);font:inherit;font-size:13.5px;color:var(--ink);max-width:100%;transition:border-color .2s,box-shadow .2s}.fi:focus{outline:0;border-color:var(--acc);box-shadow:0 0 0 3px rgba(79,91,213,.15)}
+.tabsx{display:inline-flex;gap:4px;padding:4px;background:var(--pill);border:1px solid var(--line);border-radius:999px}
+.tabx{padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:500;color:var(--ink2);transition:background .25s,color .25s}.tabx[aria-selected=true]{background:var(--hov);color:var(--ink);box-shadow:0 1px 3px rgba(40,50,90,.14)}
+.ibx{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;color:var(--mut);transition:background .2s}.ibx:hover{background:var(--hov)}
+.tpx{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px}
+.kgx{flex:1;min-height:0;display:grid;grid-template-columns:290px 1fr;gap:16px}.kl{display:flex;flex-direction:column;gap:10px;min-height:0;overflow:auto}
+.xl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}.xl li{animation:up .4s var(--e) both;animation-delay:calc(var(--i,0)*35ms)}
+.ki{width:100%;display:flex;flex-direction:column;gap:1px;text-align:left;padding:10px 12px;border-radius:12px;transition:background .2s}.ki:hover{background:var(--hov)}.ki.on{background:var(--user)}.ki b{font-weight:600;font-size:13.5px}.ki span{font-size:12.5px;color:var(--mut)}
+.b-c{color:var(--tealt)!important}.b-d{color:var(--mut)!important}.b-r{color:var(--ambt)!important}
+.kd{border-radius:16px;background:var(--card);border:1px solid var(--line);padding:24px 28px;overflow:auto}.emp{text-align:center;margin-top:80px;color:var(--mut)}.emp h2{color:var(--ink)}
+.kdi{max-width:680px;display:flex;flex-direction:column;gap:6px;animation:up .45s var(--e) both}.kdi h3{margin:12px 0 2px;font-size:12px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--mut)}
+.tt{font-size:20px;font-weight:600;border:0;border-bottom:1px solid var(--line);background:none;padding:4px 0;color:var(--ink);font-family:inherit}.tt:focus{outline:0;border-color:var(--acc)}
+.bdx{padding:2px 10px;border-radius:999px;background:var(--chip);font-size:12px;font-weight:500}.vl{margin:0;padding-left:20px;color:var(--mut);font-size:13.5px}.rwx{display:flex;gap:8px;margin-top:14px}
+.cvx{position:relative;flex:1;min-height:300px;border-radius:16px;background:var(--card);border:1px solid var(--line);overflow:hidden}.cvx svg{width:100%;height:100%;display:block}
+.tagx{position:absolute;left:14px;top:12px;z-index:2;font-size:12px;padding:3px 10px;background:var(--pill);border:1px solid var(--line);border-radius:999px;color:var(--mut)}.tagx.ok{color:var(--tealt)}
+.gnx{cursor:pointer;animation:fl 6s ease-in-out infinite alternate;transition:opacity .35s}.gnx text{font-size:13px;fill:var(--ink2);pointer-events:none}.gnx .sph{transform-box:fill-box;transform-origin:center;transition:transform .3s var(--e)}.gnx:hover .sph{transform:scale(1.12)}.gnx:focus{outline:0}.gnx:focus-visible .sph{stroke:var(--acc);stroke-width:4}
+@keyframes fl{to{transform:translateY(-5px)}}
+.nlx{position:absolute;left:14px;top:44px;width:250px;max-height:60%;overflow:auto;margin:0;padding:8px;list-style:none;background:var(--g2);backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:14px;z-index:3;animation:up .3s var(--e)}.nlx button{width:100%;text-align:left;padding:8px 10px;border-radius:8px;font-size:13px}.nlx button:hover{background:var(--hov)}
+.gdx{position:absolute;right:18px;top:18px;width:300px;padding:16px;background:var(--g2);backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 36px rgba(40,50,90,.16);transform:translateX(120%);opacity:0;visibility:hidden;transition:transform .55s var(--e),opacity .3s,visibility .55s;outline:0;z-index:3}.gdx.show{transform:none;opacity:1;visibility:visible}.gdx p{margin:6px 0 12px;font-size:13px;line-height:1.55;color:var(--ink2)}
+.lgx{position:absolute;left:14px;bottom:12px;z-index:2;padding:8px 14px;background:var(--pill);border:1px solid var(--line);border-radius:14px;font-size:12.5px}.lgx .pop{bottom:130%}
+.flow{list-style:none;margin:18px auto;padding:0;max-width:600px}.flow li{position:relative;padding:0 0 20px 36px;animation:up .5s var(--e) both;animation-delay:calc(var(--i)*110ms)}
+.flow li::before{content:"";position:absolute;left:8px;top:22px;bottom:-2px;width:2px;background:var(--line);transform-origin:top;animation:grow .5s var(--e) both;animation-delay:calc(var(--i)*110ms + 150ms)}.flow li:last-child::before{display:none}
+.flow li::after{content:"";position:absolute;left:1px;top:4px;width:16px;height:16px;border-radius:50%;background:#4FB6A8}.flow li.bad::after{background:#C38A23}.flow b{display:block;font-size:14px;font-weight:600}.flow span{font-size:13px;color:var(--mut)}
+@keyframes grow{from{transform:scaleY(0)}to{transform:none}}
+.sgx{display:grid;grid-template-columns:200px minmax(0,640px);gap:18px;padding-top:8px}.sgx>h2{margin:0;font-size:15px;font-weight:600}
+.sbx{display:flex;flex-direction:column;align-items:flex-start;gap:10px}.sbx label{font-size:13px;color:var(--ink2);margin-top:4px}.sbx .fi{width:100%}
+.okt{display:flex;align-items:center;gap:8px;margin:0;color:var(--tealt);font-weight:500;font-size:13.5px}
+.dl{width:100%;margin:0}.dl div{display:flex;justify-content:space-between;gap:20px;padding:12px 0;border-bottom:1px solid var(--line);font-size:13.5px}.dl dt{color:var(--mut)}.dl dd{margin:0;text-align:right}
+.sbx details p{margin:8px 0;color:var(--mut);font-size:13px}.sbx details .pop{position:static;box-shadow:none;margin-top:6px}
+.toastx{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);padding:9px 18px;background:var(--g2);backdrop-filter:blur(16px);border:1px solid var(--line);color:var(--ink);border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .3s,transform .4s var(--e);z-index:9;box-shadow:0 8px 28px rgba(40,50,90,.16)}.toastx.show{opacity:1;transform:translate(-50%,0)}
+.sp2{display:inline-block;width:11px;height:11px;border:1.5px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-1px;margin-right:6px}
+@media(max-width:900px){.kgx,.sgx{grid-template-columns:1fr}.side{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="glass side">
+<div class="logo"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12" fill="none" stroke="#4F5BD5" stroke-width="1.5"></circle><circle cx="13" cy="13" r="4.5" fill="#4F5BD5"></circle><circle cx="19.5" cy="7" r="2.2" fill="#4FB6A8"></circle></svg><span>CortexOS <span style="font-weight:400;color:var(--mut)">3D</span></span></div>
+<button class="pill" id="new" style="text-align:left;padding:10px 12px;border-radius:12px;font-size:13.5px">+ New thread</button>
+<nav aria-label="Primary">
+<button class="it nvb on" data-p="chat" aria-current="page">Chat</button><button class="it nvb" data-p="knowledge">Knowledge</button><button class="it nvb" data-p="graph">Cognitive graph</button><button class="it nvb" data-p="prefs">Settings</button>
+</nav>
+<div style="flex:1;min-height:0;overflow:hidden" id="ths">
+<div class="lb">Today</div><button class="it on th">Retrieval pipeline decisions</button><button class="it th">Chunking strategy for markdown</button>
+<div class="lb">Yesterday</div><button class="it th">Eval set for the local reranker</button><button class="it th">Camera transition notes</button>
+</div>
+<div class="glass" style="padding:12px;border-radius:14px;box-shadow:none;display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--mut)"><div style="display:flex;justify-content:space-between;color:var(--ink);font-weight:500;font-size:12.5px"><span>Knowledge base</span><span class="mt">main</span></div>2 changes since last commit<button class="pill">Review &amp; commit</button></div>
+</aside>
+
+<main id="cm">
+<header class="hd"><div><h1 data-h tabindex="-1" style="font-weight:600;font-size:15px;margin:0;outline:0">Retrieval pipeline decisions</h1><div style="font-size:12.5px;color:var(--mut)">Workspace / CortexOS notes</div></div>
+<span class="pill" style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:50%;background:#2E9E8F"></span>llama3.1:8b <span style="color:var(--mut);font-weight:400">on this device</span></span></header>
+<div class="scroll" id="sc"><div class="col" id="chat">
+<div class="u">Does the graph need to be fully 3D to be useful?</div>
+<div class="a"><div>Your notes lean toward a constrained camera with a synced outline view. Free orbit stays available, but the outline is the fast path for reading and editing.</div></div>
+<div class="u">What did we decide about the retrieval pipeline last week, and is anything still unresolved?</div>
+<div class="a">
+<div class="tr" id="t0"><div class="st"><span class="ok">✓</span>Searching notes · BM25 + embeddings</div><div class="st"><span class="ok">✓</span>Reranking the top 20</div><div class="st"><span class="ok">✓</span>Reading 3 sources</div><div class="st"><span class="ok">✓</span>Checking for conflicts</div></div>
+<div>You settled on hybrid search, BM25 plus embeddings, with a reranker applied only to the top 20 results.<button class="chip" data-f="c">1 Retrieval decisions</button> The reranker was deferred on lower-VRAM machines because it competes with the 3D renderer for GPU memory.<button class="chip" data-f="a">2 VRAM budget</button></div>
+<div class="warn"><strong style="font-weight:600">One conflict.</strong> An older note, Search v1, still says embeddings-only. It was never marked superseded. <button data-f="d">Resolve in graph</button></div>
+<div class="row"><button class="pill" data-tr="t0">Show trace</button><span class="mt">3 used · 1 conflict · 6 retrieved</span></div>
+</div>
+</div></div>
+<div class="cmpw"><div class="glass cmp"><textarea id="in" rows="2" aria-label="Message" placeholder="Ask anything, then press Enter"></textarea>
+<div class="row"><span class="pill" style="font-weight:400;color:var(--ink2)">Workflow: Cite &amp; verify</span><button class="send" id="go" aria-label="Send"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"></path></svg></button></div></div>
+<div style="font-size:12px;color:var(--mut)">Prototype · canned answers · runs locally</div></div>
+</main>
+
+<aside class="glass ev" id="cev">
+<div class="row"><strong style="font-size:14px">Evidence</strong><span class="mt">click a node</span></div>
+<div class="gc">
+<svg id="g" viewBox="0 0 300 232" width="100%" role="group" aria-label="Mini knowledge graph">
+<path d="M150 112L82 70M150 112L222 64M150 112L150 40M222 64L274 108M82 70L38 110" stroke="#9AA6BC" stroke-width="1.2" fill="none" opacity=".7"></path>
+<path d="M150 112L228 162" stroke="#C38A23" stroke-width="1.6" stroke-dasharray="4 3" fill="none"></path>
+<path d="M150 112L72 166" stroke="#9AA6BC" stroke-width="1.2" stroke-dasharray="2 4" fill="none"></path>
+<g class="n" data-n="c" data-f="c" tabindex="0" role="button" aria-label="Retrieval decisions"><circle class="h" cx="150" cy="112" r="18"></circle><circle class="dd" cx="150" cy="112" r="14" fill="#4FB6A8"></circle><text x="150" y="142" text-anchor="middle" style="font-weight:600">Retrieval decisions</text></g>
+<g class="n" data-n="a" data-f="a" tabindex="0" role="button" aria-label="VRAM budget"><circle class="h" cx="82" cy="70" r="12"></circle><circle class="dd" cx="82" cy="70" r="9" fill="#4FB6A8"></circle><text x="82" y="54" text-anchor="middle">VRAM budget</text></g>
+<g class="n" data-n="b" data-f="b" tabindex="0" role="button" aria-label="Reranker eval"><circle class="h" cx="222" cy="64" r="11"></circle><circle class="dd" cx="222" cy="64" r="8" fill="#4FB6A8"></circle><text x="222" y="48" text-anchor="middle">Reranker eval</text></g>
+<g class="n" data-n="d" data-f="d" tabindex="0" role="button" aria-label="Search v1, conflict"><circle class="h" cx="228" cy="162" r="13" style="fill:#C38A23"></circle><circle class="dd" cx="228" cy="162" r="10" fill="#F3D9A4" stroke="#C38A23" stroke-width="1.5"></circle><text x="228" y="184" text-anchor="middle" style="fill:var(--ambt)">Search v1</text></g>
+<circle cx="72" cy="166" r="6" fill="none" stroke="#7F8CA3" stroke-width="1.3"></circle>
+<circle cx="150" cy="40" r="5" fill="#4FB6A8" opacity=".45"></circle><circle cx="274" cy="108" r="4.5" fill="#7F8CA3" opacity=".4"></circle><circle cx="38" cy="110" r="4" fill="#7F8CA3" opacity=".4"></circle>
+</svg>
+<div class="det" id="det"><div class="row"><strong id="dt" style="font-size:13.5px"></strong><button class="pill" id="back">Back</button></div><div class="mt" id="dm"></div><p id="ds" contenteditable="true" role="textbox" aria-label="Edit note"></p></div>
+</div>
+<div><div class="row" style="margin-bottom:8px"><strong style="font-size:13px">Context window</strong><span class="mt" id="tk">3.2k / 8k tokens</span></div>
+<div class="bar"><i data-k="o" style="background:#9AA6BC"></i><i data-k="c" style="background:var(--acc)"></i><i data-k="a" style="background:#4FB6A8"></i><i data-k="d" style="background:#C38A23"></i></div></div>
+<div class="rows">
+<div class="r"><span style="width:8px;height:8px;border-radius:50%;background:#4FB6A8"></span><button class="t" data-f="c" style="font-size:13px;font-weight:500">Retrieval decisions<small>v7 · edited 4 days ago</small></button><span class="mt">840</span><button class="x" data-x="c" aria-label="Remove Retrieval decisions from context"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"></path></svg></button></div>
+<div class="r"><span style="width:8px;height:8px;border-radius:50%;background:#4FB6A8"></span><button class="t" data-f="a" style="font-size:13px;font-weight:500">VRAM budget<small>v3 · edited 6 days ago</small></button><span class="mt">610</span><button class="x" data-x="a" aria-label="Remove VRAM budget from context"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"></path></svg></button></div>
+<div class="r cf"><span style="width:8px;height:8px;border-radius:50%;background:#F3D9A4;border:1.5px solid #C38A23"></span><button class="t" data-f="d" style="font-size:13px;font-weight:500">Search v1<small style="color:var(--ambt)">Conflicts with Retrieval decisions</small></button><span class="mt">390</span><button class="x" data-x="d" aria-label="Remove Search v1 from context"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"></path></svg></button></div>
+</div>
+</aside>
+<section class="glass pgx" id="x-k" hidden aria-labelledby="x-kh">
+<div class="phx"><h1 class="h1x" id="x-kh" data-h tabindex="-1">Knowledge</h1><span class="fx"></span><button class="pill" id="x-kf">Source files</button><button class="pbtn" id="x-kn">+ New note</button></div>
+<div class="kgx"><div class="kl"><label class="sr" for="x-ks">Search titles</label><input class="fi" id="x-ks" type="search" placeholder="Search titles"><label class="sr" for="x-kst">Status</label><select class="fi" id="x-kst"><option value="">All statuses</option><option>Confirmed</option><option>Draft</option><option>Needs review</option></select><ul class="xl" id="x-kul"></ul></div><div class="kd" id="x-kd" aria-live="polite"></div></div>
+</section>
+<section class="glass pgx" id="x-g" hidden aria-labelledby="x-gh">
+<div class="phx"><h1 class="h1x" id="x-gh" data-h tabindex="-1">Cognitive graph</h1><div class="tabsx" role="tablist" aria-label="Graph views"><button class="tabx" role="tab" id="x-t1" aria-selected="true" aria-controls="x-p1">Knowledge relations</button><button class="tabx" role="tab" id="x-t2" tabindex="-1" aria-selected="false" aria-controls="x-p2">Execution trace</button></div></div>
+<div class="tpx" role="tabpanel" id="x-p1" aria-labelledby="x-t1">
+<div class="tbx"><button class="pill" id="x-nlb" aria-expanded="false" aria-controls="x-nl">Node list</button><label class="sr" for="x-ns">Search nodes</label><input class="fi" id="x-ns" type="search" placeholder="Search nodes"><button class="pill" id="x-fl" aria-pressed="false">Confirmed only</button><span class="mt" id="x-cn" role="status">Loaded 6 / 6 nodes</span><span class="fx"></span>
+<button class="ibx" id="x-fit" aria-label="Fit view"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4"></path><circle cx="12" cy="12" r="2"></circle></svg></button>
+<button class="ibx" id="x-rs" aria-label="Reset view"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M5 12a7 7 0 1 0 2.5-5.4M5 4v4h4"></path></svg></button><button class="pbtn" id="x-sv">Save view</button></div>
+<div class="cvx"><span class="tagx" id="x-vt">View not saved</span>
+<svg id="x-gs" viewBox="0 0 1000 560" role="group" aria-label="3D knowledge graph. Tab moves between nodes, Enter focuses one, Escape goes back. The node list is an alternative."></svg>
+<ul class="nlx" id="x-nl" hidden></ul><div class="gdx" id="x-gd" tabindex="-1" role="region" aria-label="Node details"></div>
+<details class="lgx"><summary>Legend and controls</summary><div class="pop">Teal: confirmed · Amber: needs review · Grey ring: draft · Click a node to focus · Esc to go back</div></details></div></div>
+<div class="tpx" role="tabpanel" id="x-p2" aria-labelledby="x-t2" hidden><div class="tbx"><label for="x-rsel">Answer record</label><select class="fi" id="x-rsel"></select><button class="pill" id="x-rr">Refresh records</button></div><div id="x-ex" aria-live="polite"></div></div>
+</section>
+<section class="glass pgx" id="x-p" hidden aria-labelledby="x-ph">
+<div class="phx"><h1 class="h1x" id="x-ph" data-h tabindex="-1">Settings</h1><div class="tabsx" role="tablist" aria-label="Settings sections" id="x-ptl"><button class="tabx" role="tab" id="x-s1" aria-selected="true" aria-controls="x-q1">Model connection</button><button class="tabx" role="tab" id="x-s2" tabindex="-1" aria-selected="false" aria-controls="x-q2">Local data</button><button class="tabx" role="tab" id="x-s3" tabindex="-1" aria-selected="false" aria-controls="x-q3">About</button></div></div>
+<div class="sgx" role="tabpanel" id="x-q1" aria-labelledby="x-s1"><h2>Model connection</h2>
+<div class="sbx"><p class="okt" id="x-ost" role="status">● Ollama 0.40.6 connected</p>
+<label for="x-url">Server address</label><input class="fi" id="x-url" value="http://127.0.0.1:11434"><button class="pill" id="x-ck">Test connection</button>
+<label for="x-msel">Model</label><select class="fi" id="x-msel"><option>llama3.1:8b (Q4_K_M, 4.9 GB)</option><option>qwen3:4b-instruct (Q4_K_M, 2.5 GB)</option></select>
+<details><summary>How to choose a model</summary><p>Under 6 GB of VRAM, a 4B model keeps the renderer smooth. Larger models answer more reliably but load more slowly.</p></details>
+<details><summary>Generation parameters</summary><div style="margin:8px 0"><label for="x-tmp">Temperature <output id="x-to">0.7</output></label><br><input id="x-tmp" type="range" min="0" max="1" step="0.1" value="0.7"></div></details>
+<button class="pbtn" id="x-sa" disabled>Save settings</button></div></div>
+<div class="sgx" role="tabpanel" id="x-q2" aria-labelledby="x-s2" hidden><h2>Local data</h2><div><dl class="dl"><div><dt>Workspace and chat storage</dt><dd>Saved automatically to a local database</dd></div><div><dt>File access</dt><dd>Only files you pick on the Knowledge page</dd></div><div><dt>Backup and export</dt><dd>Not supported yet</dd></div></dl><p class="mt" style="margin:14px 0 2px">Data location</p><p class="mt" style="margin:0">C:\Users\…\AppData\Roaming\com.cortexos.desktop\cortexos.sqlite3</p></div></div>
+<div class="sgx" role="tabpanel" id="x-q3" aria-labelledby="x-s3" hidden><h2>About</h2><p style="margin:0;font-size:14px"><b>CortexOS</b> <span style="color:var(--mut)">0.1.0 local workbench beta</span></p></div>
+</section>
+<div class="toastx" id="x-toast" role="status" aria-live="polite"></div>
+</div>
+<script>
+const N={c:{x:150,y:112,t:"Retrieval decisions",m:"v7 · edited 4 days ago",s:"Hybrid search: BM25 plus embeddings. Reranker only on the top 20 results."},a:{x:82,y:70,t:"VRAM budget",m:"v3 · edited 6 days ago",s:"Renderer and local model share GPU memory. Defer the reranker on smaller GPUs."},b:{x:222,y:64,t:"Reranker eval",m:"v2 · edited yesterday",s:"Compare rerank on and off using the saved question set."},d:{x:228,y:162,t:"Search v1",m:"v1 · never superseded · conflict",s:"Embeddings only, no keyword search. Conflicts with the current decision."}};
+const T={o:1360,c:840,a:610,d:390};
+const $=s=>document.querySelector(s),svg=$("#g"),det=$("#det"),chat=$("#chat"),sc=$("#sc");
+const rm=matchMedia("(prefers-reduced-motion:reduce)").matches;
+let vb=[0,0,300,232],cur=null,raf;
+const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+function go(to,dur=650){cancelAnimationFrame(raf);const from=vb.slice(),t0=performance.now();dur=rm?0:dur;(function f(n){const p=dur?Math.min((n-t0)/dur,1):1,e=ease(p);vb=from.map((v,i)=>v+(to[i]-v)*e);svg.setAttribute("viewBox",vb.join(" "));if(p<1)raf=requestAnimationFrame(f)})(t0)}
+function pulse(k){const g=document.querySelector('[data-n="'+k+'"]');if(!g)return;g.classList.remove("pulse");void g.getBoundingClientRect();g.classList.add("pulse")}
+function focusN(k){const n=N[k];cur=k;go([n.x-62.5,n.y-30,125,96.7]);$("#dt").textContent=n.t;$("#dm").textContent=n.m;$("#ds").textContent=n.s;det.classList.add("show");pulse(k)}
+function back(){cur=null;det.classList.remove("show");go([0,0,300,232])}
+function upd(){const tot=Object.values(T).reduce((a,b)=>a+b,0);document.querySelectorAll(".bar i").forEach(i=>i.style.width=T[i.dataset.k]/80+"%");$("#tk").textContent=(tot/1000).toFixed(1)+"k / 8k tokens"}
+function bottom(){sc.scrollTo({top:sc.scrollHeight,behavior:rm?"auto":"smooth"})}
+function send(){const ta=$("#in"),q=ta.value.trim();if(!q)return;ta.value="";
+const u=document.createElement("div");u.className="u up";u.textContent=q;
+const a=document.createElement("div");a.className="a up";a.innerHTML='<div class="tr open"></div><div class="tx"></div>';
+const e=chat.querySelector(".emp");if(e)e.remove();chat.append(u,a);bottom();
+const tr=a.firstChild,tx=a.lastChild,id="t"+Date.now();tr.id=id;
+const steps=["Searching notes · BM25 + embeddings","Reranking the top 20","Reading 3 sources","Checking for conflicts"],ks=["c","a","b","d"];
+steps.forEach((s,i)=>setTimeout(()=>{const p=tr.querySelector(".sp");if(p)p.outerHTML='<span class="ok">✓</span>';tr.insertAdjacentHTML("beforeend",'<div class="st"><span class="sp"></span>'+s+"</div>");pulse(ks[i]);bottom()},i*650));
+setTimeout(()=>{const p=tr.querySelector(".sp");if(p)p.outerHTML='<span class="ok">✓</span>';tr.classList.remove("open");stream()},steps.length*650+300);
+const parts=["Closest match in your notes: hybrid search with a reranker on the top 20 results",["c","1 Retrieval decisions"]," and a GPU memory cap that defers the reranker on smaller machines",["a","2 VRAM budget"],". One older note still disagrees:",["d","Search v1"],"."];
+function stream(){let pi=0,wi=0,sp=null;(function tick(){if(pi>=parts.length){a.insertAdjacentHTML("beforeend",'<div class="row up"><button class="pill" data-tr="'+id+'">Show trace</button><span class="mt">3 used · 1 conflict · 6 retrieved</span></div>');return bottom()}
+const p=parts[pi];if(typeof p!=="string"){const b=document.createElement("button");b.className="chip pop"+(p[0]==="d"?" am":"");b.dataset.f=p[0];b.textContent=p[1];tx.append(b);pulse(p[0]);pi++;wi=0;sp=null;return setTimeout(tick,160)}
+if(!sp){sp=document.createElement("span");tx.append(sp)}wi+=2;sp.textContent=p.slice(0,wi);if(wi>=p.length){pi++;sp=null;wi=0}setTimeout(tick,rm?0:16)})()}}
+document.addEventListener("click",e=>{
+let t=e.target.closest("[data-f]");if(t&&N[t.dataset.f])return focusN(t.dataset.f);
+t=e.target.closest("[data-x]");if(t){const k=t.dataset.x;t.closest(".r").classList.add("gone");T[k]=0;upd();const g=document.querySelector('[data-n="'+k+'"]');if(g)g.style.opacity=.3;return}
+t=e.target.closest("[data-tr]");if(t){const x=document.getElementById(t.dataset.tr).classList.toggle("open");t.textContent=x?"Hide trace":"Show trace";return}
+t=e.target.closest(".th");if(t){document.querySelectorAll(".th").forEach(b=>b.classList.remove("on"));t.classList.add("on");chat.classList.remove("up");void chat.offsetWidth;chat.classList.add("up")}});
+document.addEventListener("keydown",e=>{const t=e.target.closest&&e.target.closest("g[data-f]");if(t&&(e.key==="Enter"||e.key===" ")){e.preventDefault();focusN(t.dataset.f)}if(e.key==="Escape"&&cur)back()});
+$("#back").onclick=back;$("#go").onclick=send;
+$("#in").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}});
+$("#ds").addEventListener("input",e=>{if(cur)N[cur].s=e.target.textContent});
+$("#new").onclick=()=>{chat.innerHTML='<p class="emp">What are you working on?</p>';document.querySelectorAll(".th").forEach(b=>b.classList.remove("on"))};
+upd();sc.scrollTop=sc.scrollHeight;
+</script>
+<script>
+(()=>{
+const Q=(s,r=document)=>[...r.querySelectorAll(s)],G$=id=>document.getElementById(id),wait=ms=>new Promise(r=>setTimeout(r,rm?0:ms));
+const say=m=>{const t=G$("x-toast");t.textContent=m;t.classList.add("show");clearTimeout(say.t);say.t=setTimeout(()=>t.classList.remove("show"),2400)};
+const K=[{id:1,t:"Retrieval decisions",s:"Confirmed",v:7,b:"Hybrid search: BM25 plus embeddings, with a reranker applied only to the top 20 results.",src:"Design review, last week"},{id:2,t:"VRAM budget",s:"Confirmed",v:3,b:"The renderer and the local model share GPU memory. Defer the reranker on lower-VRAM machines.",src:"Benchmark notes"},{id:3,t:"Reranker eval",s:"Draft",v:2,b:"Compare reranking on and off using the saved question set.",src:"Eval plan"},{id:4,t:"Search v1",s:"Needs review",v:1,b:"Embeddings only, no keyword search. Conflicts with Retrieval decisions and was never marked superseded.",src:"Early prototype notes"},{id:5,t:"Chunking strategy",s:"Confirmed",v:1,b:"Split markdown by heading, keep chunks under 400 tokens, and carry the parent heading as context.",src:"Chunking thread"},{id:6,t:"Camera transition notes",s:"Draft",v:1,b:"About 400 ms, interruptible, with a persistent back gesture and a synced outline view.",src:"Graph UX thread"}];
+const kk=id=>K.find(k=>k.id==id),bc=s=>s=="Confirmed"?"b-c":s=="Draft"?"b-d":"b-r";
+/* router */
+const grp={chat:["cm","cev"],knowledge:["x-k"],graph:["x-g"],prefs:["x-p"]};let cp="chat";
+function show(p,quiet){if(p==cp)return;const old=cp;cp=p;
+Q(".nvb").forEach(b=>{const on=b.dataset.p==p;b.classList.toggle("on",on);on?b.setAttribute("aria-current","page"):b.removeAttribute("aria-current")});
+const els=i=>grp[i].map(G$),go=()=>{els(old).forEach(e=>{e.hidden=true;e.classList.remove("out")});els(p).forEach(e=>{e.hidden=false;e.classList.add("in");setTimeout(()=>e.classList.remove("in"),900)});if(p=="chat")sc.scrollTop=sc.scrollHeight;const h=els(p)[0].querySelector("[data-h]");h&&!quiet&&h.focus({preventScroll:true})};
+if(rm)go();else{els(old).forEach(e=>e.classList.add("out"));setTimeout(go,130)}}
+Q(".nvb").forEach(b=>b.onclick=()=>show(b.dataset.p));
+document.addEventListener("click",e=>{if(e.target.closest(".th")||e.target.closest("#new"))show("chat")});
+/* tabs */
+function tabs(tl,cb){const ts=Q('[role=tab]',tl),sel=(i,f)=>{ts.forEach((t,j)=>{const on=i==j;t.setAttribute("aria-selected",on);t.tabIndex=on?0:-1;const p=G$(t.getAttribute("aria-controls"));p.hidden=!on;if(on){p.classList.remove("in");void p.offsetWidth;p.classList.add("in")}});if(f)ts[i].focus();cb&&cb(i)};
+ts.forEach((t,i)=>t.onclick=()=>sel(i));tl.onkeydown=e=>{const i=ts.indexOf(document.activeElement);if(i<0)return;const n={ArrowRight:(i+1)%ts.length,ArrowLeft:(i+ts.length-1)%ts.length,Home:0,End:ts.length-1}[e.key];if(n!=null){e.preventDefault();sel(n,1)}};return sel}
+const gSel=tabs(Q('[aria-label="Graph views"]')[0]);tabs(G$("x-ptl"));
+/* knowledge */
+let ck=null;
+function renderK(){const q=G$("x-ks").value.trim().toLowerCase(),s=G$("x-kst").value;G$("x-kul").innerHTML=K.filter(k=>k.t.toLowerCase().includes(q)&&(!s||k.s==s)).map((k,i)=>`<li style="--i:${i}"><button class="ki ${k.id==ck?"on":""}" data-id="${k.id}"><b>${k.t}</b><span><span class="${bc(k.s)}">${k.s}</span> · v${k.v}</span></button></li>`).join("")||'<li class="mt" style="padding:8px">No matching notes</li>'}
+function renderD(){const k=kk(ck),d=G$("x-kd");if(!k){d.innerHTML='<div class="emp"><h2 class="h2x">Select a note</h2><p>View content, sources and versions.</p></div>';return}
+d.innerHTML=`<div class="kdi"><label class="sr" for="x-kti">Title</label><input class="tt" id="x-kti" value="${k.t}"><p style="margin:6px 0"><span class="bdx ${bc(k.s)}">${k.s}</span> &nbsp;<span class="mt">v${k.v}</span></p><label class="sr" for="x-kb">Content</label><textarea class="fi" id="x-kb" rows="6" style="width:100%;line-height:1.55">${k.b}</textarea><h3>Source</h3><div style="font-size:14px">${k.src}</div><h3>Versions</h3><ol class="vl" reversed>${Array.from({length:k.v},(_,i)=>`<li>v${k.v-i}${i?"":" (current)"}</li>`).join("")}</ol><div class="rwx"><button class="pill" id="x-kv">Save new version</button><button class="pbtn" id="x-kc" ${k.s=="Confirmed"?"disabled":""}>Confirm</button></div></div>`;
+G$("x-kv").onclick=()=>{k.t=G$("x-kti").value;k.b=G$("x-kb").value;k.v++;renderK();renderD();drawG();say("Saved as v"+k.v)};G$("x-kc").onclick=()=>{k.s="Confirmed";renderK();renderD();drawG();say("Note confirmed")}}
+const selK=id=>{ck=id;renderK();renderD()};
+G$("x-kul").onclick=e=>{const b=e.target.closest(".ki");b&&selK(+b.dataset.id)};G$("x-ks").oninput=G$("x-kst").onchange=renderK;
+G$("x-kf").onclick=()=>say("Not implemented in this prototype");
+G$("x-kn").onclick=()=>{K.push({id:K.length+1,t:"Untitled note",s:"Draft",v:1,b:"",src:"Manual entry"});G.push({k:K.length,x:300+K.length*30,y:470,r:16});selK(K.length);drawG();G$("x-kti").focus();G$("x-kti").select()};
+/* graph */
+const G=[{k:1,x:500,y:285,r:30},{k:2,x:350,y:195,r:22},{k:3,x:650,y:185,r:20},{k:4,x:690,y:345,r:24},{k:5,x:370,y:375,r:19},{k:6,x:235,y:310,r:15}];
+const gs=G$("x-gs"),gd=G$("x-gd");let vb=[0,0,1e3,560],gf=null,raf;
+const gr=(id,a,b,c)=>`<radialGradient id="${id}" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="${a}"></stop><stop offset=".55" stop-color="${b}"></stop><stop offset="1" stop-color="${c}"></stop></radialGradient>`;
+const fillOf=s=>s=="Confirmed"?"url(#gc)":s=="Draft"?"url(#gd2)":"url(#gr)";
+const vis=n=>{const k=kk(n.k);return k&&k.t.toLowerCase().includes(G$("x-ns").value.trim().toLowerCase())&&(G$("x-fl").getAttribute("aria-pressed")!="true"||k.s=="Confirmed")};
+function drawG(){gs.innerHTML="<defs>"+gr("gc","#9BE3D6","#4FB6A8","#2E8A7E")+gr("gr","#F7E2B5","#E3A84F","#B97F1F")+gr("gd2","#E3E7F0","#A3AEC3","#6F7C93")+"</defs>"+[[1,2],[1,3],[1,5],[5,6]].map(([a,b])=>{const A=G.find(n=>n.k==a),B=G.find(n=>n.k==b);return `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#9AA6BC" stroke-width="1.4" opacity=".6"></line>`}).join("")+(()=>{const A=G[0],B=G[3];return `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#C38A23" stroke-width="2" stroke-dasharray="6 4"></line>`})()+G.map((n,i)=>{const k=kk(n.k);return `<g class="gnx" tabindex="0" role="button" data-k="${n.k}" aria-label="${k.t}, ${k.s}, version ${k.v}" style="animation-delay:${-i*1.4}s"><line x1="${n.x}" y1="${n.y-n.r-14}" x2="${n.x}" y2="${n.y-n.r}" stroke="#9AA6BC"></line><text x="${n.x}" y="${n.y-n.r-20}" text-anchor="middle">${k.t}</text><circle class="sph" cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${fillOf(k.s)}"${k.s=="Draft"?' stroke="#7F8CA3" stroke-width="1.5"':""}></circle></g>`}).join("");filt()}
+function filt(){let c=0;Q(".gnx",gs).forEach(g=>{const v=vis({k:+g.dataset.k});g.style.opacity=v?1:.15;g.style.pointerEvents=v?"":"none";g.tabIndex=v?0:-1;c+=v});G$("x-cn").textContent=`Loaded ${c} / ${G.length} nodes`;G$("x-nl").innerHTML=G.filter(vis).map(n=>`<li><button data-k="${n.k}">${kk(n.k).t}</button></li>`).join("")}
+function cam(to,d=650){cancelAnimationFrame(raf);const f=vb.slice(),t0=performance.now();d=rm?0:d;const ez=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;(function s(n){const p=d?Math.min((n-t0)/d,1):1;vb=f.map((v,i)=>v+(to[i]-v)*ez(p));gs.setAttribute("viewBox",vb.join(" "));if(p<1)raf=requestAnimationFrame(s)})(t0);const t=G$("x-vt");t.textContent="View not saved";t.classList.remove("ok")}
+function focusG(id){const n=G.find(n=>n.k==id),k=kk(id);gf=id;cam([n.x-360*.36,n.y-100.8,360,201.6]);gd.innerHTML=`<h3 style="margin:0;font-size:15px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--ink)">${k.t}</h3><div class="mt" style="margin-top:4px"><span class="${bc(k.s)}">${k.s}</span> · v${k.v}</div><p>${k.b||"(No content yet)"}</p><div class="rwx" style="margin:0"><button class="pbtn" id="x-ge">Edit note</button><button class="pill" id="x-gb">Back</button></div>`;gd.classList.add("show");setTimeout(()=>gd.focus({preventScroll:true}),rm?0:250);G$("x-ge").onclick=()=>{show("knowledge");selK(id)};G$("x-gb").onclick=backG;G$("x-nl").hidden=true;G$("x-nlb").setAttribute("aria-expanded","false")}
+function backG(){if(gf==null)return;const id=gf;gf=null;gd.classList.remove("show");cam([0,0,1e3,560]);const g=Q(`.gnx[data-k="${id}"]`,gs)[0];g&&g.focus({preventScroll:true})}
+gs.onclick=e=>{const g=e.target.closest(".gnx");g&&focusG(+g.dataset.k)};gs.onkeydown=e=>{const g=e.target.closest&&e.target.closest(".gnx");if(g&&(e.key=="Enter"||e.key==" ")){e.preventDefault();focusG(+g.dataset.k)}};
+G$("x-nl").onclick=e=>{const b=e.target.closest("button");b&&focusG(+b.dataset.k)};
+G$("x-nlb").onclick=()=>{const l=G$("x-nl");l.hidden=!l.hidden;G$("x-nlb").setAttribute("aria-expanded",!l.hidden)};
+G$("x-ns").oninput=filt;G$("x-fl").onclick=e=>{const b=e.currentTarget,on=b.getAttribute("aria-pressed")!="true";b.setAttribute("aria-pressed",on);b.classList.toggle("pbtn",on);b.classList.toggle("pill",!on);filt()};
+G$("x-fit").onclick=G$("x-rs").onclick=()=>{gf=null;gd.classList.remove("show");cam([0,0,1e3,560])};
+G$("x-sv").onclick=()=>{const t=G$("x-vt");t.textContent="View saved";t.classList.add("ok");say("View saved")};
+/* execution trace */
+const R=[{id:1,t:"What did we decide about the retrieval pipeline…",s:"Done"},{id:2,t:"Does the graph need to be fully 3D…",s:"Done"},{id:3,t:"Summarize the VRAM budget notes",s:"Stopped"}],rs=G$("x-rsel");
+function fillR(){const v=rs.value;rs.innerHTML='<option value="">Select a recorded answer</option>'+R.map(r=>`<option value="${r.id}">${r.t} · ${r.s}</option>`).join("");rs.value=v}
+function renderEx(){const id=rs.value,ex=G$("x-ex");if(!id){ex.innerHTML='<div class="emp"><h2 class="h2x">Select an answer record to inspect</h2><button class="pill" id="x-tc" style="margin-top:8px">Go to chat</button></div>';G$("x-tc").onclick=()=>show("chat");return}
+const bad=R.find(r=>r.id==id).s=="Stopped",S=[["Question received","4 ms"],["Retrieve notes","6 candidates · 86 ms"],["Rerank top 20","41 ms"],["Read sources","3 used · 1 conflict · 12 ms"],["Generate answer","llama3.1:8b · 31 tok/s · 4.2 s"],[bad?"Stopped by user":"Done",""]];
+ex.innerHTML=`<ol class="flow" aria-label="Execution steps">${S.map(([a,b],i)=>`<li style="--i:${i}" class="${bad&&i==5?"bad":""}"><b>${a}</b><span>${b}</span></li>`).join("")}</ol>`}
+rs.onchange=renderEx;G$("x-rr").onclick=()=>{fillR();say("Records refreshed")};
+/* settings */
+const dirty=()=>G$("x-sa").disabled=false;["x-url","x-msel"].forEach(i=>G$(i).addEventListener("input",dirty));G$("x-tmp").oninput=e=>{G$("x-to").textContent=e.target.value;dirty()};
+G$("x-ck").onclick=async()=>{const o=G$("x-ost"),b=G$("x-ck");b.disabled=true;o.innerHTML='<span class="sp2"></span>Checking…';await wait(900);o.textContent="● Ollama 0.40.6 connected";b.disabled=false};
+G$("x-sa").onclick=()=>{G$("x-sa").disabled=true;say("Settings saved")};
+document.addEventListener("keydown",e=>{if(e.key=="Escape"&&gf!=null&&cp=="graph")backG()});
+renderK();renderD();drawG();fillR();renderEx();
+const h=location.hash.slice(1);if(grp[h]&&h!="chat")show(h,1);
+})();
+</script>
+</body>
+</html>

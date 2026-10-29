@@ -1,7 +1,10 @@
+mod benchmark;
 mod citations;
+mod cloud;
 mod commands;
 mod db;
 mod execution;
+mod generation;
 mod graph;
 mod graph_query;
 mod knowledge;
@@ -9,6 +12,7 @@ mod models;
 mod ollama;
 mod retrieval;
 mod sources;
+mod tasks;
 
 use std::sync::atomic::Ordering;
 use tauri::Manager;
@@ -41,9 +45,54 @@ pub fn run() {
                 directory = std::path::PathBuf::from(value);
             }
             app.manage(commands::AppState::new(&directory));
+            app.manage(cloud::CloudState::new());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            benchmark::standard::list_standard_benchmark_cases,
+            benchmark::standard::plan_standard_benchmark,
+            benchmark::report_read::get_benchmark_overview,
+            benchmark::report_read::get_benchmark_result_page,
+            benchmark::report_read::get_benchmark_result_detail,
+            benchmark::report_read::get_benchmark_result_location,
+            benchmark::standard::get_standard_benchmark,
+            benchmark::standard::list_standard_benchmarks,
+            benchmark::standard::start_standard_benchmark,
+            benchmark::standard::stop_standard_benchmark,
+            benchmark::personalized::repository::import_benchmark_repository,
+            benchmark::personalized::repository::list_benchmark_repositories,
+            benchmark::personalized::repository::get_benchmark_repository,
+            benchmark::personalized::generation::plan_benchmark_generation,
+            benchmark::personalized::generation::get_benchmark_generation,
+            benchmark::personalized::generation::list_benchmark_generations,
+            benchmark::personalized::generation::start_benchmark_generation,
+            benchmark::personalized::generation::stop_personalized_task,
+            benchmark::personalized::generation::revise_benchmark_candidate,
+            benchmark::personalized::generation::publish_benchmark_dataset,
+            benchmark::personalized::batch::plan_personalized_batch,
+            benchmark::personalized::batch::get_personalized_batch,
+            benchmark::personalized::batch::list_personalized_batches,
+            benchmark::personalized::batch::start_personalized_batch,
+            benchmark::personalized::report::export_personalized_report,
+            benchmark::report_transfer::export_benchmark_report,
+            benchmark::regrade::preview_benchmark_regrade,
+            benchmark::regrade::run_benchmark_regrade,
+            benchmark::regrade::cancel_benchmark_regrade,
+            benchmark::regrade::get_benchmark_regrades,
+            benchmark::profile::get_benchmark_profile,
+            benchmark::profile::save_benchmark_profile,
+            cloud::cloud_connection,
+            cloud::verify_cloud_connection,
+            cloud::cancel_cloud_verification,
+            cloud::remove_cloud_connection,
+            cloud::personalized_access,
+            commands::start_benchmark,
+            commands::get_benchmark_run,
+            commands::cancel_benchmark,
+            commands::list_benchmark_datasets,
+            commands::get_benchmark_case,
+            commands::list_benchmark_models,
+            commands::inspect_benchmark_model,
             commands::discard_source,
             commands::choose_source,
             commands::commit_source,
@@ -83,9 +132,10 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let state = window.state::<commands::AppState>().inner().clone();
+                let was_closing = state.closing.swap(true, Ordering::SeqCst);
                 if state.has_active() {
                     api.prevent_close();
-                    if !state.closing.swap(true, Ordering::SeqCst) {
+                    if !was_closing {
                         state.cancel_active();
                         let window = window.clone();
                         tauri::async_runtime::spawn(async move {

@@ -1,9 +1,8 @@
 use crate::{
     db::Database,
     models::*,
-    ollama::{ModelHealth, Ndjson, Ollama},
+    ollama::{ModelHealth, Ollama},
 };
-use serde_json::json;
 use std::{
     path::Path,
     sync::{
@@ -13,21 +12,14 @@ use std::{
     time::Duration,
 };
 use tauri::{State, ipc::Channel};
-use tokio::sync::watch;
 
 #[derive(Clone)]
 pub struct AppState {
     pub database: AppResult<Arc<Database>>,
-    provider: AppResult<Ollama>,
-    active: Arc<Mutex<Option<ActiveRun>>>,
+    pub(crate) provider: AppResult<Ollama>,
+    tasks: Arc<crate::tasks::TaskSlot>,
     pub closing: Arc<AtomicBool>,
     pending_source: Arc<Mutex<Option<crate::sources::PendingSource>>>,
-}
-
-struct ActiveRun {
-    id: String,
-    workspace_id: String,
-    cancel: watch::Sender<bool>,
 }
 
 impl AppState {
@@ -36,33 +28,38 @@ impl AppState {
             database: Database::open(directory).map(Arc::new),
             pending_source: Arc::new(Mutex::new(None)),
             provider: Ollama::new(),
-            active: Arc::new(Mutex::new(None)),
+            tasks: Arc::new(crate::tasks::TaskSlot::default()),
             closing: Arc::new(AtomicBool::new(false)),
         }
     }
+    pub(crate) fn cancel_personalized_task(&self, workspace: &str, id: &str) -> AppResult<()> {
+        self.tasks
+            .cancel(id, workspace, crate::tasks::TaskKind::Benchmark)
+    }
     pub fn has_active(&self) -> bool {
-        self.active
-            .lock()
-            .map(|active| active.is_some())
-            .unwrap_or(true)
+        self.tasks.has_active()
     }
     pub fn cancel_active(&self) {
-        if let Ok(active) = self.active.lock() {
-            if let Some(active) = active.as_ref() {
-                let _ = active.cancel.send(true);
-            }
-        }
+        self.tasks.cancel_active();
     }
-    fn clear(&self, id: &str) {
-        if let Ok(mut active) = self.active.lock() {
-            if active.as_ref().is_some_and(|run| run.id == id) {
-                *active = None;
-            }
+    pub(crate) fn claim_task(
+        &self,
+        id: &str,
+        workspace: &str,
+        kind: crate::tasks::TaskKind,
+    ) -> AppResult<crate::tasks::Lease> {
+        if self.closing.load(Ordering::SeqCst) {
+            return Err("正在关闭应用，请等待当前内容保存。".into());
         }
+        let lease = self.tasks.claim(id, workspace, kind)?;
+        if self.closing.load(Ordering::SeqCst) {
+            return Err("正在关闭应用，请等待当前内容保存。".into());
+        }
+        Ok(lease)
     }
 }
 
-async fn blocking<T: Send + 'static>(
+pub(crate) async fn blocking<T: Send + 'static>(
     database: Arc<Database>,
     operation: impl FnOnce(&Database) -> AppResult<T> + Send + 'static,
 ) -> AppResult<T> {
@@ -73,7 +70,9 @@ async fn blocking<T: Send + 'static>(
 
 #[tauri::command]
 pub async fn bootstrap(state: State<'_, AppState>) -> AppResult<Bootstrap> {
-    blocking(state.database.clone()?, |db| db.bootstrap()).await
+    let mut result = blocking(state.database.clone()?, |db| db.bootstrap()).await?;
+    result.active_task = state.tasks.summary()?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -142,6 +141,76 @@ pub async fn check_ollama(state: State<'_, AppState>) -> AppResult<ModelHealth> 
 }
 
 #[tauri::command]
+pub async fn list_benchmark_datasets(
+    state: State<'_, AppState>,
+    cloud: State<'_, crate::cloud::CloudState>,
+    workspace_id: String,
+) -> AppResult<Vec<crate::benchmark::dataset::DatasetSummary>> {
+    let allowed = cloud.guard().is_ok();
+    blocking(state.database.clone()?, move |db| {
+        db.benchmark_datasets(&workspace_id).map(|data| {
+            data.into_iter()
+                .filter(|d| d.id == "cortex-core-60" || allowed)
+                .collect()
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_benchmark_case(
+    state: State<'_, AppState>,
+    cloud: State<'_, crate::cloud::CloudState>,
+    workspace_id: String,
+    dataset_id: String,
+    version: u32,
+    case_id: String,
+) -> AppResult<crate::benchmark::dataset::Case> {
+    if dataset_id != "cortex-core-60" {
+        cloud.guard()?;
+    }
+    blocking(state.database.clone()?, move |db| {
+        db.benchmark_case(&workspace_id, &dataset_id, version, &case_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn list_benchmark_models(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> AppResult<crate::benchmark::preflight::Catalog> {
+    blocking(state.database.clone()?, move |db| {
+        crate::benchmark::dataset::require_workspace(&*db.connection()?, &workspace_id)
+    })
+    .await?;
+    state
+        .provider
+        .as_ref()
+        .map_err(Clone::clone)?
+        .benchmark_models()
+        .await
+}
+
+#[tauri::command]
+pub async fn inspect_benchmark_model(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    request: crate::benchmark::preflight::ModelRequest,
+) -> AppResult<crate::benchmark::preflight::Preflight> {
+    blocking(state.database.clone()?, move |db| {
+        crate::benchmark::dataset::require_workspace(&*db.connection()?, &workspace_id)
+    })
+    .await?;
+    state
+        .provider
+        .as_ref()
+        .map_err(Clone::clone)?
+        .benchmark_inspect(request)
+        .await
+}
+
+#[tauri::command]
 pub async fn save_settings(
     state: State<'_, AppState>,
     settings: ModelSettings,
@@ -150,6 +219,57 @@ pub async fn save_settings(
         db.save_settings(&settings)
     })
     .await
+}
+
+#[tauri::command]
+pub async fn start_benchmark(
+    state: State<'_, AppState>,
+    cloud: State<'_, crate::cloud::CloudState>,
+    workspace_id: String,
+    input: crate::benchmark::repository::StartInput,
+) -> AppResult<crate::benchmark::repository::Summary> {
+    if input.personalized_dataset.is_some() {
+        cloud.guard()?;
+        if input.model.expected_digest.is_none() {
+            return Err("本地评测需要实际模型指纹。".into());
+        }
+    }
+    crate::benchmark::runner::start(state.inner().clone(), workspace_id, input).await
+}
+
+#[tauri::command]
+pub async fn get_benchmark_run(
+    state: State<'_, AppState>,
+    cloud: State<'_, crate::cloud::CloudState>,
+    workspace_id: String,
+    experiment_id: String,
+) -> AppResult<crate::benchmark::repository::Detail> {
+    let detail = blocking(state.database.clone()?, move |db| {
+        db.benchmark_detail(&workspace_id, &experiment_id)
+    })
+    .await?;
+    if !detail.summary.development_only {
+        cloud.guard()?;
+    }
+    Ok(detail)
+}
+
+#[tauri::command]
+pub async fn cancel_benchmark(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    experiment_id: String,
+) -> AppResult<()> {
+    let scope = workspace_id.clone();
+    blocking(state.database.clone()?, move |db| {
+        crate::benchmark::dataset::require_workspace(&*db.connection()?, &scope)
+    })
+    .await?;
+    state.tasks.cancel(
+        &experiment_id,
+        &workspace_id,
+        crate::tasks::TaskKind::Benchmark,
+    )
 }
 
 #[tauri::command]
@@ -170,20 +290,9 @@ pub async fn cancel_run(
     workspace_id: String,
     run_id: String,
 ) -> AppResult<()> {
-    let active = state
-        .active
-        .lock()
-        .map_err(|_| "生成状态不可用。".to_string())?;
-    let Some(active) = active.as_ref() else {
-        return Ok(());
-    };
-    if active.id != run_id || active.workspace_id != workspace_id {
-        return Err("该运行不属于当前工作区，或已有其他运行。".into());
-    }
-    active
-        .cancel
-        .send(true)
-        .map_err(|_| "该运行已经结束。".into())
+    state
+        .tasks
+        .cancel(&run_id, &workspace_id, crate::tasks::TaskKind::Chat)
 }
 
 #[tauri::command]
@@ -195,37 +304,14 @@ pub async fn start_chat(
     context_selection: Option<Vec<ContextSelection>>,
     on_update: Channel<StreamUpdate>,
 ) -> AppResult<RunSummary> {
-    if state.closing.load(Ordering::SeqCst) {
-        return Err("正在关闭应用，请等待当前内容保存。".into());
-    }
     let database = state.database.clone()?;
     let provider = state.provider.clone()?;
     let id = new_id();
-    let (cancel, receiver) = watch::channel(false);
-    {
-        let mut active = state
-            .active
-            .lock()
-            .map_err(|_| "生成状态不可用。".to_string())?;
-        if active.is_some() {
-            return Err("已有一个回答正在生成。请先停止或等待完成。".into());
-        }
-        *active = Some(ActiveRun {
-            id: id.clone(),
-            workspace_id: workspace_id.clone(),
-            cancel,
-        });
-    }
-    let settings = match blocking(database.clone(), |db| db.settings()).await {
-        Ok(settings) => settings,
-        Err(error) => {
-            state.clear(&id);
-            return Err(error);
-        }
-    };
+    let lease = state.claim_task(&id, &workspace_id, crate::tasks::TaskKind::Chat)?;
+    let settings = blocking(database.clone(), |db| db.settings()).await?;
     let prepare_id = id.clone();
     let model_settings = settings.clone();
-    let prepared = match blocking(database.clone(), move |db| {
+    let prepared = blocking(database.clone(), move |db| {
         db.prepare_context_run(
             &prepare_id,
             &workspace_id,
@@ -236,172 +322,25 @@ pub async fn start_chat(
             false,
         )
     })
-    .await
-    {
-        Ok(prepared) => prepared,
-        Err(error) => {
-            state.clear(&id);
-            return Err(error);
-        }
-    };
+    .await?;
     let result = prepared.run.clone();
-    let worker_state = state.inner().clone();
     tauri::async_runtime::spawn(async move {
-        generate(
-            worker_state,
+        let outcome = crate::generation::execute(
             database,
             provider,
             prepared,
             settings,
-            receiver,
-            on_update,
+            crate::generation::InspectionPolicy::Chat,
+            lease.receiver(),
+            |u| {
+                let _ = on_update.send(u);
+            },
         )
         .await;
+        drop(lease);
+        let _ = on_update.send(outcome.update);
     });
     Ok(result)
-}
-
-async fn generate(
-    state: AppState,
-    database: Arc<Database>,
-    provider: Ollama,
-    prepared: PreparedRun,
-    settings: ModelSettings,
-    mut cancel: watch::Receiver<bool>,
-    channel: Channel<StreamUpdate>,
-) {
-    let run = prepared.run;
-    let mut content = String::new();
-    let mut seq = 0u64;
-    let result = {
-        let generation = async {
-            let id = run.id.clone();
-            blocking(database.clone(), move |db| {
-                db.record_event(
-                    &id,
-                    "model_inspection_started",
-                    json!({"provider":"ollama","transport":"loopback"}),
-                )
-            })
-            .await?;
-            let inspected = provider.inspect(&settings).await?;
-            let id = run.id.clone();
-            blocking(database.clone(), move |db| {
-                db.record_event(&id, "model_inspection_completed", inspected)
-            })
-            .await?;
-            let id = run.id.clone();
-            blocking(database.clone(), move |db| {
-                db.record_event(
-                    &id,
-                    "model_request_started",
-                    json!({"endpoint":"/api/chat"}),
-                )
-            })
-            .await?;
-            let mut response = provider.chat(&settings, &prepared.request).await?;
-            let id = run.id.clone();
-            blocking(database.clone(), move |db| {
-                db.record_event(&id, "model_response_received", json!({"status":200}))
-            })
-            .await?;
-            let mut parser = Ndjson::default();
-            let mut checkpoint = tokio::time::interval(Duration::from_millis(250));
-            let mut dirty = false;
-            loop {
-                let chunk = tokio::select! {
-                    chunk=response.chunk()=>chunk.map_err(|_| "模型连接中断，已保留收到的内容。请重试。".to_string())?,
-                    _=checkpoint.tick()=>{
-                        if dirty {
-                            let (id,text)=(run.id.clone(),content.clone());
-                            blocking(database.clone(),move|db|db.checkpoint(&id,&text)).await?;
-                            dirty=false;
-                        }
-                        continue;
-                    }
-                };
-                let frames = match chunk.as_ref() {
-                    Some(bytes) => parser.push(bytes),
-                    None => parser.finish(),
-                };
-                for frame in frames {
-                    let frame = frame?;
-                    if let Some(message) = frame.message.as_ref() {
-                        content.push_str(&message.content);
-                        dirty |= !message.content.is_empty();
-                    }
-                    if content.len() > 1024 * 1024 {
-                        return Err("模型输出超出安全长度，已停止生成。".into());
-                    }
-                    seq += 1;
-                    let _ = channel.send(update(&run, seq, &content, "running", None));
-                    if frame.done {
-                        if content.trim().is_empty() {
-                            return Err("模型没有返回可用文字，请换一个模型或重试。".into());
-                        }
-                        return Ok(frame.metrics());
-                    }
-                }
-                if chunk.is_none() {
-                    return Err("回答流提前结束，已保留收到的内容。请重试。".into());
-                }
-            }
-        };
-        tokio::select! {
-            biased;
-            _=cancel.changed()=>Err("__cancelled__".into()),
-            _=tokio::time::sleep(Duration::from_secs(settings.timeout_seconds))=>Err("生成超时，已保留收到的内容。可以增加超时、缩短问题或换较小模型后重试。".into()),
-            result=generation=>result,
-        }
-    };
-    let (status, mut message, metrics) = match result {
-        Ok(metrics) => ("completed", None, metrics),
-        Err(error) if error == "__cancelled__" => ("cancelled", None, json!({})),
-        Err(error) => ("failed", Some(error), json!({})),
-    };
-    let (saved_run, saved_content, saved_message) = (run.clone(), content.clone(), message.clone());
-    if let Err(error) = blocking(database, move |db| {
-        db.finish(
-            &saved_run,
-            &saved_content,
-            status,
-            saved_message.as_deref(),
-            metrics,
-        )
-    })
-    .await
-    {
-        message = Some(format!(
-            "{error} 当前回答仍在窗口中，可先复制；请检查磁盘空间。"
-        ));
-    }
-    state.clear(&run.id);
-    let _ = channel.send(update(
-        &run,
-        seq + 1,
-        &content,
-        if message.is_some() { "failed" } else { status },
-        message,
-    ));
-}
-
-fn update(
-    run: &RunSummary,
-    seq: u64,
-    content: &str,
-    status: &str,
-    error_message: Option<String>,
-) -> StreamUpdate {
-    StreamUpdate {
-        workspace_id: run.workspace_id.clone(),
-        conversation_id: run.conversation_id.clone(),
-        run_id: run.id.clone(),
-        message_id: run.assistant_message_id.clone(),
-        seq,
-        content: content.into(),
-        status: status.into(),
-        error_message,
-    }
 }
 
 #[tauri::command]
@@ -576,21 +515,57 @@ pub async fn list_runs(
 #[tauri::command]
 pub async fn load_execution_graph(
     state: State<'_, AppState>,
+    cloud: State<'_, crate::cloud::CloudState>,
     workspace_id: String,
     run_id: String,
 ) -> AppResult<crate::execution::ExecutionGraph> {
+    let purpose = state
+        .database
+        .as_ref()
+        .map_err(Clone::clone)?
+        .execution_purpose(&workspace_id, &run_id)?;
+    if state
+        .database
+        .as_ref()
+        .map_err(Clone::clone)?
+        .personalized_execution(&workspace_id, &run_id)?
+    {
+        cloud.guard()?;
+    }
     blocking(state.database.clone()?, move |db| {
-        db.execution_graph(&workspace_id, &run_id)
+        if matches!(purpose, ExecutionPurpose::Chat) {
+            db.execution_graph(&workspace_id, &run_id)
+        } else {
+            db.recorded_execution_graph(&workspace_id, &run_id, purpose)
+        }
     })
     .await
 }
 #[tauri::command]
 pub async fn save_execution_view(
     state: State<'_, AppState>,
+    cloud: State<'_, crate::cloud::CloudState>,
     input: crate::execution::SaveExecutionView,
 ) -> AppResult<i64> {
+    let purpose = state
+        .database
+        .as_ref()
+        .map_err(Clone::clone)?
+        .execution_purpose(&input.workspace_id, &input.run_id)?;
+    if state
+        .database
+        .as_ref()
+        .map_err(Clone::clone)?
+        .personalized_execution(&input.workspace_id, &input.run_id)?
+    {
+        cloud.guard()?;
+    }
     blocking(state.database.clone()?, move |db| {
-        db.save_execution_view(input)
+        if matches!(purpose, ExecutionPurpose::Chat) {
+            db.save_execution_view(input)
+        } else {
+            db.save_recorded_execution_view(input, purpose)
+        }
     })
     .await
 }

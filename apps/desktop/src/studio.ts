@@ -95,6 +95,9 @@ export interface RetrievalReport {
   }[];
 }
 export interface ContextManifest {
+  purpose?: "chat" | "benchmark";
+  batchId?: string;
+  benchmarkScope?: "standard" | "personalized";
   strategy: string;
   estimatedUnits: number;
   budgetUnits: number;
@@ -126,6 +129,12 @@ export interface Bootstrap {
   workspaces: Workspace[];
   settings: ModelSettings;
   activeRun: RunSummary | null;
+  activeTask?: {
+    id: string;
+    workspaceId: string;
+    kind: "chat" | "benchmark";
+    executionRunId: string | null;
+  } | null;
   dataPath: string;
 }
 export interface ModelHealth {

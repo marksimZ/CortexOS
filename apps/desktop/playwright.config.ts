@@ -21,16 +21,34 @@ export default defineConfig({
     timeout: 30_000,
   },
   projects: [
+    ...(process.env.CORTEXOS_BENCHMARK_ACCEPTANCE_REAL === "1"
+      ? [{ name: "benchmark-acceptance-real", testMatch: "benchmark-acceptance-real.spec.ts" }]
+      : []),
+    ...(process.env.CORTEXOS_BENCHMARK_METRICS_REAL === "1"
+      ? [{ name: "benchmark-metrics-real", testMatch: "benchmark-metrics-real.spec.ts" }]
+      : []),
+    ...(process.env.CORTEXOS_BENCHMARK_RUNNER === "1"
+      ? [{ name: "benchmark-runner", testMatch: "benchmark-runner.spec.ts" }]
+      : []),
+    ...(process.env.CORTEXOS_BENCHMARK_PREFLIGHT === "1"
+      ? [{ name: "benchmark-preflight", testMatch: "benchmark-preflight.spec.ts" }]
+      : []),
     ...(process.env.CORTEXOS_DELIVERY_CHECK === "1"
       ? [{ name: "delivery", testMatch: "windows-delivery.spec.ts" }]
       : []),
-    { name: "edge", testMatch: ["app.spec.ts", "graph-preview.spec.ts", "ui-usability.spec.ts"] },
+    { name: "edge", testMatch: ["app.spec.ts", "graph-preview.spec.ts", "ui-usability.spec.ts", "cloud-connection.spec.ts", "personalized.spec.ts", "benchmark-result-drawer.spec.ts"] },
     {
       name: "desktop",
       testMatch: [
+        "window-drag.spec.ts",
+        "standard-benchmark.spec.ts",
+        "benchmark-report-pages.spec.ts",
+        "benchmark-report-usability.spec.ts",
         "desktop.spec.ts",
+        "cloud-native.spec.ts",
         "prototype-ui.spec.ts",
         "ui-usability-native.spec.ts",
+        "ui-micro-native.spec.ts",
         "chat.spec.ts",
         "markdown-camera.spec.ts",
         "chat-design.spec.ts",

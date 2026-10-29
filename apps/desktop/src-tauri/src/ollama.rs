@@ -32,6 +32,8 @@ pub struct FrameMessage {
     pub role: String,
     #[serde(default)]
     pub content: String,
+    #[serde(default)]
+    pub tool_calls: Option<Vec<Value>>,
 }
 
 #[derive(Deserialize)]
@@ -46,20 +48,29 @@ pub struct Frame {
     pub total_duration: Option<u64>,
     pub load_duration: Option<u64>,
     pub prompt_eval_count: Option<u64>,
+    pub prompt_eval_duration: Option<u64>,
+    pub prompt_eval_cached_count: Option<u64>,
 }
 
 impl Frame {
     pub fn metrics(&self) -> Value {
-        json!({"evalCount":self.eval_count,"evalDurationNs":self.eval_duration,"finishReason":self.done_reason,"totalDurationNs":self.total_duration,"loadDurationNs":self.load_duration,"promptEvalCount":self.prompt_eval_count})
+        json!({"evalCount":self.eval_count,"evalDurationNs":self.eval_duration,"finishReason":self.done_reason,"totalDurationNs":self.total_duration,"loadDurationNs":self.load_duration,"promptEvalCount":self.prompt_eval_count,"promptEvalDurationNs":self.prompt_eval_duration,"promptEvalCachedCount":self.prompt_eval_cached_count})
     }
 }
 
 #[derive(Default)]
 pub struct Ndjson {
     buffer: Vec<u8>,
+    strict_json: bool,
 }
 
 impl Ndjson {
+    pub fn strict() -> Self {
+        Self {
+            buffer: Vec::new(),
+            strict_json: true,
+        }
+    }
     pub fn push(&mut self, bytes: &[u8]) -> Vec<AppResult<Frame>> {
         self.buffer.extend_from_slice(bytes);
         let mut frames = Vec::new();
@@ -72,7 +83,11 @@ impl Ndjson {
                     return frames;
                 }
                 if !line.iter().all(u8::is_ascii_whitespace) {
-                    let frame = parse(line);
+                    let frame = if self.strict_json {
+                        strict_parse(line)
+                    } else {
+                        parse(line)
+                    };
                     let failed = frame.is_err();
                     frames.push(frame);
                     if failed {
@@ -93,10 +108,21 @@ impl Ndjson {
         if self.buffer.iter().all(u8::is_ascii_whitespace) {
             return Vec::new();
         }
-        let frame = parse(&self.buffer);
+        let frame = if self.strict_json {
+            strict_parse(&self.buffer)
+        } else {
+            parse(&self.buffer)
+        };
         self.buffer.clear();
         vec![frame]
     }
+}
+
+fn strict_parse(line: &[u8]) -> AppResult<Frame> {
+    let text = std::str::from_utf8(line).map_err(|_| "模型响应不是有效UTF-8。")?;
+    crate::benchmark::evaluation_json::decode(text)
+        .map_err(|_| "模型响应含重复字段或非法JSON，已停止接收。")?;
+    parse(line)
 }
 
 fn parse(line: &[u8]) -> AppResult<Frame> {
@@ -153,6 +179,60 @@ async fn small_json(mut response: Response) -> AppResult<Value> {
 }
 
 impl Ollama {
+    pub(crate) async fn release_benchmark_model(
+        &self,
+        request: &crate::benchmark::preflight::ModelRequest,
+    ) -> AppResult<Value> {
+        request.validate()?;
+        let expected = request
+            .expected_digest
+            .as_deref()
+            .ok_or("缺少模型指纹，不释放模型。")?
+            .trim_start_matches("sha256:");
+        let catalog = self.benchmark_models().await?;
+        if !catalog.models.iter().any(|m| {
+            m.name == request.model
+                && m.digest
+                    .as_deref()
+                    .is_some_and(|d| d.trim_start_matches("sha256:") == expected)
+        }) {
+            return Err("模型身份已经改变，未发送释放请求。".into());
+        }
+        let loaded = catalog.loaded.ok_or("无法检查已加载模型，不释放。")?;
+        let Some(model) = loaded.iter().find(|m| m.name == request.model) else {
+            return Ok(json!({"model":request.model,"status":"not_loaded","requestSent":false}));
+        };
+        if model
+            .digest
+            .as_deref()
+            .is_none_or(|d| d.trim_start_matches("sha256:") != expected)
+        {
+            return Err("已加载模型指纹不一致，未释放。".into());
+        }
+        let response = self
+            .client
+            .post(format!("{}/api/generate", self.endpoint))
+            .json(&json!({"model":request.model,"stream":false,"keep_alive":0}))
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await
+            .map_err(network_error)?;
+        if !response.status().is_success() {
+            return Err("模型服务未接受释放请求。".into());
+        }
+        let _ = small_json(response).await?;
+        let after = self
+            .benchmark_models()
+            .await?
+            .loaded
+            .ok_or("释放请求已发送，无法确认模型状态。")?;
+        if after.iter().any(|m| m.name == request.model) {
+            return Err("释放请求已发送，但模型仍显示已加载。".into());
+        }
+        Ok(
+            json!({"model":request.model,"status":"released","requestSent":true,"confirmation":"api_ps"}),
+        )
+    }
     pub fn new() -> AppResult<Self> {
         #[allow(unused_mut)]
         let mut endpoint = "http://127.0.0.1:11434".to_string();
@@ -170,7 +250,7 @@ impl Ollama {
         Ok(Self { client, endpoint })
     }
 
-    async fn get(&self, path: &str) -> AppResult<Value> {
+    pub(crate) async fn get(&self, path: &str) -> AppResult<Value> {
         let response = self
             .client
             .get(format!("{}{path}", self.endpoint))
@@ -217,18 +297,7 @@ impl Ollama {
     }
 
     pub async fn inspect(&self, settings: &ModelSettings) -> AppResult<Value> {
-        let inspection = self
-            .client
-            .post(format!("{}/api/show", self.endpoint))
-            .timeout(Duration::from_secs(10))
-            .json(&json!({"model":settings.model}))
-            .send()
-            .await
-            .map_err(network_error)?;
-        if !inspection.status().is_success() {
-            return Err("无法检查所选模型，请确认模型已完整下载。".into());
-        }
-        let inspection = small_json(inspection).await?;
+        let inspection = self.show(&settings.model).await?;
         if inspection["remote_host"]
             .as_str()
             .is_some_and(|value| !value.is_empty())
@@ -237,11 +306,28 @@ impl Ollama {
                 .is_some_and(|value| !value.is_empty())
             || inspection["details"]["format"].as_str() != Some("gguf")
         {
-            return Err("请使用安装在本机的 GGUF 格式模型；云端模型和无法确认来源的模型暂不支持。".into());
+            return Err(
+                "请使用安装在本机的 GGUF 格式模型；云端模型和无法确认来源的模型暂不支持。".into(),
+            );
         }
         Ok(
             json!({"format":"gguf","model":settings.model,"digest":inspection.get("digest"),"identityNote":"digest unknown when provider omits it"}),
         )
+    }
+
+    pub(crate) async fn show(&self, model: &str) -> AppResult<Value> {
+        let inspection = self
+            .client
+            .post(format!("{}/api/show", self.endpoint))
+            .timeout(Duration::from_secs(10))
+            .json(&json!({"model":model}))
+            .send()
+            .await
+            .map_err(network_error)?;
+        if !inspection.status().is_success() {
+            return Err("无法检查所选模型，请确认模型已完整下载。".into());
+        }
+        small_json(inspection).await
     }
     pub async fn chat(&self, settings: &ModelSettings, request: &Value) -> AppResult<Response> {
         let response = self

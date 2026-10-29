@@ -1,0 +1,65 @@
+{
+  "version": 2,
+  "document_type": "scoring_specification",
+  "review_status": "needs_human_review",
+  "runtime_status": "not_implemented_in_stage_a",
+  "result_states": [
+    "Passed",
+    "Failed",
+    "Unsupported",
+    "Not Run",
+    "Execution Error",
+    "Scoring Error"
+  ],
+  "denominators": "Only valid scored items enter correctness; show planned coverage, execution success and each excluded state separately.",
+  "rules": [
+    {
+      "id": "exact_alias",
+      "version": 2,
+      "kind": "aliases",
+      "normalization": "Trim only leading/trailing Unicode whitespace. Case-sensitive literal membership in per-case aliases. No Unicode/case folding.",
+      "result": "0 or 1",
+      "contract_source": "case.scoring.contract"
+    },
+    {
+      "id": "integer_equal",
+      "version": 2,
+      "kind": "integer",
+      "normalization": "Trim Unicode whitespace; optional ASCII minus followed by ASCII decimal digits; i64 numeric comparison. No plus, decimals, expressions or implicit units.",
+      "result": "0 or 1",
+      "contract_source": "case.scoring.contract"
+    },
+    {
+      "id": "python_assertions",
+      "version": 2,
+      "kind": "python",
+      "normalization": "Docker Linux only, pinned Python 3.13 image digest before execution. Exact Python return types before serialization; deep input mutation check; per-assertion result. No network/socket/sensitive mounts or host fallback. Freeze CPU/RAM/PID/time/output limits; clean owned container and files. Sandbox unavailable is Execution Error, never Failed.",
+      "result": "passed/total assertions and all_passed; unavailable sandbox is blocked, never zero",
+      "contract_source": "case.scoring.contract"
+    },
+    {
+      "id": "evidence_match",
+      "version": 2,
+      "kind": "evidence",
+      "normalization": "Strict structured status/facts/reason/citations. Compare typed facts with explicit aliases; adjudicate status/refusal/conflict/as_of separately. Citation is supporting only when its claim_id and full span are in the annotated evidence map; reject duplicate/unknown citations. Answer and citation correctness separate; all dimensions required for full pass. Zero citations precision=N/A; missing required evidence cannot pass.",
+      "result": "answer correctness and citation correctness separately",
+      "contract_source": "case.scoring.contract"
+    },
+    {
+      "id": "schema_semantic",
+      "version": 2,
+      "kind": "json",
+      "normalization": "Strict single JSON, reject duplicate keys/nonfinite values. JSON Schema 2020-12 with date format assertion; semantic comparison of typed values. Object order irrelevant, arrays ordered, integer mathematical equivalence, bool distinct from numbers, null distinct from missing. Unknown scorer vocabulary is Scoring Error.",
+      "result": "schema_valid and semantic_equal separately",
+      "contract_source": "case.scoring.contract"
+    },
+    {
+      "id": "native_tool_equal",
+      "version": 2,
+      "kind": "tool",
+      "normalization": "Exactly one actual structured Provider tool_call, never text JSON. Validate name/required arguments/types/no extras and semantic values with integer equivalence. No side effects or tool dispatch. Unsupported only with capability evidence; missing capture is system Execution Error, not model failure.",
+      "result": "0 or 1",
+      "contract_source": "case.scoring.contract"
+    }
+  ]
+}

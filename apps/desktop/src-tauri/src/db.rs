@@ -16,15 +16,18 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0005_execution_views.sql"),
     include_str!("../migrations/0006_knowledge_retrieval.sql"),
     include_str!("../migrations/0007_source_evidence.sql"),
+    include_str!("../migrations/0008_benchmark_foundation.sql"),
+    include_str!("../migrations/0009_benchmark_profiles.sql"),
+    include_str!("../migrations/0010_personalized_benchmark.sql"),
 ];
 const MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const RUN_COLUMNS: &str = "id,workspace_id,conversation_id,assistant_message_id,model_id,status,started_at,finished_at,error_message";
 const SYSTEM_PROMPT: &str = "你是 CortexOS 本地项目助手。使用中文清晰回答。区分事实、假设与建议；没有来源时不要编造引用，不要声称内容已经验证。当前没有文件检索或工具权限。直接给出可用的回答，无需输出内部思考过程。";
 
-fn error(_: rusqlite::Error) -> String {
+pub(crate) fn error(_: rusqlite::Error) -> String {
     "本地数据读写失败，请保留草稿并重试。".into()
 }
-fn json_error(_: serde_json::Error) -> String {
+pub(crate) fn json_error(_: serde_json::Error) -> String {
     "本地数据格式异常，请保留数据并检查应用版本。".into()
 }
 fn hash(text: &str) -> String {
@@ -34,7 +37,71 @@ fn missing() -> String {
     "所选内容不存在，或不属于当前工作区。".into()
 }
 
-fn read_run(row: &Row<'_>) -> rusqlite::Result<RunSummary> {
+#[cfg(test)]
+fn require_chat_run(connection: &Connection, run_id: &str) -> AppResult<()> {
+    let allowed: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM execution_runs r JOIN conversations c ON c.id=r.conversation_id AND c.workspace_id=r.workspace_id WHERE r.id=?1 AND c.purpose='chat')",
+        params![run_id], |r| r.get(0),
+    ).map_err(error)?;
+    if !allowed {
+        return Err(missing());
+    }
+    Ok(())
+}
+
+fn migrate(connection: &mut Connection, directory: &Path, migrations: &[&str]) -> AppResult<()> {
+    connection.execute_batch("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,checksum TEXT NOT NULL,applied_at TEXT NOT NULL)").map_err(error)?;
+    let applied = {
+        let mut statement = connection
+            .prepare("SELECT version,checksum FROM schema_migrations ORDER BY version")
+            .map_err(error)?;
+        statement
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(error)?
+    };
+    for (index, (version, checksum)) in applied.iter().enumerate() {
+        if *version != (index + 1) as i64
+            || migrations
+                .get(index)
+                .is_none_or(|sql| hash(sql) != *checksum)
+        {
+            return Err("数据库版本或迁移校验不匹配。请保留数据并使用兼容的应用版本。".into());
+        }
+    }
+    if applied.len() == migrations.len() {
+        return Ok(());
+    }
+    if !applied.is_empty() {
+        let backup = directory.join(format!(
+            "before-migration-{}-{}.sqlite3",
+            applied.len() + 1,
+            new_id()
+        ));
+        connection
+            .execute("VACUUM INTO ?1", params![backup.to_string_lossy()])
+            .map_err(|_| "升级前备份失败，请检查磁盘空间与权限；原数据库未升级。".to_string())?;
+    }
+    let transaction = connection.transaction().map_err(error)?;
+    for (index, sql) in migrations.iter().enumerate().skip(applied.len()) {
+        transaction.execute_batch(sql).map_err(error)?;
+        if index == 5 {
+            crate::retrieval::rebuild(&transaction)?;
+        }
+        transaction
+            .execute(
+                "INSERT INTO schema_migrations VALUES(?1,?2,?3)",
+                params![(index + 1) as i64, hash(sql), now()],
+            )
+            .map_err(error)?;
+    }
+    transaction.commit().map_err(error)
+}
+
+pub(crate) fn read_run(row: &Row<'_>) -> rusqlite::Result<RunSummary> {
     Ok(RunSummary {
         id: row.get(0)?,
         workspace_id: row.get(1)?,
@@ -48,7 +115,12 @@ fn read_run(row: &Row<'_>) -> rusqlite::Result<RunSummary> {
     })
 }
 
-fn event(connection: &Connection, run_id: &str, kind: &str, payload: Value) -> AppResult<()> {
+pub(crate) fn event(
+    connection: &Connection,
+    run_id: &str,
+    kind: &str,
+    payload: Value,
+) -> AppResult<()> {
     event_at(connection, run_id, kind, payload, &now())
 }
 fn event_at(
@@ -72,6 +144,79 @@ pub struct Database {
     connection: Mutex<Connection>,
     pub path: PathBuf,
     _lock: File,
+}
+
+pub(crate) fn insert_execution(
+    c: &Connection,
+    run: &RunSummary,
+    settings: &ModelSettings,
+    request: &Value,
+    manifest: &Value,
+    user_id: &str,
+    content: &str,
+) -> AppResult<()> {
+    c.execute("INSERT INTO execution_runs(id,workspace_id,conversation_id,assistant_message_id,model_id,model_config_json,context_manifest_json,status,started_at) VALUES(?1,?2,?3,?4,?5,?6,?7,'running',?8)",params![run.id,run.workspace_id,run.conversation_id,run.assistant_message_id,settings.model,serde_json::to_string(settings).map_err(json_error)?,manifest.to_string(),run.started_at]).map_err(error)?;
+    let seq: i64 = c
+        .query_row(
+            "SELECT COALESCE(MAX(seq),0)+1 FROM messages WHERE conversation_id=?1",
+            params![run.conversation_id],
+            |r| r.get(0),
+        )
+        .map_err(error)?;
+    c.execute(
+        "INSERT INTO messages VALUES(?1,?2,?3,?4,'user',?5,'completed',?6,?7,?7)",
+        params![
+            user_id,
+            run.workspace_id,
+            run.conversation_id,
+            seq,
+            content,
+            run.id,
+            run.started_at
+        ],
+    )
+    .map_err(error)?;
+    c.execute(
+        "INSERT INTO messages VALUES(?1,?2,?3,?4,'assistant','','streaming',?5,?6,?6)",
+        params![
+            run.assistant_message_id,
+            run.workspace_id,
+            run.conversation_id,
+            seq + 1,
+            run.id,
+            run.started_at
+        ],
+    )
+    .map_err(error)?;
+    let request_json = serde_json::to_string(request).map_err(json_error)?;
+    c.execute(
+        "INSERT INTO context_snapshots VALUES(?1,?2,?3,?4,?5)",
+        params![
+            run.id,
+            request_json,
+            hash(&request_json),
+            manifest.to_string(),
+            now()
+        ],
+    )
+    .map_err(error)?;
+    Ok(())
+}
+
+fn execution_is_running(
+    c: &Connection,
+    run: &RunSummary,
+    purpose: ExecutionPurpose,
+) -> AppResult<bool> {
+    let status:Option<String>=c.query_row("SELECT r.status FROM execution_runs r JOIN conversations c ON c.id=r.conversation_id AND c.workspace_id=r.workspace_id WHERE r.id=?1 AND r.workspace_id=?2 AND r.conversation_id=?3 AND r.assistant_message_id=?4 AND c.purpose=?5",params![run.id,run.workspace_id,run.conversation_id,run.assistant_message_id,purpose.as_str()],|r|r.get(0)).optional().map_err(error)?;
+    let running = status.ok_or_else(missing)? == "running";
+    if running && matches!(purpose, ExecutionPurpose::Benchmark) {
+        let owned:bool=c.query_row("SELECT EXISTS(SELECT 1 FROM benchmark_attempts a JOIN benchmark_case_runs c ON c.id=a.case_run_id JOIN benchmark_runs b ON b.id=c.run_id WHERE a.execution_run_id=?1 AND a.workspace_id=?2 AND a.status='running' AND c.status='running' AND b.status='running')",params![run.id,run.workspace_id],|r|r.get(0)).map_err(error)?;
+        if !owned {
+            return Err(missing());
+        }
+    }
+    Ok(running)
 }
 
 impl Database {
@@ -110,56 +255,7 @@ impl Database {
         if !fts5 {
             return Err("当前 SQLite 缺少 FTS5 支持，请使用项目提供的构建。".into());
         }
-        connection.execute_batch("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,checksum TEXT NOT NULL,applied_at TEXT NOT NULL)").map_err(error)?;
-        let applied = {
-            let mut statement = connection
-                .prepare("SELECT version,checksum FROM schema_migrations ORDER BY version")
-                .map_err(error)?;
-            statement
-                .query_map([], |row| {
-                    Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-                })
-                .map_err(error)?
-                .collect::<rusqlite::Result<Vec<_>>>()
-                .map_err(error)?
-        };
-        for (index, (version, checksum)) in applied.iter().enumerate() {
-            if *version != (index + 1) as i64
-                || MIGRATIONS
-                    .get(index)
-                    .is_none_or(|sql| hash(sql) != *checksum)
-            {
-                return Err("数据库版本或迁移校验不匹配。请保留数据并使用兼容的应用版本。".into());
-            }
-        }
-        if applied.len() < MIGRATIONS.len() {
-            if !applied.is_empty() {
-                let backup = directory.join(format!(
-                    "before-migration-{}-{}.sqlite3",
-                    applied.len() + 1,
-                    new_id()
-                ));
-                connection
-                    .execute("VACUUM INTO ?1", params![backup.to_string_lossy()])
-                    .map_err(|_| {
-                        "升级前备份失败，请检查磁盘空间与权限；原数据库未升级。".to_string()
-                    })?;
-            }
-            let transaction = connection.transaction().map_err(error)?;
-            for (index, sql) in MIGRATIONS.iter().enumerate().skip(applied.len()) {
-                transaction.execute_batch(sql).map_err(error)?;
-                if index == 5 {
-                    crate::retrieval::rebuild(&transaction)?;
-                }
-                transaction
-                    .execute(
-                        "INSERT INTO schema_migrations VALUES(?1,?2,?3)",
-                        params![(index + 1) as i64, hash(sql), now()],
-                    )
-                    .map_err(error)?;
-            }
-            transaction.commit().map_err(error)?;
-        }
+        migrate(&mut connection, directory, MIGRATIONS)?;
         let database = Self {
             connection: Mutex::new(connection),
             path,
@@ -221,7 +317,7 @@ impl Database {
         let active_run = self
             .connection()?
             .query_row(
-                &format!("SELECT {RUN_COLUMNS} FROM execution_runs WHERE status='running'"),
+                &format!("SELECT {RUN_COLUMNS} FROM execution_runs WHERE status='running' AND conversation_id IN (SELECT id FROM conversations WHERE purpose='chat')"),
                 [],
                 read_run,
             )
@@ -231,6 +327,7 @@ impl Database {
             workspaces,
             settings: self.settings()?,
             active_run,
+            active_task: None,
             data_path: self.path.to_string_lossy().into_owned(),
         })
     }
@@ -262,7 +359,7 @@ impl Database {
         {
             return Err(missing());
         }
-        let mut statement = connection.prepare("SELECT id,workspace_id,title,updated_at,COALESCE((SELECT enabled FROM conversation_retrieval_settings s WHERE s.conversation_id=conversations.id),1) FROM conversations WHERE workspace_id=?1 ORDER BY updated_at DESC,id").map_err(error)?;
+        let mut statement = connection.prepare("SELECT id,workspace_id,title,updated_at,COALESCE((SELECT enabled FROM conversation_retrieval_settings s WHERE s.conversation_id=conversations.id),1) FROM conversations WHERE workspace_id=?1 AND purpose='chat' ORDER BY updated_at DESC,id").map_err(error)?;
         statement
             .query_map(params![workspace_id], |r| {
                 Ok(Conversation {
@@ -289,7 +386,7 @@ impl Database {
         };
         self.connection()?
             .execute(
-                "INSERT INTO conversations VALUES(?1,?2,?3,?4,?4)",
+                "INSERT INTO conversations(id,workspace_id,title,created_at,updated_at) VALUES(?1,?2,?3,?4,?4)",
                 params![
                     conversation.id,
                     workspace_id,
@@ -310,7 +407,7 @@ impl Database {
         let affected = self
             .connection()?
             .execute(
-                "UPDATE conversations SET title=?1,updated_at=?2 WHERE workspace_id=?3 AND id=?4",
+                "UPDATE conversations SET title=?1,updated_at=?2 WHERE workspace_id=?3 AND id=?4 AND purpose='chat'",
                 params![validate_name(title)?, now(), workspace_id, conversation_id],
             )
             .map_err(error)?;
@@ -324,7 +421,7 @@ impl Database {
         let connection = self.connection()?;
         if !connection
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM conversations WHERE workspace_id=?1 AND id=?2)",
+                "SELECT EXISTS(SELECT 1 FROM conversations WHERE workspace_id=?1 AND id=?2 AND purpose='chat')",
                 params![workspace_id, conversation_id],
                 |r| r.get::<_, bool>(0),
             )
@@ -473,7 +570,12 @@ impl Database {
                 "所选知识和问题超过发送内容的容量上限，请移除部分知识、缩短问题，或在设置中增加“输入与回答总容量”。".into(),
             );
         }
-        let enabled = crate::retrieval::enabled(&connection, workspace_id, conversation_id)?;
+        let enabled = if preview && conversation_id.is_empty() {
+            // The workspace was validated above; an unsaved chat has the default retrieval policy.
+            true
+        } else {
+            crate::retrieval::enabled(&connection, workspace_id, conversation_id)?
+        };
         let mut retrieval = if enabled {
             crate::retrieval::search(&connection, workspace_id, content)?
         } else {
@@ -586,42 +688,15 @@ impl Database {
             });
         }
         let transaction = connection.transaction().map_err(error)?;
-        transaction.execute("INSERT INTO execution_runs(id,workspace_id,conversation_id,assistant_message_id,model_id,model_config_json,context_manifest_json,status,started_at) VALUES(?1,?2,?3,?4,?5,?6,?7,'running',?8)",
-            params![run.id,workspace_id,conversation_id,run.assistant_message_id,settings.model,serde_json::to_string(settings).map_err(json_error)?,manifest.to_string(),run.started_at]).map_err(error)?;
-        let seq: i64 = transaction
-            .query_row(
-                "SELECT COALESCE(MAX(seq),0)+1 FROM messages WHERE conversation_id=?1",
-                params![conversation_id],
-                |r| r.get(0),
-            )
-            .map_err(error)?;
-        transaction
-            .execute(
-                "INSERT INTO messages VALUES(?1,?2,?3,?4,'user',?5,'completed',?6,?7,?7)",
-                params![
-                    user_id,
-                    workspace_id,
-                    conversation_id,
-                    seq,
-                    content,
-                    run.id,
-                    run.started_at
-                ],
-            )
-            .map_err(error)?;
-        transaction
-            .execute(
-                "INSERT INTO messages VALUES(?1,?2,?3,?4,'assistant','','streaming',?5,?6,?6)",
-                params![
-                    run.assistant_message_id,
-                    workspace_id,
-                    conversation_id,
-                    seq + 1,
-                    run.id,
-                    run.started_at
-                ],
-            )
-            .map_err(error)?;
+        insert_execution(
+            &transaction,
+            &run,
+            settings,
+            &request,
+            &manifest,
+            &user_id,
+            content,
+        )?;
         transaction.execute("UPDATE conversations SET title=CASE WHEN title='新对话' THEN ?1 ELSE title END,updated_at=?2 WHERE workspace_id=?3 AND id=?4",params![content.chars().take(24).collect::<String>(),run.started_at,workspace_id,conversation_id]).map_err(error)?;
         event_at(
             &transaction,
@@ -668,19 +743,6 @@ impl Database {
                     .map_err(error)?;
             }
         }
-        let request_json = serde_json::to_string(&request).map_err(json_error)?;
-        transaction
-            .execute(
-                "INSERT INTO context_snapshots VALUES(?1,?2,?3,?4,?5)",
-                params![
-                    run_id,
-                    request_json,
-                    hash(&request_json),
-                    manifest.to_string(),
-                    now()
-                ],
-            )
-            .map_err(error)?;
         for (ordinal, item) in knowledge.iter().enumerate() {
             transaction
                 .execute(
@@ -703,14 +765,67 @@ impl Database {
         })
     }
 
+    #[cfg(test)]
     pub fn record_event(&self, run_id: &str, kind: &str, payload: Value) -> AppResult<()> {
         let connection = self.connection()?;
+        require_chat_run(&connection, run_id)?;
         event(&connection, run_id, kind, payload)
+    }
+
+    pub(crate) fn execution_event(
+        &self,
+        run: &RunSummary,
+        purpose: ExecutionPurpose,
+        kind: &str,
+        payload: Value,
+    ) -> AppResult<()> {
+        let mut c = self.connection()?;
+        let tx = c.transaction().map_err(error)?;
+        if execution_is_running(&tx, run, purpose)? {
+            event(&tx, &run.id, kind, payload)?;
+            if matches!(purpose, ExecutionPurpose::Benchmark) && kind == "model_request_started" {
+                tx.execute("UPDATE benchmark_attempts SET request_disposition='unknown' WHERE execution_run_id=?1 AND status='running'",params![run.id]).map_err(error)?;
+            }
+        }
+        tx.commit().map_err(error)
+    }
+
+    pub(crate) fn execution_checkpoint(
+        &self,
+        run: &RunSummary,
+        purpose: ExecutionPurpose,
+        content: &str,
+    ) -> AppResult<()> {
+        let c = self.connection()?;
+        if execution_is_running(&c, run, purpose)? {
+            c.execute(
+                "UPDATE messages SET content=?1,updated_at=?2 WHERE id=?3 AND workspace_id=?4",
+                params![content, now(), run.assistant_message_id, run.workspace_id],
+            )
+            .map_err(error)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn execution_finish(
+        &self,
+        run: &RunSummary,
+        purpose: ExecutionPurpose,
+        content: &str,
+        status: &str,
+        message: Option<&str>,
+        metrics: Value,
+    ) -> AppResult<()> {
+        if !execution_is_running(&*self.connection()?, run, purpose)? {
+            return Ok(());
+        }
+        self.finish_recorded_run(run, content, status, message, metrics)
     }
 
     #[cfg(test)]
     pub fn model_called(&self, run_id: &str) -> AppResult<()> {
         let connection = self.connection()?;
+        require_chat_run(&connection, run_id)?;
         event(
             &connection,
             run_id,
@@ -719,12 +834,32 @@ impl Database {
         )
     }
 
+    #[cfg(test)]
     pub fn checkpoint(&self, run_id: &str, content: &str) -> AppResult<()> {
-        self.connection()?.execute("UPDATE messages SET content=?1,updated_at=?2 WHERE model_run_id=?3 AND role='assistant' AND EXISTS(SELECT 1 FROM execution_runs WHERE id=?3 AND status='running')",params![content,now(),run_id]).map_err(error)?;
+        let connection = self.connection()?;
+        require_chat_run(&connection, run_id)?;
+        connection.execute("UPDATE messages SET content=?1,updated_at=?2 WHERE model_run_id=?3 AND role='assistant' AND EXISTS(SELECT 1 FROM execution_runs WHERE id=?3 AND status='running')",params![content,now(),run_id]).map_err(error)?;
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn finish(
+        &self,
+        run: &RunSummary,
+        content: &str,
+        status: &str,
+        message: Option<&str>,
+        metrics: Value,
+    ) -> AppResult<()> {
+        {
+            let connection = self.connection()?;
+            require_chat_run(&connection, &run.id)?;
+        }
+        self.finish_recorded_run(run, content, status, message, metrics)
+    }
+
+    // Startup recovery handles both purposes, without exposing benchmark data to chat commands.
+    fn finish_recorded_run(
         &self,
         run: &RunSummary,
         content: &str,
@@ -741,6 +876,13 @@ impl Database {
         };
         let mut connection = self.connection()?;
         let transaction = connection.transaction().map_err(error)?;
+        let matching_run: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM execution_runs WHERE id=?1 AND workspace_id=?2 AND conversation_id=?3 AND assistant_message_id=?4)",
+            params![run.id,run.workspace_id,run.conversation_id,run.assistant_message_id], |r| r.get(0),
+        ).map_err(error)?;
+        if !matching_run {
+            return Err(missing());
+        }
         let time = now();
         let updated = transaction.execute("UPDATE execution_runs SET status=?1,error_message=?2,finished_at=?3 WHERE id=?4 AND workspace_id=?5 AND status='running'",params![status,message,time,run.id,run.workspace_id]).map_err(error)?;
         if updated == 1 {
@@ -783,7 +925,7 @@ impl Database {
         }
         self.conversations(workspace)?;
         let connection = self.connection()?;
-        let mut query=connection.prepare(&format!("SELECT {RUN_COLUMNS} FROM execution_runs WHERE workspace_id=?1 ORDER BY started_at DESC,id DESC LIMIT 50 OFFSET ?2")).map_err(error)?;
+        let mut query=connection.prepare(&format!("SELECT {RUN_COLUMNS} FROM execution_runs WHERE workspace_id=?1 AND conversation_id IN (SELECT id FROM conversations WHERE purpose='chat') ORDER BY started_at DESC,id DESC LIMIT 50 OFFSET ?2")).map_err(error)?;
         query
             .query_map(params![workspace, offset], read_run)
             .map_err(error)?
@@ -792,13 +934,22 @@ impl Database {
     }
 
     pub fn run_detail(&self, workspace_id: &str, run_id: &str) -> AppResult<RunDetail> {
+        self.recorded_run_detail(workspace_id, run_id, ExecutionPurpose::Chat)
+    }
+
+    pub(crate) fn recorded_run_detail(
+        &self,
+        workspace_id: &str,
+        run_id: &str,
+        purpose: ExecutionPurpose,
+    ) -> AppResult<RunDetail> {
         let connection = self.connection()?;
         let run = connection
             .query_row(
                 &format!(
-                    "SELECT {RUN_COLUMNS} FROM execution_runs WHERE workspace_id=?1 AND id=?2"
+                    "SELECT {RUN_COLUMNS} FROM execution_runs WHERE workspace_id=?1 AND id=?2 AND conversation_id IN (SELECT id FROM conversations WHERE purpose=?3)"
                 ),
-                params![workspace_id, run_id],
+                params![workspace_id, run_id, purpose.as_str()],
                 read_run,
             )
             .optional()
@@ -864,7 +1015,7 @@ impl Database {
                     |r| r.get(0),
                 )
                 .map_err(error)?;
-            self.finish(
+            self.finish_recorded_run(
                 &run,
                 &content,
                 "interrupted",
@@ -872,9 +1023,25 @@ impl Database {
                 json!({}),
             )?;
         }
-        Ok(())
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction().map_err(error)?;
+        let recovered_at = now();
+        transaction.execute("UPDATE benchmark_generation_jobs SET status='interrupted',error='Application stopped; request may have been billed. No automatic resend.',finished_at=?1 WHERE status='sending'",params![recovered_at]).map_err(error)?;
+        transaction.execute("UPDATE benchmark_batch_items SET run_id=COALESCE(run_id,(SELECT id FROM benchmark_runs WHERE launch_key=benchmark_batch_items.batch_id||':'||benchmark_batch_items.ordinal AND workspace_id=(SELECT workspace_id FROM benchmark_batches WHERE id=benchmark_batch_items.batch_id))),status='interrupted',error='app_restart_no_automatic_replay' WHERE status='running'",[]).map_err(error)?;
+        transaction.execute("UPDATE benchmark_batches SET status='interrupted',finished_at=?1 WHERE status IN ('running','stopping')",params![recovered_at]).map_err(error)?;
+        transaction.execute("INSERT INTO benchmark_events(run_id,seq,workspace_id,kind,occurred_at,payload_json) SELECT r.id,COALESCE((SELECT MAX(e.seq) FROM benchmark_events e WHERE e.run_id=r.id),0)+1,r.workspace_id,'experiment_interrupted',?1,'{\"reason\":\"app_restart\"}' FROM benchmark_runs r WHERE r.status='running'", params![recovered_at]).map_err(error)?;
+        transaction.execute("UPDATE benchmark_attempts SET status=COALESCE((SELECT status FROM execution_runs WHERE id=execution_run_id),'interrupted'),request_disposition=CASE WHEN (SELECT status FROM execution_runs WHERE id=execution_run_id)='completed' THEN 'finished' WHEN execution_run_id IS NOT NULL THEN 'unknown' ELSE request_disposition END,finished_at=?1,error_kind='app_restart' WHERE status='running'", params![recovered_at]).map_err(error)?;
+        transaction.execute("UPDATE benchmark_case_runs SET status=COALESCE((SELECT status FROM benchmark_attempts a WHERE a.case_run_id=benchmark_case_runs.id ORDER BY attempt_no DESC LIMIT 1),'interrupted') WHERE status='running'", []).map_err(error)?;
+        transaction.execute("UPDATE benchmark_runs SET status='interrupted',finished_at=?1 WHERE status='running'", params![recovered_at]).map_err(error)?;
+        transaction.commit().map_err(error)
     }
 }
+
+#[cfg(test)]
+mod benchmark_foundation_tests;
+#[cfg(test)]
+#[path = "db/profile_tests.rs"]
+mod profile_tests;
 
 #[cfg(test)]
 mod tests {
@@ -964,7 +1131,13 @@ mod tests {
             assert_eq!(messages[1].content, "部分回答");
             assert_eq!(messages[1].status, "interrupted");
             let detail = database.run_detail(&workspace_id, &run_id).unwrap();
-            assert_eq!(detail.events.len(), original_event_count + 1);
+            assert_eq!(
+                detail.events[original_event_count..]
+                    .iter()
+                    .map(|event| event.kind.as_str())
+                    .collect::<Vec<_>>(),
+                ["citations_checked", "run_interrupted"]
+            );
             assert_eq!(detail.events.last().unwrap().kind, "run_interrupted");
             database
                 .finish(&detail.run, "不得覆盖", "completed", None, json!({}))

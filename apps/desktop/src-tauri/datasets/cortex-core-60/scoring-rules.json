@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "document_type": "scoring_specification",
+  "review_status": "needs_human_review",
+  "rules": [
+    {
+      "id": "exact_alias",
+      "version": 1,
+      "kind": "aliases",
+      "normalization": "Trim Unicode whitespace at both ends; exact case-sensitive equality against any alias. No Unicode folding.",
+      "result": "0 or 1"
+    },
+    {
+      "id": "integer_equal",
+      "version": 1,
+      "kind": "integer",
+      "normalization": "Trim Unicode whitespace; accept only optional ASCII minus and ASCII decimal digits; parse i64; compare integer.",
+      "result": "0 or 1"
+    },
+    {
+      "id": "python_assertions",
+      "version": 1,
+      "kind": "python",
+      "normalization": "Only Python pure functions in authorized Linux Docker; positional JSON args; exact JSON output; no host fallback.",
+      "result": "passed/total assertions and all_passed; unavailable sandbox is blocked, never zero"
+    },
+    {
+      "id": "evidence_match",
+      "version": 1,
+      "kind": "evidence",
+      "normalization": "Strict JSON status/answer/citations; exact status; answer trimmed matches an alias (unanswerable: nonempty explanation); citations match the expected source/span set, one-based inclusive. Answer and citation results separate.",
+      "result": "answer correctness and citation correctness separately"
+    },
+    {
+      "id": "schema_semantic",
+      "version": 1,
+      "kind": "json",
+      "normalization": "Strict single JSON value; validate supplied schema; compare whole expected JSON semantically; object order ignored, array order retained.",
+      "result": "schema_valid and semantic_equal separately"
+    },
+    {
+      "id": "native_tool_equal",
+      "version": 1,
+      "kind": "tool",
+      "normalization": "Exactly one actual Provider tool_calls entry; matching function name and parsed arguments; validate declared parameter schema; no tool execution. Text JSON is not a tool call.",
+      "result": "0 or 1"
+    }
+  ]
+}

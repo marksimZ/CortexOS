@@ -1,3 +1,5 @@
+import { benchmarkReturn } from "./benchmark/reportNavigation";
+import { AppDialog, openDialog } from "./components/AppDialog";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { AppShell, pages } from "./components/AppShell";
@@ -9,6 +11,7 @@ import {
 import { ChatPage } from "./Chat";
 import { GraphPage, RelationshipEditor, type EditEdge } from "./Graph";
 import { SettingsPage } from "./Settings";
+import { BenchmarkPage } from "./benchmark/BenchmarkPage";
 import { errorText, useStudio } from "./studio";
 import { notify } from "./components/Toast";
 import "./styles/tokens.css";
@@ -37,6 +40,7 @@ export default function App() {
   const [knowledgeRevision, setKnowledgeRevision] = useState(0);
   const route = useNavigation();
   const page = route.page;
+  const returnTarget=route.back?.startsWith("#/benchmark?")?benchmarkReturn(route.back,route.workspace,route.run):route.back;
   useEffect(() => {
     if (studio.loading || !studio.data || !route.workspace) return;
     if (!studio.data.workspaces.some((item) => item.id === route.workspace)) {
@@ -67,7 +71,7 @@ export default function App() {
   const openCreateWorkspace = () => {
     setWorkspaceName("");
     setWorkspaceError(null);
-    workspaceDialog.current?.showModal();
+    openDialog(workspaceDialog.current);
   };
   useEffect(() => {
     document.title = `${pages.find((item) => item.id === page)?.label} · CortexOS`;
@@ -117,9 +121,9 @@ export default function App() {
             </button>
           </div>
         )}
-        {route.back && (
-          <a className="button text-button return-to-trace" href={route.back}>
-            {route.back.startsWith("#/chat?") ? "返回回答" : "返回执行轨迹"}
+        {returnTarget && (
+          <a className="button text-button return-to-trace" href={returnTarget}>
+            {returnTarget.startsWith("#/benchmark?")?"返回评测结果":returnTarget.startsWith("#/chat?") ? "返回回答" : "返回执行轨迹"}
           </a>
         )}
         {page === "chat" && (
@@ -170,6 +174,7 @@ export default function App() {
           />
         )}
         {page === "settings" && <SettingsPage studio={studio} />}
+        {page === "benchmark" && <BenchmarkPage studio={studio} personalized={route.personalized} />}
       </main>
       {edgeEdit && (
         <RelationshipEditor
@@ -203,7 +208,7 @@ export default function App() {
           }}
         />
       )}
-      <dialog
+      <AppDialog
         ref={workspaceDialog}
         className="form-dialog"
         aria-labelledby="workspace-title"
@@ -261,7 +266,7 @@ export default function App() {
             </button>
           </div>
         </form>
-      </dialog>
+      </AppDialog>
     </AppShell>
   );
 }

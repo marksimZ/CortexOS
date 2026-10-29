@@ -1,3 +1,4 @@
+import { AppDialog, openDialog } from "./AppDialog";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, BookOpen, Network, PanelRightClose } from "lucide-react";
 import { errorText, type RunDetail, type Studio } from "../studio";
@@ -7,7 +8,7 @@ export function ChatEvidence({ studio, overlay, runId, onInspect, onClose }: {
   studio: Studio; overlay: boolean; runId: string | null; onInspect: () => void; onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => { if (overlay) dialog.current?.showModal(); }, [overlay]);
+  useEffect(() => { if (overlay) openDialog(dialog.current); }, [overlay]);
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -58,6 +59,6 @@ export function ChatEvidence({ studio, overlay, runId, onInspect, onClose }: {
     </div>
   </>;
   return overlay
-    ? <dialog ref={dialog} id="chat-evidence" className="chat-evidence evidence-overlay" aria-labelledby="evidence-title" onClose={onClose}>{content}</dialog>
+    ? <AppDialog ref={dialog} id="chat-evidence" className="chat-evidence evidence-overlay" aria-labelledby="evidence-title" onClose={onClose}>{content}</AppDialog>
     : <aside id="chat-evidence" className="chat-evidence" aria-labelledby="evidence-title">{content}</aside>;
 }

@@ -1,10 +1,74 @@
 # 检查与验收
 
+## Benchmark 8 真实本地完整计划
+
+显式设置 `CORTEXOS_BENCHMARK_ACCEPTANCE_REAL=1`，运行 `benchmark-acceptance-real.spec.ts --project=benchmark-acceptance-real`。只选择实际目录中至多两个不同指纹的已安装模型，使用独立SQLite/Profile，先两题两次重复并停止/恢复，再固定Core60 v2全计划。原文、各类状态、分母、资源与配置均保留，不断言模型必须答对。Docker缺失按真实环境阻断；不下载模型、安装Docker或执行宿主代码。
+
+检查源运行全部终态、已完成项恢复时的runId不变、普通聊天为空及全局设置不变。全量已保存输出的独立重新评分和JSON/CSV系统保存可复查。若输出已完成而检查脚本后段失败，设置 `CORTEXOS_BENCHMARK_ACCEPTANCE_SAVED` 为仓库artifacts下原目录，复用其data、small.json及report.json，仅复查保存数据，不重复模型生成；新结果目录与原目录分开。该模式仍追加一轮显式独立评分，原分数不覆盖。
+
+实际结果及Docker/跨厂商模型/系统缩放等环境门槛见 [切片8](benchmark-acceptance-slice8.md)，不把Core60 Smoke当能力排行榜。
+
+## Benchmark 7 导出与独立重新评分
+
+先审阅工作区/用途/批次归属、源数据指纹、追加事务及原评分选择。仅运行必要的 `report_transfer` 两个数据库/文件专项，验证取消/失败不写、旧成绩保留、全部尝试、哈希、CSV 转义及公式保护、结构化认证元数据剔除、拒绝覆盖和临时文件清理，不运行无关单元套件。
+
+浏览器复用单题及个人向导检查，覆盖导出取消/失败重试、独立评分确认/取消/切页清理、三尺寸浅深布局。原生标准批次专项使用受控 HTTP 真实保存的8次回答，核对追加8条新评分但原统计与模型请求数不变，轮次定位正确；系统保存窗口实际保存 JSON/CSV 并取消。UIA 脚本使用本机现有 `pwsh.exe`（PowerShell7），只操作指定进程及仓库内路径；本机旧 Windows PowerShell 无法取得完整保存控件，不将它的失败记录为通过。JSON/CSV 实际解析核对结果。自动化环境依赖不增加产品运行依赖。
+
+实际命令、失败修正及截图见里程碑和 [切片7](benchmark-report-slice7.md)。Docker实测、真实付费模型、长时跨硬件、磁盘拔出/断电、系统150%与读屏另列未测；内容视口检查不代替系统缩放。
+
+## Benchmark 6.5 页面与性能专项
+
+仅前端增量，先逻辑审阅、类型检查及调试构建，不新增或运行单元套件。`benchmark-result-drawer.spec.ts` 补加载计数、三尺寸浅深长内容、固定栏、菜单/Esc/焦点；`personalized.spec.ts` 使用长文件名检查扩展名保留；复查共享菜单和导航。
+
+新增原生 `benchmark-report-usability.spec.ts` 使用独立 SQLite 的 900 项未运行计划（3 模型×60 题×5 次），各读取 5 次概览/页面/单题，记录 WebView2 内部 IPC 等待时间及序列化后 UTF-8 字节，另记录含自动化往返的翻页耗时。验证 60 个可见列表项、统计不变、读取时零模型请求，再发送一条受控未结束响应检查滚动后的停止入口。测试 HTTP 端点不是真实模型。实测结果、样本数与环境边界见 [6.5](benchmark-report-slice6-5.md)。
+
+最终原生检查复用 300 项定位与标准批量/实际执行图/停止恢复专项。两组 Playwright 若共用 1420 开发服务须顺序运行，避免服务所有者退出导致另一组连接拒绝。实际系统缩放和读屏保留人工检查，不以 CSS 缩放或内容视口截图替代。
+
+## Benchmark 6.4 导航与返回定位专项
+
+先审查 URL 参数、异步响应身份和所有只读查询的工作区/用途边界。只运行必要的两个 `cargo test report_ --lib --offline -- --nocapture` 数据库专项，不跑完整单元套件；新增定位命令需要验证执行与题目配对、跨域拒绝、筛选后页码和不匹配状态。
+
+浏览器专项覆盖复制/打开内部链接、刷新、前进后退、错误链接、晚到批次、个人入口重载及无自动任务调用。原生专项以真实 SQLite 的 300 项计划核对末题定位、筛选恢复和关闭焦点，以受控模型 HTTP 响应核对真实已保存执行图往返、原样输出及停止/恢复。共享弹窗或导航修改后按需复查全局窗口按钮、知识历史与既有菜单。三尺寸浅深截图是应用内容视口检查，不等同于 150% 系统缩放或读屏验收。实际命令和失败过程见里程碑与 [6.4 交付](benchmark-report-slice6-4.md)。
+
+## Benchmark 6.3 单题详情专项
+
+先审阅只读调用与响应身份；无需新增单元测试。`benchmark-result-drawer.spec.ts --project=edge` 使用可控晚到请求检查切题、长原文、读取/运行错误、未运行/不支持和焦点；`ui-usability.spec.ts` 回归开发 StrictMode 下的共享弹窗与菜单。
+
+Windows 调试构建后，`benchmark-report-pages.spec.ts` 覆盖实际 SQLite 的 300 项分页、页内切题、固定资料及三尺寸浅深抽屉；`standard-benchmark.spec.ts` 保留受控标准批次、已保存评分/采样和停止恢复。共享 AppDialog 有修正时按需补 `ui-usability-native.spec.ts` 及 `window-drag.spec.ts --grep "native dialogs"`，不把它等同于物理鼠标拖动通过。实际命令、结果与截图见里程碑。
+
+## Benchmark 6.2 与弹窗专项
+
+按需要运行 `cargo test report_ --lib -- --nocapture` 两项数据库专项，验证筛选在分页前完成、固定轮次/题库元数据、空匹配、非法参数及隔离；不扩大为全部单元测试。原生 `benchmark-report-pages.spec.ts` 覆盖 300 项组合筛选/重置/三尺寸主题；`standard-benchmark.spec.ts` 使用受控模型检查缺失速度排序、同分稳定次序、模型详情筛选不改全计划表和停止恢复。
+
+`window-drag.spec.ts --grep "native dialogs"` 独立检查弹窗下移、正文 inert、标题栏真实命中、最大化/最小化/还原/全局关闭、各页 Esc 和焦点；`ui-usability-native.spec.ts` 保留长记录/历史/嵌套草稿/来源菜单。物理鼠标拖动测试仍单列原有专项；本轮命中另一 Edge 窗口而被归属保护拒绝，不把其他通过项当作其通过。实际结果见里程碑。
+
+## 窗口标题拖动专项
+
+调试构建后可运行 `npx.cmd playwright test window-drag.spec.ts --project=desktop`。使用独立数据库，原生鼠标和实际窗口坐标检查五页标题/聊天空白、双击、最大化/还原、最小化和关闭；辅助脚本只操作此检查启动的窗口，并恢复光标。此专项会短暂置前测试窗口，按窗口交互改动需要执行，不属于每次修改的必跑项。实际结果见 2026-10-28 里程碑。
+
+## Benchmark 6.1 只读与分页专项
+
+`cargo test --lib report_paging --offline` 核对完整/概览的统计和性能一致、回答不进入列表、分页范围与归属、未运行详情及普通聊天隔离。`benchmark-report-pages.spec.ts --project=desktop` 使用真实 Tauri/SQLite 的 300 项未运行计划，验证 15 页、每页 20 项、单题展开及三尺寸浅深截图；`standard-benchmark.spec.ts` 检查已完成回答、计量、采样与停止恢复兼容。`personalized.spec.ts --project=edge` 保留三尺寸浏览器流程兼容。按需读取触发由组件挂载/effect 代码审阅及实际返回内容共同检查，不依赖修改 WebView2 内置 invoke。实际命令与结果见里程碑。
+
+## Benchmark 切片 5 专项
+
+先检查代码逻辑。计量与存储边界使用 `cargo test --lib telemetry --offline`，包含缺失/零、配对速度、分位数、溢出、GPU 不支持字段、工作区隔离、追加约束与重启历史。前端类型/构建及原生 `standard-benchmark.spec.ts --project=desktop` 检查终帧不重复、空白不算首字、缺字段、取消/恢复、原始采样查看与三尺寸浅深截图。共享执行改动另做 `chat.spec.ts` 必要回归。
+
+真实小范围显式设置 `CORTEXOS_BENCHMARK_METRICS_REAL=1` 后运行 `benchmark-metrics-real.spec.ts --project=benchmark-metrics-real`，使用当前实际模型列表，一题两次、64 输出 Token 请求上限，不下载或释放模型。已有记录复查可设置 `CORTEXOS_BENCHMARK_METRICS_SAVED` 为该检查结果目录，仅重开其独立数据库和核对采样，不重复调用模型。实际结果及脚本失败修正在 [里程碑](milestone-log.md)，边界见 [指标交付](benchmark-metrics-slice5.md)。
+
 > 阅读说明（2026-10-22）：本页是检查方法及分阶段覆盖记录，不是每次修改的必跑清单。按 [开发指南](../CONTRIBUTING.md) 选择相关专项；纯文档变更检查事实、链接和差异。实际运行结果以 [里程碑](milestone-log.md) 为准。
 
 2026-10-23 验收补充：用户已在Windows150%系统缩放下验证所有功能，反馈无问题，该项通过。真实读屏、干净系统安装和长期真实模型等剩余检查继续保留。下文各阶段的“未测/待验”保留当时事实；当前状态见[Windows交付记录](windows-delivery.md)。
 
 ## 当前可运行命令
+
+Core60 v2阶段B：`cargo test --lib scoring_ -- --nocapture`运行评分正反控制、分母及存储专项，其中真实Docker检查明确ignored。已有数据/用途兼容检查用`cargo test --lib benchmark_ -- --nocapture`，共享帧解析用`cargo test --lib ollama::tests -- --nocapture`。调试构建后设置`CORTEXOS_BENCHMARK_RUNNER=1`，原生`--grep 'native v2'`覆盖14种受控场景；它不是完整60题模型成绩。Docker尚未安装，用户决定保留实测待办，不回退宿主执行；具体命令和边界见[阶段B](benchmark-scoring-stage-b.md)。下段保留切片3检查历史。
+
+Benchmark切片3：必要数据专项为`cargo test --lib benchmark_development -- --nocapture`。原生专项在调试构建后设置`CORTEXOS_BENCHMARK_RUNNER=1`，执行`npx.cmd playwright test tests/benchmark-runner.spec.ts --project=benchmark-runner`；默认只跑受控服务，用`CORTEXOS_BENCHMARK_REAL_RUN=1`另行启用一次真实本地模型问答（180秒请求上限、64输出Token请求值）。首次实施已获用户确认并执行。共享执行变化还需相关聊天/知识/检索/来源/执行图回归；实际命令和结果见里程碑。不运行批量或代码题。
+
+Benchmark切片2：必要数据检查为`cargo test --lib benchmark_bundle -- --nocapture`；原生检查先构建调试应用，再设置`CORTEXOS_BENCHMARK_PREFLIGHT=1`运行`npx.cmd playwright test tests/benchmark-preflight.spec.ts --project=benchmark-preflight`。仅当明确允许只读访问本机模型时再加`CORTEXOS_BENCHMARK_REAL_MODELS=1`，会读取实际两个Qwen身份，不下载/生成/卸载。默认测试集不运行该专项；题目人工审核、实际能力探针和评分执行另验。实际结果见里程碑。
+
+Benchmark Phase 1切片1的必要检查已完成：`src-tauri`中执行`cargo test --lib benchmark_foundation_tests -- --nocapture`及单项既有聊天恢复测试；`apps/desktop`中执行`npm.cmd run tauri -- build --debug --no-bundle`，再运行聊天/知识/检索/来源/执行图五项原生专项。覆盖用途拒绝、空库/7→8升级、备份失败、事务回滚与备份恢复、旧数据逐表相等和中断对账；细节和实际失败修正见[milestone-log](milestone-log.md)。全部使用隔离数据，没有运行完整测试集、Docker或真实模型基准。
 
 从 `apps/desktop` 执行：
 
@@ -186,3 +250,13 @@ markdown-camera.spec.ts在desktop项目运行两个隔离原生场景：输入�
 保留citations、graph-instances及trace专项检查，不跑单元或全套测试；citations既有分隔点断言调整为当前V3逗号，未删除业务断言。三内容视口实际截图与命令见milestone-log。原生截图不代表系统150%或真实读屏；代码中引用为字面文本，原报告不改写。
 
 实体点选的固定投影检查显式选用立即模式，不以其验证动画；相机专项另外检查真实中间位置。Windows SPI和WebView媒体查询分别记录，不混为同一事实。
+
+
+## Phase C / C3–C5（2026-10-27）
+
+必要的安全/迁移/数据隔离检查与 Mock Provider 全链路见 [交付报告](benchmark-phase-c3-c5.md)。`cargo test --lib personalized --offline` 11 项通过；浏览器 3 种尺寸流程与 4 项连接/问卷回归通过；原生准入、知识、执行图、标准评测 v1/v2 共 5 项通过。真实云端、Docker 和新增页面的系统缩放/读屏不计为已测。截图保留于 artifacts/phase-c-ui-final，原生证据按报告列示；界面替身数据不作为模型成绩。
+
+
+## 标准批量与窗口控制（2026-10-27）
+
+本地标准计划不依赖云端或画像，工作区/类型边界、重复计划、重启补首次评分与无重发由必要专项检查。原生标准流程观察12次受控答题、并发1、授权模型释放、停止/剩余恢复、既有数据隔离及三尺寸按钮归属；详见 [本轮交付](benchmark-standard-batches.md) 和里程碑。真实模型能力、1800项极限规模、资源采样、Docker与系统缩放/读屏不作为本轮已验证项。

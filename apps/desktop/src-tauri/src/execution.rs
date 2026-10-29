@@ -29,15 +29,41 @@ fn error(_: rusqlite::Error) -> String {
     "执行视图读取或保存失败，请重试。".into()
 }
 impl Database {
+    pub(crate) fn personalized_execution(&self, workspace: &str, run: &str) -> AppResult<bool> {
+        self.connection()?.query_row("SELECT EXISTS(SELECT 1 FROM benchmark_attempts a JOIN benchmark_case_runs c ON c.id=a.case_run_id JOIN benchmark_runs b ON b.id=c.run_id WHERE a.execution_run_id=?1 AND a.workspace_id=?2 AND b.workspace_id=?2 AND b.dataset_id LIKE 'personal-%')",params![run,workspace],|r|r.get(0)).map_err(error)
+    }
     pub fn execution_graph(&self, workspace: &str, run: &str) -> AppResult<ExecutionGraph> {
-        let mut detail = self.run_detail(workspace, run)?;
-        let output = self
-            .messages(workspace, &detail.run.conversation_id)?
-            .into_iter()
-            .find(|m| m.id == detail.run.assistant_message_id)
-            .ok_or("运行输出不存在。")?;
+        self.recorded_execution_graph(workspace, run, ExecutionPurpose::Chat)
+    }
+    pub(crate) fn execution_purpose(
+        &self,
+        workspace: &str,
+        run: &str,
+    ) -> AppResult<ExecutionPurpose> {
+        let raw:String=self.connection()?.query_row("SELECT c.purpose FROM execution_runs r JOIN conversations c ON c.id=r.conversation_id AND c.workspace_id=r.workspace_id WHERE r.workspace_id=?1 AND r.id=?2",params![workspace,run],|r|r.get(0)).map_err(error)?;
+        match raw.as_str() {
+            "chat" => Ok(ExecutionPurpose::Chat),
+            "benchmark" => Ok(ExecutionPurpose::Benchmark),
+            _ => Err("运行用途无效。".into()),
+        }
+    }
+    pub(crate) fn recorded_execution_graph(
+        &self,
+        workspace: &str,
+        run: &str,
+        purpose: ExecutionPurpose,
+    ) -> AppResult<ExecutionGraph> {
+        let mut detail = self.recorded_run_detail(workspace, run, purpose)?;
+        let output = if matches!(purpose, ExecutionPurpose::Chat) {
+            self.messages(workspace, &detail.run.conversation_id)?
+                .into_iter()
+                .find(|m| m.id == detail.run.assistant_message_id)
+                .ok_or("Output missing")?
+        } else {
+            self.connection()?.query_row("SELECT id,workspace_id,conversation_id,role,content,status,model_run_id,created_at FROM messages WHERE workspace_id=?1 AND id=?2",params![workspace,detail.run.assistant_message_id],|r|Ok(Message{id:r.get(0)?,workspace_id:r.get(1)?,conversation_id:r.get(2)?,role:r.get(3)?,content:r.get(4)?,status:r.get(5)?,model_run_id:r.get(6)?,created_at:r.get(7)?,finish_reason:detail.events.iter().rev().find(|e|e.kind=="response_completed").and_then(|e|e.payload["metrics"]["finishReason"].as_str()).map(str::to_string),citations:None})).map_err(error)?
+        };
         if detail.run.status == "running" && output.status != "streaming" {
-            detail = self.run_detail(workspace, run)?;
+            detail = self.recorded_run_detail(workspace, run, purpose)?;
         }
         let connection = self.connection()?;
         let saved:Option<(i64,String,String)>=connection.query_row("SELECT revision,camera_json,target_json FROM execution_layouts WHERE workspace_id=?1 AND run_id=?2",params![workspace,run],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(error)?;
@@ -60,6 +86,13 @@ impl Database {
         })
     }
     pub fn save_execution_view(&self, input: SaveExecutionView) -> AppResult<i64> {
+        self.save_recorded_execution_view(input, ExecutionPurpose::Chat)
+    }
+    pub(crate) fn save_recorded_execution_view(
+        &self,
+        input: SaveExecutionView,
+        purpose: ExecutionPurpose,
+    ) -> AppResult<i64> {
         if input.expected_revision < 0
             || input
                 .camera
@@ -80,8 +113,8 @@ impl Database {
         let tx = connection.transaction().map_err(error)?;
         let exists: bool = tx
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM execution_runs WHERE workspace_id=?1 AND id=?2)",
-                params![input.workspace_id, input.run_id],
+                "SELECT EXISTS(SELECT 1 FROM execution_runs r JOIN conversations c ON c.id=r.conversation_id AND c.workspace_id=r.workspace_id WHERE r.workspace_id=?1 AND r.id=?2 AND c.purpose=?3)",
+                params![input.workspace_id, input.run_id,purpose.as_str()],
                 |r| r.get(0),
             )
             .map_err(error)?;

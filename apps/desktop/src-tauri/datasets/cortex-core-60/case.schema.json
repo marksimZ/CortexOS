@@ -1,0 +1,312 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cortexos:benchmark:case:1",
+  "title": "Cortex core case v1",
+  "type": "object",
+  "properties": {
+    "case_id": {
+      "type": "string",
+      "pattern": "^(zh|math|code|rag|schema|tool)-[0-9]{3}$"
+    },
+    "dataset_version": {
+      "const": 1
+    },
+    "category": {
+      "enum": [
+        "zh_knowledge",
+        "math_logic",
+        "coding",
+        "rag_citation",
+        "structured_tools"
+      ]
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "response_schema": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "required": [
+        "prompt",
+        "response_schema",
+        "tools"
+      ],
+      "additionalProperties": false
+    },
+    "expected": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "aliases"
+            },
+            "answers": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "answers"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "integer"
+            },
+            "answer": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "answer"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "python"
+            },
+            "function": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tests": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "args": {
+                    "type": "array"
+                  },
+                  "output": {}
+                },
+                "required": [
+                  "args",
+                  "output"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "function",
+            "tests"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "evidence"
+            },
+            "disposition": {
+              "enum": [
+                "answerable",
+                "unanswerable",
+                "conflict"
+              ]
+            },
+            "answers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "citations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "source_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "start": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "source_id",
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "disposition",
+            "answers",
+            "citations"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "json"
+            },
+            "answer": {}
+          },
+          "required": [
+            "kind",
+            "answer"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "tool"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "arguments": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "arguments"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "scoring": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "difficulty": {
+      "enum": [
+        "easy",
+        "medium",
+        "hard"
+      ]
+    },
+    "output_format": {
+      "enum": [
+        "text",
+        "integer",
+        "python",
+        "json",
+        "tool_calls"
+      ]
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "completion",
+          "python_sandbox",
+          "json_schema",
+          "tool_calls"
+        ]
+      }
+    },
+    "fixture": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lines": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "lines"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "case_id",
+    "dataset_version",
+    "category",
+    "input",
+    "expected",
+    "scoring",
+    "difficulty",
+    "output_format",
+    "requirements",
+    "fixture",
+    "content_hash"
+  ],
+  "additionalProperties": false
+}

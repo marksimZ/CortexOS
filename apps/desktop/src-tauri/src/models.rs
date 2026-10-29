@@ -117,7 +117,22 @@ pub struct Bootstrap {
     pub workspaces: Vec<Workspace>,
     pub settings: ModelSettings,
     pub active_run: Option<RunSummary>,
+    pub active_task: Option<crate::tasks::TaskSummary>,
     pub data_path: String,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum ExecutionPurpose {
+    Chat,
+    Benchmark,
+}
+impl ExecutionPurpose {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Chat => "chat",
+            Self::Benchmark => "benchmark",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

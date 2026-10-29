@@ -1,5 +1,637 @@
 # 里程碑记录
 
+## 2026-10-29：Benchmark 8——真实本地完整计划与交付
+
+用户授权按原计划执行最后一步，7作为已验收依赖。完成[切片8](benchmark-acceptance-slice8.md)本机可执行范围，停止等待用户验收；Docker Linux/跨厂商等环境门槛保留未完成。没有修改生产业务代码、数据库迁移、题库、标准答案或依赖，没有发布/提交/推送。新增tests/benchmark-acceptance-real.spec.ts，playwright.config.ts只增加显式开关，阶段/实施/测试/索引文档同步。
+
+读取现有阶段计划、预检、调度、计量、评分/状态及导出实现；复用ponytail最小方案。实际loopback的tags/ps/version确认Ollama0.40.9、两个不同digest的已安装Qwen身份，Docker CLI未检测到。未下载模型、安装系统工具或调用云端。实验numCtx4096、numPredict1024、temperature0、超时120秒，冻结Core60 v2 hash及模型digest。实际条件、版本、原文和参数见environment/report/details，不作品牌能力或最大上下文推断。
+
+类型检查通过。显式CORTEXOS_BENCHMARK_ACCEPTANCE_REAL=1运行 `npx.cmd playwright test --project=benchmark-acceptance-real benchmark-acceptance-real.spec.ts --output=../../artifacts/benchmark-8-real`：真实运行约12.9分钟，先两题两次重复两模型共8项，实际停止/恢复并核对2个已完成runId不变；再完整120项。终态100次完成调用、20项docker_unavailable，所有输出/评分和逐题详情已保存。检查脚本最后误用in_progress/not_run状态键，断言失败；实际键为“In Progress”/“Not Run”。改正检查脚本，原数据和评分不变，不把首轮组合写成通过。
+
+设置CORTEXOS_BENCHMARK_ACCEPTANCE_SAVED为原隔离证据目录，仅复用其数据库/已保存原文，输出到benchmark-8-saved-verification；同一专项1项通过（约1.2分钟）。追加100条独立评分、原成绩不变，原生系统窗口实际保存JSON/CSV。无新模型生成。SQLite只读对账确认model_request_started仍107（含小批次7次）、execution_runs128、messages256、context_snapshots128、execution_events844，知识节点/版本0；评分128→228，原全计划120个评分ID/outputHash/metrics/details逐条相等。JSON含120计划项，8,113,312字节；CSV标准库实际解析37列220条评分明细，1,852,659字节，行列数一致，哈希归档。107不是全计划请求数，220不是题目数。
+
+全计划instruct Passed38/Failed12/Docker阻断10，已评分38/50、覆盖50/60；另一身份Passed9/Failed22/Needs Review19/Docker阻断10，已评分9/31、覆盖31/60。两者实际执行成功均50/50，未运行/不支持/评分器错误0。截断和环境错误没有混入正确率分母；数学可见解释性文字违反输出格式不等于不会计算。RAG事实和引用分别记录，原生工具真实对象各5/5；Python0/0、20项环境阻断，不是编程能力0分。分类、难度、引用和Token/资源口径详见切片8，不生成综合能力榜。
+
+本轮未运行单元或无关套件，复用最新已构建产品程序（最近构建33.03秒，SHA256 345CD4E06B164ABA3412A720D321B6CFB6F10D34461975687A48190D2295B4E8），新增的仅为外部验收脚本和文档。完整真实执行中留存100次资源记录，模型间速度不是独占硬件/受控冷缓存比较；没有用两个同系列身份代替多厂商验收。
+
+启动独立真实结果窗口30088，工作区“Core60 v2 真实本地验收”，使用本轮隔离库，不覆盖原用户验收窗口和正式数据。只读导航并查看artifacts/benchmark-8-acceptance/ready.png，报告统计与原始记录一致。show.ps1返回visible=true、foregroundGranted=false，可从任务栏进入；没有自动新调用。Docker真实安全执行、其他厂商模型、长时跨硬件、新评测页系统150%/读屏等仍是剩余门槛。完成本轮后停止等待确认。
+
+## 2026-10-29：区分导航与知识列表按钮
+
+用户随后确认已保存关闭旧窗口。`npm.cmd run tauri -- build --debug --no-bundle`成功，含类型检查/Vite，Rust33.03秒，保留既有大JS块提示。复用独立验收数据打开进程16064，执行本机check-list-controls.cjs实际点击两组开关，核对分别收起/展开而不改变另一组状态，动态提示正确；查看实际截图list-controls-ready.png。未修改知识内容或启动模型。show-current.ps1确认visible=true、foregroundGranted=false，窗口可从任务栏打开。完成本次图标调整，无新单元测试或无关套件。下段为此前等待关闭时的记录。
+
+用户指出两处分栏图标功能不清。本轮修改Knowledge.tsx，将局部列表开关改为已有lucide ListTree图标加“知识列表”文字，保留原展开状态/逻辑，补动态title及aria-controls关联；AppShell.tsx的全局导航title改为明确的展开/收起操作。同步HTML规范，没有新增依赖或调整业务数据。`npm.cmd run typecheck`通过。按用户规范未运行单元测试；本次为低影响图标/文案调整，不重复无关套件。当前旧验收进程11940仍占用程序，已请用户保存关闭，桌面更新待其关闭后完成，未声称新图标已在运行窗口显示。
+
+## 2026-10-29：正文标题去重与控件比例微调
+
+用户提供三张截图，选择保留顶部标题、移除正文同名标题的最小方案。实际修改 Settings.tsx、Knowledge.tsx、Graph.tsx、benchmark/BenchmarkPage.tsx：h1保留读屏语义并视觉隐藏；设置/评测移除纯标题行，知识操作/图谱切换保留。styles/features.css统一设置/图谱分段控件的字高、选项高度和内距；图谱数据下拉移除padding-left:0，恢复12px左留白及32px箭头区，34px控件高度。无数据库/模型逻辑/依赖变化，未重做业务容器或对话页。
+
+扩展原tests/window-drag.spec.ts检查顶部标题/隐藏h1、34px选择器和内距、模式标签切换及各页1366/1600/1920截图；旧物理拖动专项目标改为可见顶部标题。同步HTML规范。`npm.cmd run tauri -- build --debug --no-bundle`通过，包含类型检查/Vite，Rust34.52秒；保留既有JS大块提示。`git diff --check`通过（既有换行提示）。未运行单元测试。
+
+首次原生界面检查page-heading-controls等待透明且pointer-events:none的radio输入，60秒超时；改为点击实际label并断言选中，不修改产品交互。最终 `npx.cmd playwright test --project=desktop window-drag.spec.ts --grep "native dialogs" --output=../../artifacts/page-heading-controls-final`：1项通过（10.0秒，场景6.5秒），各页面标题/控件布局、三尺寸截图、图谱模式切换及既有窗口操作/弹窗检查通过。查看实际1366深色图谱和设置截图，正文无重复页面标题、控件图文分离且留白均匀。未重跑受桌面环境阻挡的物理拖动检查。
+
+用户已保存关闭旧窗口。使用原独立验收数据启动最新版进程11940；没有自动运行模型，未提交/推送/发布。Benchmark7等待验收状态不变。
+
+## 2026-10-29：全页面窗口标题栏一致性修复
+
+用户反馈非对话页无法拖动、窗口操作嵌在业务区域。本轮仅修改 `apps/desktop/src/styles/layout.css` 的共享布局：移除901px以上非对话页绝对定位/隐藏标题/压缩拖动空白的特例，所有页沿用对话页48px基础标题栏，增加flex-shrink:0。保留现有WindowControls拖动及交互控件排除规则，弹窗仍下移并独立关闭，全局按钮始终可用。同步HTML规范，扩展原 `tests/window-drag.spec.ts` 检查各页空白拖动区域及标题栏与内容区不重叠。无数据库、模型逻辑、依赖或权限变动。
+
+读取总纲/开发/实施/HTML规范，复用ponytail与ui-ux-pro-max；定向搜索dragging movements规则只适用于内容拖动替代操作，未据此引入窗口拖动新控件。`git rev-parse --show-toplevel`确认独立仓库。用户已保存关闭旧窗口。`npm.cmd run typecheck`通过；`npm.cmd run tauri -- build --debug --no-bundle`通过，Rust1分35秒，主CSS index-Dz21PZzE.css 61.00kB，保留既有大JS块提示。没有运行单元测试。
+
+原生命令 `npx.cmd playwright test --project=desktop window-drag.spec.ts --output=../../artifacts/window-titlebar-unified`：弹窗专项通过5.1秒，物理拖动专项失败6.1秒，原因是Win32命中另一个msedge进程11384而非被测2728，安全保护阻止继续操作，不作为真实拖动通过。随后尝试拦截拖动IPC的辅助断言未观察到调用，移除该未验证的模拟方法，继续沿用独立物理专项。该中间组合window-titlebar-unified-verified失败，不计为通过。
+
+最终 `... --project=desktop window-drag.spec.ts --grep "native dialogs" --output=../../artifacts/window-titlebar-unified-layout`：1项通过（7.6秒，场景5.1秒）。核对非对话页正常状态48px标题栏/足够空白/与正文分离；三尺寸浅深弹窗截图、所有页全局按钮命中、真实最大化/还原/最小化及关闭、焦点返回与Tab均通过。物理鼠标拖动仍需用户验收，不以布局断言替代。检查脚本的一次临时TS窗口类型声明错误已修正，类型检查随后通过；该模拟段最终删除。
+
+复用原独立验收数据启动最新版进程31468，show-current.ps1返回visible=true、foregroundGranted=false，窗口已显示但Windows未授予前台切换，可从任务栏进入验收。没有自动运行评测，未提交/推送/发布。Benchmark7仍待验收，本次不进入8。`git diff --check`通过，仅既有换行提示。
+
+## 2026-10-29：Benchmark 7——导出与独立重新评分
+
+用户验收6.5并授权下一步，完成 [切片7](benchmark-report-slice7.md)；实际文件清单见该文，[导出协议](benchmark-export-schema.md)记录格式及边界。复用现有表、评分器和共享弹窗，新增限定范围的导出及重新评分命令。原报告显式读取原评分，新轮次事务追加，取消整体回滚；所有尝试、原始输出、来源与计量可导出。无新迁移或依赖，未提交、推送、发布，保留既有工作区变动。
+
+实际命令：Cargo位于apps/desktop/src-tauri，npm/Playwright位于apps/desktop。必要 `cargo test report_transfer --lib --offline -- --nocapture` 最终2项通过（5.63秒），其余79项未运行；此前 `cargo test report_ --lib --offline -- --nocapture` 的原2项报告检查通过。早期新增检查发现用途字段实际位于conversations、夹具标准答案应为95、终态fixture更新无效，以及预检查事件副本中的认证字段漏清理，已分别修正并验证。检查覆盖归属、源指纹、追加/取消/重复轮次、原数据不变、全部尝试、JSON校验、CSV转义/公式保护、旧文件保护及临时文件清理。`cargo fmt --all`、`cargo check --lib --offline` 最终通过（后者3.47秒）；一次从desktop目录误运行fmt因无Cargo.toml失败，随后在正确目录完成。
+
+`npx.cmd playwright test --project=edge benchmark-result-drawer.spec.ts personalized.spec.ts --output=../../artifacts/benchmark-7-browser-final`：8项通过（17.2秒），含保存取消/错误恢复、确认/取消评分、切页清理、三尺寸浅深与既有个人向导。`npx.cmd playwright test --project=desktop standard-benchmark.spec.ts --output=../../artifacts/benchmark-7-native-pwsh7`：1项通过（38.5秒），受控HTTP实际8次回答经SQLite保存后追加8条独立评分，模型请求仍8次，原统计不变，实际重复轮次正确；JSON/CSV系统保存与取消、原图谱往返/停止恢复均通过。此前native-visible组合中的300项分页专项通过（10.3秒），标准专项因旧PowerShell无法取得保存控件失败，未将失败组合记录为通过。改用本机现有PowerShell7后通过，未安装软件。CSV标准库解析37列、16条评分明细，所有行列数一致。原生检查后仅补切页清理与评分来源元数据，前者由最终浏览器检查覆盖，全部源码由最终构建覆盖。
+
+最后 `npm.cmd run tauri -- build --debug --no-bundle` 成功，含类型检查/Vite，Rust26.49秒；资源index-Bccl34JH.js 657.66kB、index-DE8nMJ2F.css 61.72kB、GraphViewport-XUr_07_H.js 941.05kB，保留既有大块提示。此前构建会话在中断后不可读取，因此重新取得明确成功输出。查看实际深色1920评分历史及原生1366截图，固定操作可见；不把浏览器夹具成绩当模型能力。
+
+用户指出窗口未弹出后，先恢复独立受控排查窗口并实际检查保存对话框。最终运行launch-metrics.cjs、show-current.ps1和prepare-transfer.cjs：最新版进程3460，visible=true、foregroundGranted=true，复用原phase-c-acceptance独立数据库与用户编辑，已打开“导出评测报告”。准备前后统计一致，无自动模型请求或文件保存，截图artifacts/phase-c-acceptance/transfer-ready.png。正式用户数据库保持原样。
+
+Docker未安装，真实容器重评分未测；真实付费模型、完整本地模型新生成、跨硬件长时、断电/磁盘故障、系统150%及读屏未执行。全量长答案导出的内存压力仍待验收。切片7完成后暂停，下一步8真实模型验收等待用户确认。
+
+## 2026-10-28：Benchmark 6.5——页面收尾与体验检查
+
+6.4 用户验收后明确授权“做”。按 [6.5 文件/验收方案](benchmark-report-slice6-5.md) 完成前端增量，交付后停在 6.5 验收；7 导出/复算与 8 真实模型验收不自动启动。复用 HTML 规范、语义 Tokens、SelectMenu、FileName、现有报告/详情/调度。没有数据库、评分器、模型调用、权限、依赖或版本号修改，未提交/推送/发布，保留此前用户及阶段改动。
+
+### 实际修改与检查依据
+
+- PagedResults：原 layout effect 会在每个模型首批结果到达时滚动，新逻辑跳过默认第一页的首次揭示及同页后台刷新，保留明确翻页和单题定位。数据未到时不再显示虚假的总页数/0 匹配；已知页码、读取中/失败/重试仍可见，旧查询结果不混入。
+- PersonalizedReport / PersonalizedWorkbench：运行操作固定在当前报告滚动区顶部，以 ResizeObserver 实测操作栏高度供分页定位与焦点留白，卸载清理。个人结果步骤的旧步骤条回归文档流，避免遮挡。原启动、停止、刷新、导出方法和确认要求保持。
+- benchmark.css：当前模型分页固定在运行操作下方；长名称/来源正文按需断行，计数保留稳定宽度，表格区域独立横向滚动及内嵌焦点。初次截图复核发现半透明固定栏会透出底下题目，已将原 surface 叠在 background 上形成遮挡，无新颜色/动画系统。
+- PerformanceDetails 及总比较表：增加区域名称和键盘焦点，保留原 caption/字段与统计口径。FileName 在三尺寸确实截断主体、保留 .py；外观菜单及 Esc 正常，因此这两个共享组件未改。
+- 新增 tests/benchmark-report-usability.spec.ts，扩展 benchmark-result-drawer.spec.ts / personalized.spec.ts；playwright.config.ts 登记原生专项。同步阶段顺序、实施/测试计划和 HTML 规范。完整文件清单与原始性能样本位置见 6.5 说明。
+
+### 实际命令与结果
+
+npm/Playwright 位于 apps/desktop，文档/仓库检查位于仓库根；UI 检查使用已批准的 require_escalated、独立 SQLite 与 WebView Profile。没有运行单元测试。
+
+- 确认 `git rev-parse --show-toplevel`；读取 AGENTS.md、development.md、开发/实施规范、原阶段计划与相关组件/接口。沿用 ponytail 最小增量与 ui-ux-pro-max；`py -3 -X utf8 .../ui-ux-pro-max/scripts/search.py "focus not obscured" --domain ux -n 3` 匹配焦点避免遮挡及 scroll-padding 指导，区分 AA 最低和 AAA 增强要求，未生成新设计体系。
+- `npm.cmd run typecheck` 首次通过。`... playwright test --project=edge benchmark-result-drawer.spec.ts --grep 'report loading' --output=../../artifacts/benchmark-6-5-browser-first`：新增加载/长内容/三尺寸浅深/固定栏/菜单与键盘专项 1 项通过（7.8 秒）。
+- `npm.cmd run tauri -- build --debug --no-bundle` 三轮依次通过：首轮 Rust 32.81 秒；补错误加载计数后 25.32 秒；固定栏遮挡最终版 31.68 秒。最终含类型检查/Vite通过，资源 index-8xoEkA12.js 649.25 kB、index-D4JwgpA2.css 61.32 kB、GraphViewport 941.05 kB；保留既有大块提示，没有修改打包架构或生成安装包。构建前无 CortexOS 进程，未强制关闭用户窗口。
+- `... --project=desktop benchmark-report-usability.spec.ts --output=../../artifacts/benchmark-6-5-native-first`：900 项实际 SQLite/读取/滚动停止专项通过（16.9 秒）；服务端为受控 HTTP 模型端点，不是真实模型。
+- 首次同时运行上述原生与浏览器组合，浏览器复用了原生进程拥有的 1420 开发服务；原生结束关闭服务，导致浏览器后四项 ERR_CONNECTION_REFUSED。组合 `... --project=edge benchmark-result-drawer.spec.ts personalized.spec.ts ui-usability.spec.ts --output=../../artifacts/benchmark-6-5-browser`：5 项通过，4 项环境连接失败（21.8 秒）；已通过导航/个人重载/晚到请求/原详情/新长内容和 1366 向导。没有将失败写成产品成功。后续全部 Playwright 组顺序运行，不再共用会提前退出的服务。
+- 一次补跑命令的无空格含管道 grep 在 Windows cmd 参数转发中被拆分，未运行测试；改为直接指定两个文件。`... --project=edge personalized.spec.ts ui-usability.spec.ts --output=../../artifacts/benchmark-6-5-browser-recovery`：5 项通过（14.4 秒），含三尺寸长文件名/向导、菜单和共享面板。连同前次通过的四个报告场景，共 9 个相关浏览器场景有通过证据。
+- 最终 `... --project=desktop benchmark-report-usability.spec.ts benchmark-report-pages.spec.ts standard-benchmark.spec.ts --output=../../artifacts/benchmark-6-5-native-final`：3 项通过（总约 1 分钟；12.7/10.6/34.4 秒）。覆盖最终固定栏遮挡、三尺寸浅深、焦点避让、900 项性能、实际停止、300 项分页/单题/筛选/返回，及已有双模型实际执行记录、原始采样、图谱往返、停止/恢复。未重复无关知识/相机/模型全套检查。
+- `git diff --check` 通过，仅既有 CRLF 提示；新增文件另查尾空白。当前大量旧未提交变动未撤销，未读取根目录令牌。
+
+### 性能和可见窗口
+
+900 项未运行计划（3×60×5），只渲染 60 个结果列表项（每模型20）。WebView2 内顺序各 5 次，未清缓存：概览中位 152.5 ms、48,891 JSON UTF-8 字节；第8页中位10.2 ms、11,353字节；未运行单题中位70.1 ms、798字节。翻页至新行出现中位68.7 ms（5次，含自动化往返）。完整 min/max/样本与口径见 6.5 及 performance.json。不是纯 SQL、纯帧时间或模型速度，也不代表 900 条完成长回答的负载。读取期间请求0、计划统计不变；随后单独让1条受控响应等待，滚动到最后模型仍能停止，余899项未发送。
+
+已查看原生1366浅色顶部、1920深色滚动停止及最终遮挡修复截图；三尺寸浅深均实际生成并检查溢出/按钮位置，但未逐张人工复核。另查看实际验收窗口截图，清楚标记未运行与无输出，没有伪造答案。
+
+执行现有 launch-metrics.cjs 和基于原只读准备脚本的 prepare-usability.cjs，复用原独立数据/用户编辑，进程25552，stage=benchmark-6.5。仍打开原批次 rag-001，重载保留查看条件，前后统计相等，没有创建新计划或自动运行，也没有调用真实 Ollama、下载模型或付费云端。show-current.ps1 恢复窗口 visible=true，Windows foregroundGranted=false；不抢前台，保留窗口/任务栏供用户切换。截图 artifacts/phase-c-acceptance/usability-ready.png。
+
+### 限制与停止点
+
+系统150%和真实读屏本轮未执行，不以旧版本用户验收、内容视口或自动名称/焦点检查代替。人工检查表已写进6.5说明，保留用户系统设置。900条已完成长答案、跨硬件/长时真实评测、Docker及真实付费个人评测待后续环境验收。当前大块JS提示保留。6.5已交付待验收，下一步建议7导出与复算；本轮停止。
+
+## 2026-10-28：Benchmark 6.4 用户验收完成
+
+用户确认“验收完”。更新阶段顺序、实施计划和 6.4 交付说明为已验收；下一步为 6.5 页面收尾与体验检查。本次仅修改文档，没有修改代码、操作验收窗口或启动任务，未运行单元测试或构建。实际执行 `git rev-parse --show-toplevel`、读取上述文档、按原文精确更新状态并回读核对；既有测试/未测边界保持原记录。
+
+## 2026-10-28：Benchmark 6.4——导航与返回定位
+
+用户授权“做导航与返回定位”，随后明确已保存并关闭原验收窗口。本轮按 [阶段顺序](benchmark-phase1-remaining-plan.md) 完成 [6.4](benchmark-report-slice6-4.md)，停在本增量验收。标准/个人报告共享 URL 状态、只读概览与定位；刷新/前进后退恢复排序、模型、筛选、各模型页码和单题，实际执行图返回原题，独立图按真实执行 ID 定位。保留停止/继续、原文/评分/来源/采样和全局窗口操作。没有新依赖、表、迁移、题库或评分修改；不推进 6.5、导出/复算或发布。
+
+实际文件完整列于 6.4 交付文档。新增 reportNavigation.ts / useBatchOverview.ts / BenchmarkLink.tsx；接入 BenchmarkPage、StandardBenchmarks、PersonalizedWorkbench、PersonalizedReport、PagedResults、ResultDrawer、navigation、App、ExecutionTrace；AppDialog 增加可选焦点返回解析函数。后端 report_read.rs 复用数据库筛选 SQL，新增 get_benchmark_result_location；lib/build/capability 仅登记这一限定范围的业务读命令；standard_tests 扩展已有两个数据库专项；三个 UI 专项和阶段/测试/HTML 文档同步。工作区此前已有大量未提交改动，未撤销或提交推送。
+
+逻辑审阅：定位先校验工作区/用途/批次，再验证 item 与实际 execution_run_id 的关联；结果页和定位共用筛选投影，不能拿原题配另一执行 ID。直接链接按数据库查目标页，避免读取全量回答。概览/列表/详情均以当前查询身份防旧响应；批次读取不会改写新的导航地址。个人准入沿用原 gate；标准入口不需云端密钥。链接操作只读，不批准、发送或重新评分。跨工作区返回链接、外站链接、重复/无效参数和筛选不匹配均提供可恢复状态。没有 OS 深链接或新通用文件/数据库能力。
+
+### 实际命令与结果
+
+npm/Playwright 命令目录 apps/desktop，Cargo 目录 apps/desktop/src-tauri；原生/浏览器进程检查使用受批准的 require_escalated 和独立数据库/Profile。
+
+- 复核 AGENTS.md、development.md、开发/实施规范、当前阶段计划、已有报告和执行图；复用 ponytail / ui-ux-pro-max 的最小增量和焦点可达规则。确认仓库根；未读取令牌或修改凭据。
+- `cargo fmt --all`、`cargo check --lib --offline` 通过。只运行必要 `cargo test report_ --lib --offline -- --nocapture`：2 项通过（0.85 秒），其余 77 项未运行。扩展检查覆盖跨工作区/用途拒绝、错配题目/执行、缺失目标/不合法页大小、按实际执行反查、模型独立页码及筛选不匹配。新增只读数据库命令存在安全边界，因此保留这两项专项，没有运行无关单元套件。
+- 类型检查早期发现未使用导入及定位回调放置错误，修正后通过。新增 UI 检查又因局部 `location` 变量遮蔽浏览器对象而使 `npm.cmd run typecheck` 和构建前置检查失败；仅重命名检查中的变量，随后最终 `npm.cmd run typecheck` 通过。
+- 最终 `npm.cmd run tauri -- build --debug --no-bundle` 通过，Rust 29.64 秒；包含类型检查和 Vite。主块 index-CLxB3fjq.js 648.39 kB，样式 index-BnHMZ8fH.css，GraphViewport 941.05 kB，保留既有大块提示。没有生成或发布安装包。
+- 初次浏览器 fixture 在自身初始化时引用 rows，导致 IPC stub 未安装；修正受控输入后 `... --project=edge benchmark-result-drawer.spec.ts --output=../../artifacts/benchmark-6-4-browser-smoke`：原单题检查通过（4.7 秒）。这不是产品运行错误或真实模型成绩。
+- 新导航浏览器组合先后因检查写错“返回结果列表”“重置查看条件”名称而失败；修正名称，不改产品标签。`... --project=edge benchmark-result-drawer.spec.ts personalized.spec.ts --output=../../artifacts/benchmark-6-4-browser-verified`：5 项通过，1 项上述名称失败（总 26.2 秒）。最终仅重跑该项 `... --project=edge benchmark-result-drawer.spec.ts --grep 'report links' --output=../../artifacts/benchmark-6-4-browser-links`：1 项通过（总 6.7 秒）。共 6 个相关场景分别有通过证据，未将失败组合写成全通过。覆盖翻页历史、重载、筛选/单题/复制/打开内部链接、错误配对不读详情、个人报告重载、晚到批次隔离、长原文/错误/焦点和三尺寸原个人向导。
+- `... --project=desktop benchmark-report-pages.spec.ts standard-benchmark.spec.ts --output=../../artifacts/benchmark-6-4-native`：300 项实际 SQLite 分页/末题定位/筛选刷新/单题焦点/三尺寸浅深截图通过（11.9 秒）；标准批次新检查误把返回链接写成 button，等待 120 秒超时。修正为 link 并给检查设置 10 秒定位超时，产品保持原链接语义。
+- `... --project=desktop standard-benchmark.spec.ts ui-usability-native.spec.ts window-drag.spec.ts --grep 'standard batches|native long records|native dialogs' --output=../../artifacts/benchmark-6-4-native-verified`：3 项通过（45.1 秒；28.7/6.3/6.4 秒）。受控双模型真实 HTTP→SQLite→执行图，图谱重载后返回原筛选/模型/轮次/题目，独立执行图反查结果，返回过程请求仍为 8 次；原停止/继续只发送剩余项。知识历史、编辑/来源菜单、弹窗期间全局窗口按钮回归通过。没有运行物理鼠标拖动用例。
+- 查看真实 1366 浅色抽屉顶部、1920 深色滚动后及本机验收窗口截图；其他尺寸截图由原生专项实际生成并检查无横向溢出，未逐张人工复核。实际视口检查不替代系统 150% 或读屏。
+- `git diff --check` 首次发现 ExecutionTrace 空行尾空白，清理后通过，仅保留原 CRLF 提示。最终类型检查通过；不重复已通过的全套或无关检查。
+
+### 验收窗口与停止点
+
+运行已有 `node artifacts/phase-c-acceptance/launch-metrics.cjs`，复用原独立数据库和 WebView Profile，启动进程 18644，调试端口仅供本机检查。新增本机只读准备脚本 `prepare-navigation.cjs`：打开原批次 68f2568b-1bfe-46cb-98cd-40be4a50f5f6 的 rag-001，带模型/轮次/能力/排序/单题定位，刷新后条件和题目一致，前后统计相等。没有重建数据、生成问题、批准运行或调用模型，也没有覆盖生产库或用户编辑。manifest 更新为 benchmark-6.4，实际图 artifacts/phase-c-acceptance/navigation-ready.png 已查看。
+
+运行 `show-current.ps1 -AppProcessId 18644`，Win32 visible=true，foregroundGranted=false；Windows 未授予抢前台，保留可见窗口和任务栏入口供用户切换，没有绕过限制。原两题仍未运行，便于先验收链接/刷新；执行图往返另有上述受控原生证据，不伪称为真实 Qwen 回答。
+
+当前风险/未测：内部链接依赖当前本地数据库，不能作为跨机器报告分享；个人历史恢复仍受原连接准入限制。真实个人云端、Docker、真实 Qwen 本轮生成、多硬件/长时运行、读屏和新增评测页系统 150% 均未执行，原因是本轮只读导航范围或环境未就绪。此前用户对其他页面 150% 的验收不代替本次新增页面验证。新建/生成向导的未保存选择不在报告链接中序列化。下一步建议 6.5 页面收尾，本轮在 6.4 验收点停止。
+
+## 2026-10-28：Benchmark 6.3——单题详情面板
+
+用户确认回到主线继续，按原计划实施 [6.3](benchmark-report-slice6-3.md)，完成后停在本增量验收。复用 6.1 单题只读接口、6.2 分页/筛选以及现有共享弹窗、Markdown 和采样组件；新增右侧按需详情、固定标题/刷新/关闭、底部返回/页内切题、完整原文、评分/题目要求/固定资料/请求/采样分层查看。没有修改后端业务、迁移、模型调用、题库或评分，不进入 6.4–6.5、导出/复算或发布。
+
+实际文件：新增 apps/desktop/src/benchmark/ResultDrawer.tsx；修改 PagedResults.tsx、PersonalizedReport.tsx、benchmark.css、components/AppDialog.tsx、styles/layout.css；新增 tests/benchmark-result-drawer.spec.ts，适配 benchmark-report-pages.spec.ts / standard-benchmark.spec.ts 和 playwright.config.ts。完整功能与文件清单见 6.3 说明，同步原计划/界面规范/测试计划。当前工作区有大量此前阶段修改，未撤销、提交、推送或发布。
+
+逻辑检查：响应与工作区/用途/批次/题目身份绑定，切题立即隐藏旧内容且忽略晚到结果；正文 DOM 随题目重置，采样状态不串题。当前题已有保存评分即停止轮询，关闭/切题清理旧请求与计时器。未运行不显示模型输出/执行图入口；运行无文字、读取错误、执行错误与不支持保持不同状态。固定资料保留编号与 1 起始行号，不称其为生产检索命中。请求查看区区分保存的云端 wire 与本地快照，保留实际事件与所有评分记录。
+
+实际执行（npm/Playwright 位于 apps/desktop）：
+
+- 阅读 development.md、开发/实施规范、阶段计划、HTML UI 规范与现有接口/数据序列化代码。沿用 ponytail 与 ui-ux-pro-max 定向规则；`py -3 .../ui-ux-pro-max/scripts/search.py "drawer close return focus" --domain ux` 命中焦点可见/避免遮挡的相关项，未生成新设计体系。
+- `npm.cmd run typecheck` 通过。用户明确保存并关闭验收窗口后，`npm.cmd run tauri -- build --debug --no-bundle` 多轮构建通过，最终 28.19 秒；内含类型检查/Vite。最终资源 index-MAQF9par.js / index-BnHMZ8fH.css，主包约 638 kB、GraphViewport 约 941 kB，原大块提示保留。
+- 初次原生 `npx.cmd playwright test --project=desktop benchmark-report-pages.spec.ts standard-benchmark.spec.ts --output=../../artifacts/benchmark-6-3-native`：标准批量/计量/停止恢复通过（29.1 秒）；新固定标题坐标检查在入场动画途中测量失败。为几何测量显式设置 reducedMotion=reduce，不修改产品动画。
+- 初次浏览器新专项在 Esc 关闭处失败（6.6 秒），晚到响应、完整原文、重试/错误已先通过。检查确认 React StrictMode 重放 effect 会移除仍打开 dialog 的内容限制注册，旧 openDialog 仅凭 open 提前返回。共享入口现仅跳过“已打开且已注册”的实例；重放时重新注册，恢复正文 inert/Esc/返回焦点。
+- `npx.cmd playwright test --project=edge benchmark-result-drawer.spec.ts ui-usability.spec.ts --output=../../artifacts/benchmark-6-3-browser-final`：3 项通过（8.4 秒），覆盖上述修正、新详情及既有共享面板/菜单。UI 合成输入明确标记，不是模型成绩。
+- 第一次最终组合 `... --project=edge --project=desktop benchmark-result-drawer.spec.ts benchmark-report-pages.spec.ts standard-benchmark.spec.ts ui-usability-native.spec.ts window-drag.spec.ts --grep "drawer ignores|native report pages|standard batches|native long records|native dialogs" --output=../../artifacts/benchmark-6-3-final`：5 项通过（53.2 秒）。包含真实 SQLite 的 300 项计划/固定资料，受控双模型、已保存评分/原始采样/停止恢复，知识历史/草稿/来源以及弹窗期间全局窗口操作。
+- 截图复核仍发现旧 side-drawer 同权重规则将新面板覆盖为 430px，且非聊天页弹窗顶栏与原页面标题重叠。已提高专用面板宽度规则优先级，弹窗打开时隐藏被顶栏替代的页面 h1，关闭后恢复；未更改页面布局。截图检查增加 720px 精确宽度与等待读取完成，保留顶部/滚动后截图，不将加载画面当成内容还原通过。
+- 最终 `npx.cmd playwright test --project=edge --project=desktop benchmark-result-drawer.spec.ts benchmark-report-pages.spec.ts window-drag.spec.ts --grep "drawer ignores|native report pages|native dialogs" --output=../../artifacts/benchmark-6-3-acceptance`：3 项通过（22.3 秒）。复核最终样式、晚到请求、Esc/焦点、真实资料、三尺寸浅深、固定操作区与全局窗口按钮；不重复无关检查。已查看最终 1366 浅色顶部、1920 深色滚动后原生图和实际验收窗口图。
+- `git diff --check` 通过，保留原 CRLF 提示。按用户要求未运行单元测试；本轮无后端算法或数据库变更，不重复既有数据库/评分全套检查。
+
+已运行本地验收启动脚本，复用原独立数据与用户编辑，主进程 27252。原验收库没有标准历史，首次准备两题计划因 Ollama 离线而停止，未写假模型身份。随后启动此前授权安装的本地 Ollama（仅 127.0.0.1:11434，进程 28108）；确认 loadedModels=0，只读取真实模型列表。根据实际 qwen3:4b-instruct 及其 digest/现有请求设置，在独立工作区“单题详情验收（未运行）”创建 math-001 / rag-001、单次两题的未运行计划，并打开 rag-001 详情。没有下载/加载模型或生成回答，没有覆盖生产数据或原工作区。已有应用窗口恢复显示，Win32 visible=true；验收图为 artifacts/phase-c-acceptance/detail-ready.png，窗口保留供测试。
+
+当前限制：真实个人云端、Docker、读屏、新页面 150% 和跨硬件/长期任务未在本轮执行；物理鼠标拖动保留此前环境命中待核对，不由窗口按钮通过代替。下一步为 6.4 稳定内部链接/刷新/图谱返回定位，等待本增量验收后再实施。
+
+
+## 2026-10-28：修复任务栏仍显示旧 Logo
+
+用户反馈任务栏仍为旧图标。核查已生成的新 SVG/PNG/ICO 与 Windows 编译链发现：安装的 tauri-codegen 2.7.3 在 Windows 从应用图标资源 32512 读取默认窗口图标；tauri-build 2.7.3 的构建输出只监听配置/权限等文件，没有监听图标。旧 resource.lib 时间为 13:33，新 ICO 为 17:47，因此之前 18:03 的 EXE 仍链接旧图标资源。此前只检查应用内标识并声称桌面图标已应用的验证不充分，由本条更正。
+
+本次产品代码只修改 apps/desktop/src-tauri/build.rs：增加 cargo:rerun-if-changed=icons，图标目录变化即重新编译原生资源。复用原 Tauri 图标链，无依赖、权限、数据库或界面变动。
+
+实际验证：
+
+- `npm.cmd run tauri -- build --debug --no-bundle` 通过（36.74 秒），包含类型检查/Vite；原有大块提示保留。构建输出已出现 `cargo:rerun-if-changed=icons`，resource.lib 更新到 18:32。
+- 一次性本地 artifacts/icon-embedding/verify-icon.ps1 使用 LoadLibraryEx/FindResource 读取 EXE 的图标组和各帧，并逐字节与现有 icon.ico 比较；6 帧全部一致。没有加载执行待检 EXE，也没有以文件图标缓存替代资源读取。
+- 已复用独立验收数据重开进程 3280，原页面就绪，未自动运行评测。首次启动因上轮 PowerShell 写入 JSON BOM 失败，已修正本地验收脚本的 BOM 读取和写入后正常启动；该脚本不属于产品功能。
+- 实际窗口检查补齐 WM_GETICON 的大/小类型，保存并查看运行窗口图标 runtime-window-icon.png，已为知识节点 Logo。初次只查大图标返回空，是检查脚本覆盖不足，不当作产品无图标。
+- 通过 Windows UI Automation 仅定位任务栏的 CortexOS 按钮，匹配 `CortexOS - 1 个运行窗口`，截取该按钮 55×60 像素图 cortex-taskbar.png；已查看，实际任务栏为新青绿/靛蓝三节点标识。证据位于 artifacts/icon-embedding/，未清除系统图标缓存或修改固定项。
+
+按项目约定没有运行单元测试或无关业务检查；使用实际构建资源和真实任务栏验证本问题。窗口保留供用户继续验收，Benchmark 6.2 的停止点保持不变。
+
+
+## 2026-10-28：Benchmark 6.2、Logo 02 与应用内弹窗标题栏
+
+用户在 6.1 交付后授权继续原计划，暂选 Logo 02“知识节点”，随后明确全局窗口标题栏始终可见、可操作，弹窗下移并有自己的关闭入口。本轮交付 [6.2](benchmark-report-slice6-2.md)，停止在本增量验收；不进入 6.3、导出/复算或发布。无新依赖/权限/迁移，无实际模型生成、云端调用或下载，生产数据库未用于检查。
+
+实现：共享概览保留全计划统计，比较表支持计划顺序/正确率/评分覆盖率/已记录速度排序，缺失放最后、同值按模型序号；逐题模型/状态/能力/难度/重复轮次筛选以数据库全部匹配为准，再分页，显示匹配与计划数量。切换筛选重置页码和展开项，旧请求不会渲染到新筛选下。冻结比较条件显示题库/模型标识和请求参数差异，不推测量化方式、实际用量或跨机器可比性。
+
+原生 showModal 会把弹窗外的全局标题栏也设为不可交互，因此新增内容范围 AppDialog/openDialog；正文与侧栏 inert、标题栏保持可操作，弹窗 Portal 到 body 并预留顶部 76px。原 close/cancel、Esc、审核与未保存保护仍由原业务处理。长面板沿用固定标题/关闭/操作区，紧凑确认框补独立且随滚动保留的关闭按钮。Logo 按已选 PNG 方向整理透明 SVG，导航/欢迎页/favicon 共用 BrandMark；现有 Tauri CLI 转换原六个桌面图标，额外生成的移动端/商店文件已清理。
+
+实际修改文件完整列表见 6.2 交付文档；下列为实际执行结果（npm/Playwright 在 apps/desktop，Cargo 在其 src-tauri，其他命令在仓库根）：
+
+- 阅读项目总纲、开发/实施规范、当前计划及 HTML UI 规范，使用 ponytail / ui-ux-pro-max 的既有组件与最小共享修正。UX 定向检索 `py -3 .../ui-ux-pro-max/scripts/search.py "dialog keyboard focus close" --domain ux` 命中焦点可见与避免遮挡规则，没有生成新设计体系。
+- `npm.cmd run tauri -- icon --help`、`npm.cmd run tauri -- icon public/cortex.svg --output src-tauri/icons` 成功。字体扫描提示 mstmc.ttf malformed，SVG 无字体，图标正常生成；已检查原方案及实际应用标识。
+- `npm.cmd run typecheck`、`npm.cmd run build` 通过。`cargo fmt --all` 完成。初次 `cargo test benchmark::standard_tests::report_ --lib -- --nocapture` 匹配 0 项，不能视为专项通过；更正模块匹配后 `cargo test report_ --lib -- --nocapture`：2 项通过、77 项未运行，0.80 秒。涵盖六类能力、三档难度、轮次组合、跨页计数、零匹配、非法条件、用途隔离、完整/概览等价及正文不进列表；没有运行无关单元测试。
+- `npm.cmd run tauri -- build --debug --no-bundle` 最终通过（29.11 秒）。包含类型与前端构建，资源为 index-DC8liaLT.js / index-BnSkaf_Y.css，GraphViewport 约 941 kB。原 Vite 大块提示保留，没有因此拆分无关模块。
+- 原生初次 `... playwright test --project=desktop window-drag.spec.ts benchmark-report-pages.spec.ts ui-usability-native.spec.ts --output=../../artifacts/benchmark-6-2-ui`：长记录/知识历史/嵌套未保存保护/来源菜单通过（5.4 秒）；新筛选检查等待字段标签超时。加跟踪重查发现包裹 label 的文本包含选项，已为新 SelectMenu 显式设置可访问名称，后续实际筛选通过。
+- `... --output=../../artifacts/benchmark-6-2-check`：300 项分页与筛选通过（5.4 秒）；双模型检查的表格定位误命中详情内的另一张表，修正为全计划比较表选择器。
+- `... playwright test --project=desktop window-drag.spec.ts standard-benchmark.spec.ts --output=../../artifacts/benchmark-6-2-native-controls`：标准批量/缺失速度排序/同分顺序/模型筛选不改比较表/指标采样/停止恢复通过（26.3 秒）。实际回答均来自明确的受控服务，非真实模型成绩。物理拖动项仍未通过，原因如下。
+- 物理鼠标拖动专项多次在实际发送前命中另一个 Edge 进程（26232），不是本次测试窗口；确认目标仍可见后，归属保护继续拒绝发送。保留失败记录在上述目录和 benchmark-6-2-diagnose，没有绕过归属检查，也没有把 IPC 调用或 DOM 位移当作实际拖动。此项留待人工验收。
+- 将弹窗操作与物理拖动拆为独立原生检查。最终 `npx.cmd playwright test --project=desktop window-drag.spec.ts benchmark-report-pages.spec.ts ui-usability-native.spec.ts --grep "native dialogs|native report pages|native long records" --output=../../artifacts/benchmark-6-2-final`：3 项通过（19.8 秒）。实际核对 300 项数据库筛选/翻页/清除、全计划不变；三尺寸浅深弹窗与比较截图；五页弹窗的标题栏命中、正文 inert、Esc/焦点返回、Tab 范围，以及弹窗打开时真实最大化/还原、Win32 最小化状态和全局关闭。长记录/知识历史/草稿/资料导入回归保持通过。
+- 已查看最终 1366 浅色紧凑弹窗、深色比较表，以及同布局长处理记录原生截图。截图是实际 WebView2 渲染，不用静态图充当页面，也未声称像素相似度或读屏通过。
+- `git diff --check` 通过（保留工作区已有 CRLF 提示）。当前有大量此前阶段未提交修改，未撤销、提交、推送或发布。
+
+已运行 `node artifacts/phase-c-acceptance/launch-metrics.cjs` 与 `verify-report.cjs`，复用原独立验收目录/用户保存的内容，进程 18076，页面就绪，未找到已有标准批次，保留新建计划入口；没有自动创建计划或发送模型请求。随后仅匹配该 PID 下标题为 CortexOS 的主窗口，`show-current.ps1` 恢复显示，Win32 visible=true、foregroundGranted=true。窗口保留供用户验收。
+
+当前限制：物理鼠标拖动、新增页面的系统 150% 与真实读屏留待人工复核；Docker、完整真实 Core60、跨显卡/长期大计划沿用既有待办。下一步 6.3 单题详情面板需先验收本增量。
+
+
+## 2026-10-28：修复窗口标题区域无法拖动
+
+用户报告窗口无法拖动。检查发现非聊天页顶栏为右侧收缩布局，原 WindowDragRegion 只剩窄空白；页面标题和大部分标题行留白未绑定拖动。复用现有原生 startDragging/toggleMaximize 与既有权限，在 AppShell 的 workspace-stage 对顶栏/页标题区域委托鼠标事件；WindowControls 共享同一处理函数，避免重复触发。明确跳过按钮、链接、标签、输入/选择/可编辑控件及其交互角色；正文、图谱和分屏事件保持原逻辑。只为标题加不选中文本和默认指针，不改变布局位置或权限。
+
+实际修改：apps/desktop/src/components/AppShell.tsx、WindowControls.tsx、src/styles/layout.css；新增 tests/window-drag.spec.ts / window-drag.ps1，在 playwright.config.ts 注册。同步 HTML 界面规范与本记录。测试辅助脚本只对自身独立窗口短暂置前、确认鼠标命中归属后输入，在 finally 释放鼠标、移除临时置前并恢复光标；使用线程级 DPI 坐标转换，不改变系统缩放。
+
+实际验证（命令位于 apps/desktop）：
+
+- 修改前旧程序执行 `npx.cmd playwright test window-drag.spec.ts --project=desktop --output ../../artifacts/window-drag-before`，评测页标题的真实窗口水平位移为 0，断言失败，复现问题。测试通过 Win32 原生鼠标输入与 GetWindowRect 核对位置，没有以 DOM 事件或 IPC 成功冒充实际移动。
+- `npm.cmd run typecheck` 通过；`npm.cmd run tauri -- build --debug --no-bundle` 通过。Vite 原有主包/图谱大块提示保留，资源为 index-BWmboGBM.js / index-lsdRfeFC.css。
+- 修复后 `npx.cmd playwright test window-drag.spec.ts --project=desktop --output ../../artifacts/window-drag-fixed`：1 项通过（14.7 秒）。五页标题分别触发真实窗口水平位移 >60、垂直位移 >10 物理像素，窗口尺寸不变；聊天空白拖动区也产生实际位移。另核对标题双击最大化、按钮还原、最小化及原生状态、主题下拉和关闭按钮。已查看实际 WebView2 截图 window-titlebar.png。
+
+已用最终构建重开原独立验收数据和 WebView 配置，进程 17288，保留用户保存的编辑；入口就绪并保留窗口，没有开始评测。恢复主窗口显示只匹配本次主窗口，未操作输入法窗口。
+
+按用户约定没有运行无关单元测试、模型请求或整套业务检查，没有修改数据库、模型或 Benchmark 计划。Benchmark 6.1 仍等待验收，不因此进入 6.2。
+
+## 2026-10-28：Benchmark 6.1——完整计划与报告按需读取
+
+用户先要求当前阶段完整步骤计划，再继续下一步。已给出 [6–8 顺序及停止点](benchmark-phase1-remaining-plan.md)，本轮交付 [6.1 报告按需读取/分页](benchmark-report-slice6-1.md)，停在本增量验收。使用已有评分、计量、状态和 UI Tokens，未新增依赖或迁移；schema 10、旧题库/评分及完整接口保持兼容。
+
+实际执行（npm/Playwright 位于 apps/desktop；Cargo 位于 apps/desktop/src-tauri）：
+
+- 阅读 development.md、开发规范、实施计划及 HTML UI 规范；按 ponytail / ui-ux-pro-max 复用现有实现。本地分页设计规则检索未命中，按既有组件与实际截图实现，没有生成新设计体系。
+- `cargo check --lib --offline`、`npm.cmd run typecheck` 通过。代码逻辑审阅发现数据库为互斥连接，已限制概览查询持锁区间，并在单题读取后释放锁再调用完整读取，避免递归持锁。
+- `cargo test --lib report_paging --offline` 初次因测试误用 list_conversations 方法名编译失败，改为现有 conversations 后，1 项通过（77 项未运行，0.72 秒）。核对统计/性能等价、20 万字符回答不进入概览/列表、页码与数量限制、模型/工作区/用途拒绝、未运行详情和聊天隔离；没有运行无关全套单元测试。
+- `npm.cmd run tauri -- build --debug --no-bundle` 最终通过；内含类型与前端构建。最终 main 约 624 kB、GraphViewport 约 941 kB，Vite 既有大块提示保留；前端资源 index-CI3_D-6h.js / index--FCu5Lod.css。
+- `npx.cmd playwright test personalized.spec.ts --project=edge --output ../../artifacts/benchmark-report-browser` 的三项分别完成，但受限进程未正常结束清理；已结束该旧命令的专用进程。改在授权环境复用开发服务，`... --output ../../artifacts/benchmark-report-browser-final` 正常退出，3 项通过（5.3 秒），覆盖既有个人评测三尺寸流程。
+- 原生 `benchmark-report-pages.spec.ts / standard-benchmark.spec.ts` 初次运行，标准批量/计量/停止恢复专项通过（23.6 秒）；分页的接口和单题展开已通过，脚本尝试改写 WebView2 内置 invoke 统计调用数无效，断言失败。已移除无效拦截，改用真实返回、实际展开内容及组件 effect 逻辑审阅；未把失效的调用计数当作通过证据。
+- `... playwright test benchmark-report-pages.spec.ts --project=desktop --output ../../artifacts/benchmark-report-pages-final`：1 项通过（4.6 秒）。最后补充长问题截断省略号，并按 UTF-8 字节计量概览样本，重新构建后执行 `npx.cmd playwright test benchmark-report-pages.spec.ts standard-benchmark.spec.ts --project=desktop --output ../../artifacts/benchmark-report-acceptance`：2 项通过（30.5 秒）。
+
+最终原生证据：300 个未运行逻辑项，15 页 × 20 项、末项 ordinal=299 / 重复第 5 次；该样本概览小于 100000 UTF-8 字节。前后翻页、展开/收起、三尺寸浅深截图正常，模型答题请求为 0。另一个受控标准批量专项继续实际检查既有终帧计量、原始采样、图谱入口、取消后不重发及恢复剩余项，并核对概览与完整接口的统计/速度/GPU/CPU峰值一致；它的回答由受控服务产生，不是实际模型成绩。
+
+已查看 artifacts/benchmark-report-pages-final 的浅深分页截图；最终截图与检查数据在 artifacts/benchmark-report-acceptance。个人新分页完整原生链路、全完成大计划读取耗时、排序/筛选、右侧详情、稳定页码链接及外观菜单复核按后续增量继续；150%/读屏、真实 Docker 和完整 Smoke 验收保持独立待办。没有发起真实模型问答、云端计费、模型下载或全量业务重验。
+
+已执行 artifacts/phase-c-acceptance/launch-metrics.cjs 与 verify-report.cjs，复用原独立验收目录和 WebView 设置打开最终程序，保留用户刚保存的编辑；没有重拷生产库或自动开始评测。进程 16768；当前工作区无标准报告历史，显示已就绪的新建标准评测页。实际截图 report-ready.png；主窗口可见性由 Win32 另行核对，窗口前台请求遵循系统限制。
+
+`git rev-parse --show-toplevel` 确认为 D:/vibecoding/CortexOS，`git diff --check` 检查差异；未读取 token、未提交或推送已有工作树。完成 6.1 后等待验收，下一增量为 6.2 比较排序与筛选。
+
+## 2026-10-28：用户确认 Benchmark 切片 5 验收
+
+用户明确反馈“验收完毕”，已同步指标交付说明及两份实施计划。下一步为原切片 6 的报告比较、筛选分页、大列表和单题详情交互；Docker、其他 GPU、读屏及完整 Smoke 等独立待办保持原状态。
+
+本次只更新验收状态，没有修改应用代码、启动评测或重新运行单元测试/构建。实际执行 `git rev-parse --show-toplevel` 核对当前独立仓库，并用 `git diff --check` 检查文档差异。
+
+## 2026-10-27：Benchmark 切片 5——计时、Token 和资源
+
+用户验收标准批量链路并授权下一步，按原计划切片 5 实施。文件、指标公式、隔离、采样范围和风险见 [指标交付](benchmark-metrics-slice5.md)。复用 schema 10 和不可变采样表，无迁移；题库、评分器版本、生产知识及聊天配置保持原样。
+
+实际命令（npm/Playwright 在 apps/desktop；Cargo 在 apps/desktop/src-tauri）：
+
+- `cargo check --lib --offline` 初次因启用既有 Tokio 的进程读取功能而缺 `signal-hook-registry`，未通过；普通联网重试遇到 Windows TLS 凭据错误。获自动授权后 `cargo check --lib` 下载锁定间接依赖并执行编译，发现 rusqlite 不接受 u64 的采样时间，改用检查转换的 i64 后 `cargo check --lib --offline` 通过。没有系统软件安装。
+- `cargo test --lib telemetry --offline` 最终 3 项通过（74 项未运行），覆盖缺失/零、配对速度、分位数、溢出、GPU 不支持字段、工作区隔离、追加约束、取消和重启保留评分。没有运行无关全套单元测试。
+- `npm.cmd run typecheck`、`npm.cmd run build` 通过；`npm.cmd run tauri -- build --debug --no-bundle` 在最终代码上通过。最终资源为 `index-_QZFzzf6.js` / `index-5uHxzl7B.css`；main 约 620 kB、GraphViewport 约 941 kB，既有大块提示保留。
+- `npx.cmd playwright test personalized.spec.ts --project=edge --output ../../artifacts/benchmark-metrics-browser`：3 项通过，三尺寸既有个人评测界面兼容。
+- 原生受控 `standard-benchmark.spec.ts --project=desktop` 初次计量/取消恢复通过。扩展浅深主题和采样查看后，先后遇到测试的主题选项定位歧义、错误选中处理事件而非采样原文；分别限定 listbox 和本题计量区域修正。现有外观菜单在鼠标选择后观察到仍展开，截图用 Esc 收起，未借机修改共享菜单。
+- 显式设置 `CORTEXOS_BENCHMARK_METRICS_REAL=1` 后运行 `benchmark-metrics-real.spec.ts --project=benchmark-metrics-real`：首次脚本请求 32 Token 被既有 64 最低预算拒绝，未生成；改为 64 后完成一个实际模型 × 一题 × 两次、保存并核对原文/计时/终帧/资源。截图阶段因脚本创建工作区后未刷新状态失败；修正为重载，并用 `CORTEXOS_BENCHMARK_METRICS_SAVED` 指向该存档目录，仅重开验证，不重发问题。
+- `... playwright test standard-benchmark.spec.ts chat.spec.ts benchmark-metrics-real.spec.ts --project=desktop --project=benchmark-metrics-real --output ../../artifacts/benchmark-metrics-verified` 中既有聊天回归 1 项通过，真实存档复查 1 项通过；标准专项遇到上述主题定位问题，后续单独修正复验。
+- 最终同一已构建程序，设置上述 REAL/SAVED（SAVED 指向 artifacts/benchmark-metrics-real-final/benchmark-metrics-real-two-cc0fb-g-tokens-and-resource-scope-benchmark-metrics-real），执行 `npx.cmd playwright test standard-benchmark.spec.ts benchmark-metrics-real.spec.ts --project=desktop --project=benchmark-metrics-real --output ../../artifacts/benchmark-metrics-acceptance`：2 项通过，43.7 秒。最终标准专项的受控答题请求为 12 次，串行、仅授权释放、半截输出不重发、恢复只补剩余 3 次；首帧空白不算首字，中间帧 999 计数不累计，缺时长速度为 null。覆盖三尺寸浅深截图、本题原始采样查看、聊天顶栏位置；看过实际浅深及资源截图。
+
+实际模型为目录当时选出的 qwen3:4b-instruct，math-001 两次均为 95；输入合计 174、输出 6 Token，30 份 CPU/内存/可用 NVIDIA 资源采样。首字分别 24231 / 36 ms，响应 26008 / 64 ms，请求前状态分别未加载 / 已加载。原始记录保存在 artifacts/benchmark-metrics-real-final；后续多个复查没有追加真实模型调用。仅为一题两次观测，不是冷缓存保证、正式排行或完整 60 题验收。
+
+已运行 artifacts/phase-c-acceptance/launch-metrics.cjs / verify-metrics.cjs，用最终程序重开原独立验收目录及 WebView 配置，保留用户保存的编辑，没有重拷生产库。进程 3884，标准评测入口读取到 62 个模型/题目复选项；没有自动发题，截图 metrics-ready.png。初次截图早于读取完成，等待真实复选项就绪后补拍。原生主窗口 IsWindowVisible=true；前台请求未获 Windows 同意，保留任务栏入口，不强制抢占前台。
+
+没有下载模型、发起付费请求、运行 Docker、重新检查系统读屏/150% 或极限大计划。普通聊天回归使用受控服务，不以它声称全部知识/3D 功能重新验收。`git rev-parse --show-toplevel` 确认为当前独立仓库；未读取 token、未提交或推送已有工作树。
+
+## 2026-10-27：窗口控制修复与标准批量评测（原切片 4）
+
+用户指出聊天页窗口按钮落在回答依据卡片上；随后明确选择“补齐标准评测的批量运行与恢复”。先修正聊天顶栏定位并检查，再复用 C5 调度进入原切片 4。实现/文件清单/边界见 [标准批量交付](benchmark-standard-batches.md)。本轮新增标准任务范围入口，保持本地、无云端密钥/偏好准入；没有新数据库迁移，没有修改固定题库或正式发布物。
+
+- UI 根因是聊天页窗口按钮绝对定位、依据卡片 -60px 上边距和标题 32px 补偿共同造成归属混淆。移除它们，并删除 Chat.tsx 的动态顶栏留位观察器，复用 AppShell 原有控件和事件。三尺寸展开/收起检查通过，未改聊天/知识/模型业务。
+- 标准计划固定 Core60 v2/哈希、实际模型指纹、选题顺序、1–5 次重复、最多6模型和可选释放名单。默认短题，逐模型串行；与聊天共用任务锁。停止状态持久化；恢复只继续未发送项，完整输出缺首次评分时只补评分，已有尝试终态和评分仍不可变。
+- 复用 benchmark_batches/items、Runner v2、评分存储与报告；个人历史与标准历史按数据集身份分开。标准入口拒绝云端模型，个人入口保留连接 Guard。可选释放核对目录及已加载指纹，仅处理授权名单，并记录实际请求/确认事件；无关已加载模型保持原样。官方 keep_alive 协议已查阅，链接见报告。
+
+实际命令：npm/Playwright 在 apps/desktop，Cargo 在 apps/desktop/src-tauri。
+
+- `npm run typecheck`、`cargo check --lib --offline` 通过。`cargo test --lib standard_ --offline` 最终 2 项通过；`cargo test --lib scoring_storage --offline` 4 项通过；`cargo test --lib personalized --offline` 最终 11 项通过。只运行新调度/恢复与相关兼容检查，没有运行无关单元或全套测试。
+- 初次标准定向检查指出选题顺序与计划声明不同、补分路径触发已结束尝试保护。改为按批准题序排程，并保持旧尝试字段不变、仅追加缺失评分；修正后重启补分无新模型请求检查通过，没有放宽原 SQL 保护触发器。
+- `npx.cmd playwright test --project=edge cloud-connection.spec.ts --grep 'chat window controls' --output ../../artifacts/window-controls-fix` 1 条通过，含三尺寸与收起前后坐标。
+- `npx.cmd playwright test cloud-connection.spec.ts personalized.spec.ts --project=edge --output ../../artifacts/standard-benchmark-browser` 7 条通过、1 条旧文本选择器因新题库标题/历史列表重名失败；改用明确标题后 `--grep 'cloud onboarding' --output ../../artifacts/standard-cloud-compatibility` 单条通过。不是把失败算通过。
+- `npm.cmd run tauri -- build --debug --no-bundle` 最终完成 TypeScript/Vite/Windows debug 构建，Rust 39.25s；index-Ayjl6kre.js、index-CFQRapux.css，保留既有 Vite 大块提示。一次测试等待同一构建目录的 Cargo 文件锁，未更换依赖/系统配置。
+- `npx.cmd playwright test standard-benchmark.spec.ts --project=desktop --output ../../artifacts/standard-benchmark-native-final` 经允许使用隔离原生窗口与合成服务，1 条完整流程通过（22.3s）。首轮脚本过早读取异步计划 URL，等待实际报告就绪后复验。实际12次答题请求、最大并发1：2模型×2题×2次=8；第二计划停止1次后只继续3次。核对授权释放1次、无关模型未释放、原聊天/配置不变、标准执行图无密钥可读、取消原文/运行ID保留、评分覆盖75%与正确率分母正确。
+- 已查看 native-chat-controls-1366.png 与 standard-report-1920.png，专项同时保存1366/1600/1920原生截图。按钮位于卡片上方的应用顶栏。没有以合成回答声称真实模型成绩，也没有跑真实云端/Docker/系统缩放或读屏验收。
+
+用户保存并关闭了旧验收窗口。已用最终程序重新打开同一独立验收目录和窗口配置，保留用户刚保存的验收数据；进程28380，真实1440×900聊天页顶栏控件范围检查通过，截图 artifacts/phase-c-acceptance/window-controls-fixed.png，未自动开始评测。原生产数据库不升级。原生 IsWindowVisible=true；SetForegroundWindow=false，遵守系统前台限制，不声称强制置顶。
+
+`git rev-parse --show-toplevel` 确认为当前独立仓库，`git diff --check` 通过（仅既有 CRLF 提示）；未读取 token、未提交/推送已有工作树。完成本切片后停止等待验收；下一步资源采样/指标、大报告分页/导出与真实完整验收各自保留，未把整个八片计划标为完成。
+
+
+## 2026-10-27：Phase C / C3–C5 开发交付与验收窗口
+
+用户验收 C2 后授权完成 C 阶段余下部分，并要求完成后弹出测试窗口。本轮按 C3 项目快照、C4 发送计划/候选审核、C5 复用 Runner 的串行评测推进。实现、文件清单、迁移和风险见 [C3–C5 报告](benchmark-phase-c3-c5.md)。保留已有 Core60、生产知识和聊天用途隔离；没有运行付费模型、下载模型、安装 Docker、更新发布安装包或推送。
+
+实际命令（npm/Playwright 在 apps/desktop；Cargo 在 apps/desktop/src-tauri）：
+
+- ZIP 读取新增 zip=2.4.2（仅 deflate），Cargo.lock 同步；`cargo fetch` 经允许获取构建依赖。扫描不解压到宿主机、不执行仓库脚本。
+- `cargo fmt --all`；`cargo check --lib --offline` 通过。`cargo test --lib personalized --offline` 最终 11 项通过；`cargo test --lib benchmark:: --offline` 32 项通过、1 项真实 Docker 按原条件跳过，两组有重叠。为 v10 备份数量补强后单跑 `cargo test --lib personalized_migration_v10 --offline`，1 项通过，确认失败和成功尝试均产生可读的 v9 备份。
+- `npm run typecheck` 与最终 `npm.cmd run tauri -- build --debug --no-bundle` 通过；最终 Rust 构建 31.99s，前端 index-BUZcD2s8.js / index-CmOAG0Y3.css，保留 Vite 大块提示。没有新增 npm 依赖；一次离线 prettier 因 ENOTCACHED 没有运行，也没有安装工具。
+- `npx.cmd playwright test --project=edge personalized.spec.ts --output ../../artifacts/phase-c-ui-final`：1366×768、1600×900、1920×1080 各一条完整流程通过，已查看真实组件截图；接口数据明确为 UI 替身。`cloud-connection.spec.ts --project=edge` 4 条通过。
+- 最初受限原生检查停在 CDP 超时/ECONNRESET，没有进入功能断言；使用已授权桌面检查权限，串行复核：`cloud-native.spec.ts --project=desktop` 1 条通过，含 13 个新接口绕过尝试；`trace.spec.ts knowledge.spec.ts --project=desktop` 2 条通过；设置 CORTEXOS_BENCHMARK_RUNNER=1 后，`benchmark-runner.spec.ts --project=benchmark-runner --grep 'native v2 scoring|native development benchmark'` 2 条通过。使用独立数据与本机合成响应，不是实际模型能力成绩。
+- 必要修正包括：避免复用单连接时锁重入、按数据集身份区分个人 v1 与 Core v1/v2、固定审核修订、代码/Schema/工具请求大小纳入预算、停止/解除连接可取消、原有聊天执行图保留消息字段。新题库结构检查和人工审核职责分开，不声称语义已自动证明。
+- `git rev-parse --show-toplevel` 确认为本仓库，`git diff --check` 通过（仅既有 CRLF 提示）；Gittoken.txt 与 artifacts 仍忽略，没有读取 token 或提交已有无关改动。
+
+按用户要求启动最终调试版，验收窗口进程 23156，页面真实可见 1440×900；原生 IsWindowVisible=true，SetForegroundWindow=false，尊重系统前台限制。SQLite 只读备份原数据库到独立验收目录，原库仍 schema 7，副本 schema 10，副本保留 before-migration-8 的 schema 7 备份。验收目录与截图见报告；窗口留给用户测试，没有自动推理。真实云端权限/账单、Docker、新页面系统缩放和读屏仍是未验证项；本轮交付后停止。
+
+
+## 2026-10-27：输入、阅读与预览栏六项微调
+
+用户要求一次完成六项体验规范，同时限定不全面重构。本轮保留 Soft Glass 页面结构与现有业务状态，仅修改相关前端：
+
+- `apps/desktop/src/components/ChatComposer.tsx`：组合输入状态与结束时间，选字后500ms拦截发送回车，保留换行和显式发送。
+- 新增 `components/useChatScroll.ts`，在 `Chat.tsx` 接入：按行高判断一行跟随/三行跳转；用户上滑意图暂停，关闭浏览器自动锚定，正文/容器尺寸变化时复核位置。
+- 新增 `components/PaneDivider.tsx`，在 `Chat.tsx` 与 `SourceBrowser.tsx` 的现有列间距内接入分隔条：透明遮罩、Pointer Capture、Esc/失焦回退、双击/Enter均分、方向键调整、主内容超过80%后松手收起。原关闭/恢复与窄窗抽屉继续可用；取消和恢复保留键盘焦点。聊天顶栏按实际依据栏宽度留位。缩放换算使用实际物理间距，修复快速双击后立即拖动被误当第二次点击的问题。
+- 新增 `components/FileName.tsx`，资料列表、导入预览和详情标题保留扩展名；完整名称仍可查看/复制，版本号独立一行。
+- `styles/tokens.css`、`controls.css`、`layout.css`、`features.css`：次级按钮默认无框，单层内嵌轮廓与分隔线，菜单/明确嵌套圆角按间距关联，保留选中态与键盘焦点。
+- 新增 `tests/ui-micro-native.spec.ts`，`playwright.config.ts` 仅注册该专项；同步 `docs/design/html-prototype-ui.md` 与 `docs/implementation-plan.md`。
+
+没有修改 Rust 业务、SQLite/题库、Provider、图谱相机、依赖或已有 Benchmark 数据；工作树中先前各阶段的未提交修改保留，不归入本轮改动。没有进入 C3、提交、推送或发布。
+
+实际命令与检查过程：
+
+- `npm.cmd run typecheck` 在 `apps/desktop` 通过。一次误在仓库根运行 npm dev 返回缺少 package.json，随后按项目目录执行，未安装依赖。
+- `npm.cmd run tauri -- build --debug --no-bundle` 实际完成 TypeScript/Vite/Windows debug 构建；每次代码或布局修正后重建，保留既有 Vite 500kB 提示。
+- 原生专项在独立库与本地合成流式服务运行。早期检查发现位置变化，关闭 overflow-anchor 并强化用户上滑意图；又通过临时事件/scrollTop调用轨迹区分浏览器惯性与程序写入。最终定位测试的“距离大于0”不能证明上滑：WebView2底部存在不足1px舍入差，改为等待相对初始位置真实上移，再分别检查惯性期间不能下拉与停止后位置稳定。临时 DOM setter 诊断已从正式测试移除，历史诊断输出保留在本机 artifacts。
+- 测试资料首次放在隔离 data 目录外，被现有授权守卫拒绝；修正合成夹具路径，未放宽守卫。一次最终运行因自动审批服务用量限制未执行；用户要求继续后同项正常获批。未绕过审批或伪报通过。
+- 既有必要回归：`npx.cmd playwright test tests/ui-usability.spec.ts tests/ui-usability-native.spec.ts tests/markdown-camera.spec.ts --project=edge --project=desktop --grep 'browser|native long records|native Markdown preview' --output=../../artifacts/ui-micro-regression`，4/4，17.1秒。2项浏览器菜单/面板，2项真实WebView2长记录/知识编辑/历史/资料菜单与Markdown原文/流式/引用偏移；数据与模型响应为隔离合成输入。
+- 最终构建通过：Vite 781ms、Rust debug 19.81秒；主JS570.64kB/gzip172.67kB，未制作安装包。
+- 最终专项：`npx.cmd playwright test tests/ui-micro-native.spec.ts --project=desktop --repeat-each=2 --output=../../artifacts/ui-micro-final`，连续两轮均通过，合计16.7秒。检查composition事件、500ms内回车、Shift+Enter、真实流式阅读位置、一行/三行阈值、按钮hover不改变尺寸、两处分隔条/透明遮罩/Esc/双击/键盘/80%收起恢复、125% CSS zoom后的比例、菜单12=8+4圆角、长名后缀与跨页功能。重复不累计为不同测试；本轮共3项不同原生检查、2项不同浏览器检查。
+- 最终每轮9张实际截图：1366×768/1600×900/1920×1080浅深聊天6张，CSS zoom 100%/125%/150%资料预览3张，分别保存于上述目录的基础测试目录与repeat1目录。已审阅代表聊天浅色、深色资料放大截图，确认顶栏避让、版本号单独排布与后缀显示。没有声称像素相似度或Windows系统缩放验收。
+- `git diff --check` 通过，仅保留已有CRLF提示；本机哈希复核旧题库/迁移/Benchmark引擎33份文件字节未变。
+
+本轮不跑单元或无关全量测试。真实中文输入法候选操作、触控设备及 Windows 系统缩放仍保留手工验收；原生专项使用 composition 模拟事件，CSS zoom 截图不是系统缩放。完成后停在本轮交互验收。
+
+## 2026-10-27：Phase C / C2 使用偏好与不可变版本
+
+用户明确确认 C1 验收，授权下一步。复核开发规范、Phase C 计划、C1 Guard/界面、SQLite 迁移机制后交付 C2，详情与实际文件清单见 [C2 报告](benchmark-phase-c2.md)。仅新增工作区画像、三步可选问卷、查看/修改/跳过/重置、版本冲突保护和 schema 9；不进入项目扫描/云端生成/模型推荐。旧评分器/Runner、Core60 与既有 8 份迁移保留。
+
+实际验证：
+
+- `npm.cmd run typecheck` 在 `apps/desktop` 通过。第一次误在仓库根目录运行返回 ENOENT（根目录无 package.json），随后在规定目录执行；未安装任何依赖。
+- `cargo check --lib --offline` 通过。
+- `cargo test --lib profile_ --offline`：3/3，0.09 秒。覆盖真实 SQLite 保存/版本/并发冲突/工作区隔离/无效输入/重置/重开/不可变约束，8→9 前备份、故意迁移失败后的事务回滚与重试，以及 Guard 阻断未配置/操作中/已撤销状态。
+- `cargo test --lib db::benchmark_foundation_tests --offline`：8/8，0.23 秒。原测试只更新新 schema 版本和新增表数量预期，旧聊天/知识/评测行及旧迁移 checksum 保护断言保留。共 11 个相关 Rust 检查，未运行无关全量测试。
+- 浏览器先完成四项流程，首轮工具会话随后手动结束；后续干净退出的最终完整命令为 `npx.cmd playwright test tests/cloud-connection.spec.ts --project=edge --output=../../artifacts/phase-c2-browser-verified`：4/4，8.2 秒。C1 连接兼容三项 + C2 多领域/水平/任务/工具/权重/草稿/修改/重置/跳过一项。IPC 是明确替身，不代表真实云端身份验证。
+- 截图审查后压缩第一步及权重行间距，并修正共享 input 样式优先级造成的滑块高度问题；`npx.cmd playwright test tests/cloud-connection.spec.ts --project=edge --grep 'profile questionnaire' --output=../../artifacts/phase-c2-layout-final` 最终 1/1，4.5 秒，为上一项重复，不重复计数。新增第七项权重位于底部操作区上方的边界断言通过。三尺寸第一步、1366 任务页及深色权重页均为实际渲染截图；查看代表图，没有用静态图实现页面。
+- 正常权限 `npx.cmd playwright test tests/cloud-native.spec.ts tests/chat.spec.ts --project=desktop --grep 'native personalized|native chat preserves' --output=../../artifacts/phase-c2-native`：2/2，44.1 秒。隔离库中验证无凭据不能直接调用新增画像读写、原固定题库和导航可用，以及真实 SQLite 聊天取消/错误/重启；聊天服务为本地受控替身。无真实云端 key。
+- `npm.cmd run tauri -- build --debug --no-bundle` 完成类型/Vite/Windows debug 构建；布局修订后重新构建。保留原 Vite 大块提示。未制作安装包或发布。
+- `git diff --check` 与 `cargo fmt --all -- --check` 通过，既有 CRLF 提示保留。
+
+数据仅写入测试隔离库，没有启动生产数据库升级。新迁移沿用升级前 VACUUM 备份和单事务；旧版程序不可直接打开 schema 9，回退需要兼容程序或升级前备份。真实云端账号下的原生画像端到端、系统缩放/读屏、Docker 实测继续待办。C2 完成后停止，等待验收；下一步 C3 尚未实施。
+
+## 2026-10-25：Phase C / C0 复核及 C1 云端连接准入
+
+按用户完整 Phase C 提示执行 C0 后直接 C1，完成后停止。读取总纲/规范/计划、评分器/Runner/目录/Schema/页面代码与阶段 B 本机证据，确认已有六类评分和单题本地执行，但没有完整 Benchmark UI/云端执行，Docker 实测仍未完成。新增 [Phase C 计划](benchmark-phase-c-plan.md)与[C1 交付报告](benchmark-phase-c1.md)，实际文件清单、5 个命令及已知边界见报告。
+
+实现三家官方 HTTPS 模型目录验证、Windows Credential Manager 单连接原子记录、真实状态 Guard、取消/超时/互斥/更换/删除/恢复。仅新增必要评测入口、目录展示和连接表单，复用 Soft Glass/SelectMenu/Toast。未改评分器、Core60、SQLite 迁移或历史数据，不进入 C2–C5。用 ponytail 控制范围、ui-ux-pro-max 表单建议和 OpenAI Docs 官方接口资料。没有真实云端密钥或推理请求。
+
+实际命令与结果（在独立仓库内执行，git rev-parse 确认根目录）：
+
+- `cargo check --lib` 初次受沙箱 TLS 阻碍；`cargo fetch` 正常权限下载 18 个新增锁定包。随后 offline check 因 reqwest 未启用 query API 失败，改用现有 Url query_pairs_mut 编码，不额外增加 query 依赖。
+- `cargo test --lib cloud_ --offline -- --nocapture` 初次 6 通过、1 凭据检查失败（沙箱登录令牌限制）；正常权限 `cargo test --lib cloud_windows_vault_synthetic_roundtrip --offline -- --nocapture` 1/1 通过。只创建随机测试目标并删除，不读取用户其他凭据。
+- 增补超时后 `cargo test --lib cloud_ --offline -- --skip cloud_windows_vault_synthetic_roundtrip` 7/7 通过，运行 30.01 秒。包括真实等待 30 秒的 Mock 超时、六种错误、状态恢复、绕过/模型/Provider 检查、取消删除。最终取消竞争修复后 `cargo test --lib cloud_cancel_and_delete --offline` 1/1 通过，为前述检查的重复子集。共 8 个不同 Rust 检查，不是整个库全测。
+- `npm.cmd run typecheck` 通过；`npm.cmd run tauri -- build --debug --no-bundle` 完成 TypeScript/Vite/Windows debug 构建。新增原生测试曾误用 createWorkspace 的 void 返回导致一次类型失败，修正后重建成功。最终 Vite 681ms；主 JS 555.55kB、gzip167.99kB，保留已有 500kB 警告；没有安装包/Release。
+- 浏览器第一轮 1 通过、1 模型标签定位失败，修复明确 aria-label 和替身事件清理后 2/2 通过。最后增加取消晚到测试，`npx.cmd playwright test tests/cloud-connection.spec.ts --project=edge --output=../../artifacts/phase-c1-browser-final2` 3/3，6.5 秒。1366×768、1600×900、1920×1080、800×600 浅深主题共 8 张截图；已查看代表浅/深图。无真实系统缩放或读屏结论。
+- 正常权限 `npx.cmd playwright test tests/cloud-native.spec.ts tests/chat.spec.ts --project=desktop --grep 'native personalized|native chat preserves' --output=../../artifacts/phase-c1-native` 2/2，43.4 秒（聊天 40.3 秒，C1 2.2 秒）。真实 WebView2/SQLite；聊天为本地受控 HTTP 服务。检查未配置、伪造 allowed 的 IPC/深链接、页面重载、v1/v2 固定题库与四个原导航，bootstrap 未被连接操作修改。
+- `cargo fmt --all -- --check`、`git diff --check` 通过（既有 CRLF 提示保留）。本机 `artifacts/phase-c1/before.json` 比对：既有应用源码只改 App.tsx/navigation.ts/AppShell.tsx/NavigationIcon.tsx/lib.rs；既有 benchmark 评分/Runner、9 个数据文件、8 份 SQL 均字节不变。
+
+最终构建 Rust 24.34 秒完成；最终二进制又运行 `npx.cmd playwright test tests/cloud-native.spec.ts --project=desktop --output=../../artifacts/phase-c1-native-final`，1/1 通过（4.8 秒），为前述 C1 检查重复，不累计为新测试。本机范围证据保存至 `artifacts/phase-c1/scope-check.json`，两份新增报告的本地链接检查通过。
+
+真实三家认证/配额/推理权限、企业网络、真实账号完整进程重启待验收；Python Docker 待办沿用用户决定。不把目录成功写成生成能力或余额已验证。未下载模型/镜像、未生成 Level2/3、不发送付费请求、未推送或发布。当前停在 C1 验收。
+
+## 2026-10-24：Core60 v2阶段B——运行时评分与单题闭环
+
+用户验收阶段A后要求继续。复核三份设计/审计、v2契约、运行/存储/Provider实现，沿用ponytail复用既有SQLite、Ollama、TaskLease和请求快照。异步询问运行环境后，用户确认未安装Docker，要求先完成实现并保留实测待办。本轮不安装Docker或WSL，不下载镜像/额外模型，不进入原切片4，不生成120题或32场景。
+
+### 本轮实际文件与功能
+
+- 新增`src-tauri/src/benchmark/evaluation.rs`、`evaluation_json.rs`、`evaluation_tests.rs`，实现中文/整数、实际JSON Schema/精确数值、RAG事实/引用/生效条件、真实工具字段判定及独立状态/分母。
+- 新增`python.rs`、`python_runner.py`、`python_tests.rs`：本机Linux Docker、镜像内容ID、无网络/挂载/Socket、CPU/内存/PID/时间/合并输出限制、只读/非root/禁提权、逐断言类型/输入观察与宿主比对、所有路径清理；Docker缺少时Execution Error，不执行宿主机提交。真实Docker检查显式ignored，不算通过。
+- 新增`scoring_repository.rs`、`scoring_repository_tests.rs`、`runner_v2.rs`；修改dataset/mod/preflight/repository/runner接入显式版本2，沿用原三个业务命令和互斥/取消。评分保存在原表，包含独立引擎版本、规则/契约/输出hash，输出hash同时包含真实工具帧；重复启动/完成不重复请求或插评分。保存失败保留原文，不给模型填0。
+- 修改`generation.rs`、`ollama.rs`：v2严格JSON帧校验、实际tool_calls帧保存、无文字工具响应完成、客户端单调计时；运行前能力检查保留证据。普通聊天/v1维持原文字路径。RAG把实际编号资料送入请求并记录fixtureRefs；JSON Schema仅schema题发送，工具声明只用于工具题，没有伪造检索、工具执行或隐藏思维链。
+- 修改原repository/tests、dataset_v2_tests夹具，显式指定版本1及空镜像选项；修改`tests/benchmark-runner.spec.ts`新增v2受控原生检查，保留旧v1及真实模型开关。
+- `Cargo.toml`/`Cargo.lock`固定jsonschema 0.60.0，default-features=false；serde_json启用arbitrary_precision/raw_value，防止小数舍入误判。新增29个锁定包，原锁定版本未替换；没有npm依赖变更。元数据核对jsonschema、jsonschema-value、referencing为MIT，jsonschema启用features为空，外部Schema网络/文件引用在规则层也拒绝。
+- 新增[阶段B交付报告](benchmark-scoring-stage-b.md)；同步docs README、implementation-plan、benchmark-implementation-plan、benchmark-core60-v2、benchmark-scoring-v2、benchmark-evaluation-methodology、benchmark-preflight、benchmark-execution-slice3、benchmark-database-schema、test-plan和本日志。完整应用文件表和接口例子见报告。
+
+数据集两版9份文件及hash不变；数据/schema/规则版本仍1和2，运行时引擎新增`core60-runtime-2.1`。创建时的manifest元信息不静默改写，当前能力放在runtime目录字段。数据库仍开发schema8，没有DDL迁移或新的迁移前备份操作；正式用户库未打开。前端src/既有UI、知识引擎、8份SQL迁移、权限登记与用户reference/desktop.spec.ts等原状态保留。没有NSIS/Release、Git提交/推送或版本发布，未读取凭据。
+
+### 实际命令与结果
+
+1. `git rev-parse --show-toplevel`确认`D:/vibecoding/CortexOS`。开始时保存122个已有应用/题库/迁移/检查文件的hash到`artifacts/benchmark-scoring-v2/before.json`，定向读代码后实施；未根据模型跑分调整答案。
+2. `cargo fetch`在受限环境因Windows TLS `SEC_E_NO_CREDENTIALS`失败；获准在受限环境外执行同一命令后成功。仅获取构建依赖，没有模型/系统软件安装。`cargo metadata --offline --format-version 1`实际核对版本/许可及空features；Cargo.lock保留已有包版本，新增29包。
+3. `cargo test --lib scoring_ -- --nocapture`首轮10项纯评分/控制器通过。加入持久化专项后首次出现4项失败：旧summary查询只认development_single_case_v1，v2记录被误报不存在；修正为明确的数据版本与模式匹配后全部通过。没有把首次失败记为通过。编程异常测试故意panic，被捕获转为Scoring Error，用例通过；测试输出的panic文本不是程序崩溃。
+4. 最后完整评分专项为`cargo test --lib scoring_ -- --nocapture`：16通过、0失败、1 ignored，编译7.86秒、用例1.11秒。覆盖50个非编程题标准响应及重复确定性、合法等价/错误/缺少/多余/错误类型/顺序/null/重复键/真实日期/精确数值、RAG位置与支持/拒答/冲突/过期/缺证据、真实工具与正文伪装/分片、分母、环境/评分器异常和历史/幂等/存储恢复。编程控制器以受控CLI观察核对全部93条结果及错误类型、输入变化、额外输出、超时、取消、错误环境、清理失败；没有实际执行模型程序。补充了评分保存错误事件对应Scoring Error统计的断言。
+5. `cargo test --lib benchmark_ -- --nocapture`19/19通过，用例2.47秒，覆盖原数据、备份/迁移、用途/工作区、幂等、旧判定及恢复；`cargo test --lib ollama::tests -- --nocapture`2/2通过，覆盖分片UTF8/多帧/坏流和端点限制。本轮独立Rust检查共37项通过，真实Docker1项ignored；不是全库50项全部运行。
+6. `npm.cmd run typecheck`通过。`npm.cmd run tauri -- build --debug --no-bundle`通过（含TS/Vite/Rust），首构建Rust56.59秒、Vite12.77秒。JS546.73kB/gzip165.16kB、图谱941.05kB，前端产物名字与既有相同；保留Vite体积/npm版本提示，无新增Rust告警，不安装npm更新。
+7. 设置`CORTEXOS_BENCHMARK_RUNNER=1`，在已知受限环境无法稳定启动WebView2的条件下，获准在受限环境外运行`npx.cmd playwright test tests/benchmark-runner.spec.ts --project=benchmark-runner --grep 'native v2' --output=../../artifacts/benchmark-scoring-v2-native`：1/1通过，总15.4秒、用例12.9秒。包含14个实际隔离SQLite实验，受控HTTP服务共11次生成请求；状态为Passed6、Failed3、Unsupported2、Execution Error2、Needs Review1，均是预声明的正反例结果，不是实际模型能力成绩。复用同launchKey未新增请求或评价，精确请求字节hash一致、两版隔离、Schema/tools/编号资料实际发送、真实工具帧/无文字/片段、普通文字伪装拒绝、初检与运行前能力不支持、Docker缺少不调用模型、断流保留部分、截断待复核及普通bootstrap不变均通过。
+8. `npx.cmd playwright test tests/benchmark-runner.spec.ts tests/chat.spec.ts tests/knowledge.spec.ts tests/retrieval.spec.ts tests/trace.spec.ts tests/sources.spec.ts --project=benchmark-runner --project=desktop --grep 'native development|native chat preserves|knowledge drafts|automatic retrieval|execution graph|authorized snapshots' --output=../../artifacts/benchmark-scoring-v2-regression`：6/6通过，总约1.3分钟。旧v1检查7.1秒、聊天38.2秒、知识9.3秒、检索4.7秒、来源6.1秒、执行图9.1秒；都是真实WebView2与隔离库、受控模型服务，不是真实Ollama质量/长期使用验证。
+9. 收尾给容器入口补上非Python3.13时在执行提交前直接返回的保护；只影响容器脚本，不改变已通过的聊天/旧接口路径。最终再次`npm.cmd run tauri -- build --debug --no-bundle`通过，Rust19.06秒、Vite744毫秒；再以`--output=../../artifacts/benchmark-scoring-v2-native-final`重跑相同v2原生命令：1/1通过，总14.6秒、用例12.7秒。最终证据`v2-scoring-controlled-evidence.json`仍为14项/11请求。最后`cargo test --lib scoring_python_ -- --nocapture`4通过、1 ignored，用例0.38秒；不把重复执行累计成更多独立检查。
+10. `py -3 -X utf8 scripts/benchmark_core60_v2.py`通过，60题/93断言及原5份v2资产逐字节可复现。可信容器脚本用标准库`ast.parse`只检查语法，没有在宿主执行提交。`cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --all -- --check`及`git diff --check`通过，仅既有CRLF提示。
+11. `py -3 -X utf8 artifacts/benchmark-scoring-v2/check_scope.py`通过：原122文件只有本轮预期10个应用/检查文件修改，其余112个原文件不变；两版题库9文件、前端src和8迁移保持原样，npm清单/锁文件与HEAD相同。只读打开本轮原生隔离库确认14实验/14评价/120版本化题目、11个真实模型请求开始事件、知识节点/检索/上下文知识写入0；所有记录数据版本2，排除状态无正确率分数。运行表的19文件源码/依赖指纹与最终构建/当前实现一致：`benchmark-scoring-sha256:5583d32618d3f05f042b3e4d7f6844946c3ef30538d1e048d6f8d1e321ca1826`。结果写入同目录scope-check.json，并核对本轮文档本地链接。
+
+### 未运行、风险与停止点
+
+真实Docker容器、Windows/WSL资源/网络/文件隔离压力和93条实际代码执行未运行，原因是环境未安装且用户选择保留待办；没有假称Docker安全验收。已经写好显式ignored的实际容器检查，准备好本地Python3.13镜像ID后可另行运行。容器内类型/输入观察加宿主比对不是对恶意Python的形式化纯函数/防作弊证明；Core60保持Smoke定位。
+
+没有实际本地模型答题、付费API、额外模型/镜像下载、完整60题模型结果、批量/多模型排程、新评测UI、重评分/导出、资源峰值采集或Level 2/3数据。原150%验收不外推新的评测页面；本轮没有视觉改动，不给新截图/读屏/缩放结论。
+
+Unsupported等排除项可见，正确率分母仅Passed+Failed；模型执行完成率与题目评分覆盖率分开，同时给单题计划和全60题覆盖口径，防止缩小分母误称全部100%。Failed3等原生场景是故意错误响应，不是失败的自动化检查。普通文本工具JSON不会被记录为工具调用，实际工具执行为0。旧历史不会因新引擎静默重判；本轮没有重评分接口，启动恢复也不自动重发。
+
+局部评分保存失败已通过触发器验证原文保留；全库不可写仍可能无法记录错误自身，没有做磁盘耗尽实验。当前源码指纹覆盖指定19个文件，不等同完整Git发布提交。阶段B实现交付，按约定停在验收；真实Docker待办保留，确认后才安排原切片4。
+
+## 2026-10-24：Core60 v2阶段A——题库版本化修订
+
+用户原则批准三级Benchmark设计，明确先做阶段A并验收后才做阶段B。复读development、开发标准、计划、三份审计/设计/评分报告、全部60题及现有数据/预检/运行/存储代码；逐条对应Q-01–Q-12。沿用ponytail复用serde/rusqlite/chrono及标准库，没有增加依赖、Docker或评分框架。运行时评分尚未扩展，本轮不进入原切片4。
+
+### 实际文件与版本
+
+- 新建`apps/desktop/src-tauri/datasets/cortex-core-60-v2/`中的cases、manifest、case.schema、scoring-rules、revision-notes共5份JSON。保留原60题ID、类别、难度及v1文件；v2数据/schema/六种规则均版本2，全部标待审阅，定位Smoke。数学等差、工具limit、中文别名/字形、RAG结构化事实/支持范围/固定时间、Python契约/93条断言及JSON日期等变更详见[阶段A报告](benchmark-core60-v2.md)与逐题差异文件。
+- 新增`scripts/benchmark_core60_v2.py`，默认从固定v1重新编制并逐字节比较v2，首次创建模式拒绝覆盖已存在目录。只有可信作者的固定计算，没有执行模型代码或宿主机不可信提交。编制期间在尚未验收、未被实际运行引用的v2草稿内补齐RAG评分专用schema标识并移除旧evidence变体；最终文件/hash以下述值为准。v1始终逐字节保留。
+- 修改`src-tauri/src/benchmark/dataset.rs`：注册两个版本，按版本校验/入库/读取、单事务安装、同版本不覆盖；新增可省略Scoring.contract，旧v1序列化保持原内容。新增`dataset_v2.rs`及`dataset_v2_tests.rs`做作者数据的有限校验与6项专项，不是模型响应评分器。
+- `src-tauri/src/benchmark/repository.rs`只将开发入口从数组首项改为明确查找版本1；传v2 hash会拒绝，不误用v1引擎。`tests/benchmark-preflight.spec.ts`更新双版本目录预期、增加v2读取，并保存版本/题目/契约证据。前端src、聊天、知识、模型生成协议、图谱和迁移均未修改。
+- 新增`docs/benchmark-core60-v2.md`，同步README、implementation-plan、benchmark-implementation-plan、benchmark-evaluation-methodology、benchmark-preflight、benchmark-tiers-design、benchmark-scoring-v2及本日志。原审计、原题目审阅表、用户reference和desktop.spec.ts状态保留。
+
+没有新SQL迁移、正式用户库访问、云端请求、模型下载、模型问答、工具实际执行、打包发布或Git提交/推送。开发schema仍8，正式v0.2.0仍schema7。没有新迁移所以不声称执行了新的迁移前备份；本轮回归了既有备份/失败恢复专项。
+
+### 实际命令与结果
+
+1. `git rev-parse --show-toplevel`确认独立仓库`D:/vibecoding/CortexOS`。开始时将119个现有应用/测试/数据/依赖文件的hash保存到`artifacts/benchmark-core60-v2/before.json`，未读取凭据。读取旧case全字段、评分规格及执行代码后确定保守契约；不是依据审计摘要直接改标准，也没有按模型分数调答案。
+2. `py -3 -X utf8 scripts/benchmark_core60_v2.py --write-new`首次创建新目录成功。编制草稿协议补充后，`py -3 -X utf8 scripts/benchmark_core60_v2.py`最终通过：60题、93条断言、全部5份资产可复现。原32条断言保留为每题前缀；阶乘0–12穷举；重复偶数和大小写回文反例已在作者数据检查中核对。只是可信固定输入/标准计算，不是运行模型提交。
+3. `cargo fmt --all`完成。第一次`cargo test --lib benchmark_v2 -- --nocapture`遇测试用切片不满足encode的Sized约束；将通用编码函数放宽为`Serialize + ?Sized`后，最初5项通过，补版本冲突项后6项通过。期间`cargo test --lib benchmark_bundle -- --nocapture`2/2、`cargo test --lib benchmark_development -- --nocapture`3/3通过。
+4. 最终数据/协议定稿后，`cargo test --lib benchmark_ -- --nocapture`19/19通过，编译11.90秒、用例3.11秒。包含新增v2六项、原题库两项、开发执行三项，以及原数据库基础八项；没有运行全库33项。覆盖数据/规则/hash/别名契约、坏类型/缺失/额外字段/无效日期、支持范围/错误来源/冲突/生效时刻、定义域、同版本冲突拒绝、原子失败回滚、重开读取、v1合成运行/评分保持、v2误运行拒绝；既有迁移/备份/用途隔离也通过。合成历史记录有明确fixture标记，不冒充用户实际评测成绩。
+5. `npm.cmd run typecheck`通过，`npm.cmd run tauri -- build --debug --no-bundle`通过，含TS/Vite/Rust桌面编译；Rust34.77秒、Vite1.26秒。JS546.73kB/gzip165.16kB、图谱941.05kB，前端内容与此前一致。保留已有Vite体积及npm版本提示，无新增依赖或安装更新。未生成NSIS/Release。
+6. 设置`CORTEXOS_BENCHMARK_PREFLIGHT=1`，运行`npx.cmd playwright test tests/benchmark-preflight.spec.ts --project=benchmark-preflight --grep 'controlled model' --output=../../artifacts/benchmark-core60-v2-native`。受限环境首次连接到CDP但5秒内页面数仍0；相同命令改输出到`...-native-retry`时CDP健康检查30秒超时。均为启动阶段失败，没有到业务断言；保留error-context。失败后停止对应检查进程，没有为绕过环境问题修改共享native.ts或放宽断言。
+7. 获准在受限环境外运行同一命令，输出到`../../artifacts/benchmark-core60-v2-native-final`，1/1通过，总6.0秒、用例2.4秒。补充将datasets/v1Case/v2Case写入证据后，以`...-native-evidence`再次执行，最终1/1通过，总8.1秒、用例3.2秒。是真实原生WebView2/SQLite及受控本机HTTP服务，不是浏览器替身或真实Ollama答题；双版本读取、版本2事实/规则、工作区拒绝和预检未知/不支持等均通过。完整证据在该目录的`controlled-preflight.json`；请求仅tags/version/ps/show，生成请求0。只访问项目内新隔离库。
+8. 补充原生证据后再次`npm.cmd run typecheck`通过；`cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --all -- --check`通过。`py -3 -X utf8 artifacts/benchmark-core60-v2/check_scope.py`通过：原119个文件中只有dataset.rs、repository.rs、benchmark-preflight.spec.ts这3个发生本轮预期修改，其余116个原文件不变；v1的4份文件、8份迁移、依赖清单/锁文件与开始一致。全部新题及文件hash、60条差异、原断言前缀、文档本地链接、原生双版本及无生成请求证据检查通过；输出`scope-check.json`。`git diff --check`通过，仅既有CRLF提示。
+
+v2最终manifest SHA-256为`b8d462c2408f948c9a1f74d1e044cb4f78dbfabe52f76f93e6d135ee171edb70`；cases为`8a575711712d352d9e61d915c6b95b01e54c4b280e3cb3fb8175404c4e168174`。v1 manifest仍为`3595faf98b35865e00ba7f156ba89a21f6f5406f8f1b2908f41df031c3f882cc`，cases仍为`784089a5243bb3dc1cf4b723b351df19c5006ff983d97c3f4e8f9a946bc88806`。运行端仍绑定v1，未用v2静默重判任何历史输出。
+
+### 未运行、风险和停止点
+
+没有运行v2模型答题、Docker隔离、六类模型响应评分器、完整60题、付费API、真实本机模型预检或UI全套/缩放/读屏；这些不在阶段A范围。原生检查只确认当前数据接口与受控预检，没有新视觉变更或新截图结论。
+
+运行时Schema方言/数值语义、原生工具对象捕获、逐断言执行/输入修改、RAG各维度评分及六状态报表仍待阶段B。作者标准静态校验采用有限词汇，不取代成熟JSON Schema验证器；引用支持范围与别名仍需要人工语义复核。Python3.13仅是契约目标，尚未安装/验证对应容器镜像及资源限制。v2状态保持needs_human_review，不将技术专项通过冒充全题人工验收。
+
+阶段A已交付，停在用户验收门槛。下一步须用户验收后才实施阶段B评分器及其正反控制测试；不自动继续原切片4、生成Level 2/3数据或发布新版本。
+
+## 2026-10-23：Benchmark测试集质量审计与三级设计
+
+用户审阅原benchmark-dataset-review后，明确Core60仅作基础Smoke，要求先逐题审计并设计新的能力/认知测试体系。本轮复核development、开发标准、实施计划和既有Benchmark方法，读取全部60题、标准/别名、32条代码断言、13份资料22行、5份JSON标准和5份工具参数示例，并追到加载器、模型预检、Runner、存储判定及Provider解析路径。独立保存本轮技术报告；没有将AI复核表述为第三方盲审或独立人工签审。
+
+### 本轮实际修改
+
+| 文件 | 内容 |
+| --- | --- |
+| [benchmark-core60-audit.md](benchmark-core60-audit.md)（新增） | 全部60题逐条核对、代码/数据位置、12项问题及优先级、32条已有断言值、运行时评分与能力标记边界 |
+| [benchmark-tiers-design.md](benchmark-tiers-design.md)（新增） | Level 1版本修订方案、Level 2的120题配额/公开与保留划分/分级评分、Level 3的32个固定快照场景与A/B/O证据诊断；均为提案 |
+| [benchmark-scoring-v2.md](benchmark-scoring-v2.md)（新增） | 功能/能力/难度/工具/编程/引用/性能独立指标、互斥数量账本、分母/覆盖率、评分器正反控制及版本审计 |
+| [README.md](README.md)、[implementation-plan.md](implementation-plan.md)、[benchmark-implementation-plan.md](benchmark-implementation-plan.md)、[benchmark-evaluation-methodology.md](benchmark-evaluation-methodology.md)及本日志 | 文档入口、Core60的Smoke定位与当前设计验收停止点；保留既有八片顺序和历史结果 |
+
+工作区原有切片1–3及用户文件状态保留，本轮没有应用源码、依赖、迁移、UI或测试文件修改。未覆盖原审阅表、cases、manifest、schema、规则或历史结果；没有创建v2、能力题或隐藏题，没有打开用户库或执行迁移、模型、容器。没有提交、推送、标签或版本发布，未读取凭据。
+
+### 审核结论与实际检查
+
+- 60题均有独立行记录；35道easy、25道medium、0道hard。数学15项标准值经固定算式复算一致，但math-006须额外假设等差，不能标题意无歧义。10道编程题的32条现有预期值一致，仍缺边界/类型/输入不变验证；不代表运行了模型代码或编程题已通过。
+- 明确记录math-006、tool-002、zh-014、RAG拒答/说明/跨度及as_of、Python码点/空白/边界等问题。JSON当前只有作者示例的小词汇检查，不能误称通用结构化评分已实现，也没有证据说正在用字符串评分。原生工具字段尚未保存/验证；其余58题当前未开放不能归因模型不支持。
+- 事实与协议疑点通过教育部字典、教育局原文材料、BIPM、NASA、PubChem、Python/Unicode、JSON Schema/RFC及Ollama官方资料核对，链接放在相应结论旁。虚构RAG材料只按内部事实审阅；行号检查不代替语义证据支持。
+- `git rev-parse --show-toplevel`确认`D:/vibecoding/CortexOS`。使用`rg`及PowerShell定向读文件，未变更仓库边界。
+- `py -3 -X utf8 artifacts/benchmark-quality-audit/audit_core60.py`成功：60个唯一ID/顺序/内容与文件hash、15项数学固定计算、32条可信控制计算、5份JSON标准/5份工具参数的有限结构检查、10个引用跨度。脚本没有加载任何待测代码；它不是通用Schema一致性测试或正式评分器。首次输出已有Unicode的读取命令遇cp950编码错误，改用`-X utf8`后成功，没有因该错误修改数据。
+- `py -3 -X utf8 artifacts/benchmark-quality-audit/audit_core60.py --verify`通过：审计表60个ID与cases顺序完全相同；87个指定应用源码/数据/迁移/配置/依赖文件与本轮开始快照逐字节一致；三份新报告的本地链接和行尾检查通过；新增数据集版本数0。辅助脚本、完整断言控制结果及开始hash存于已忽略的本机`artifacts/benchmark-quality-audit/`，不混入发布题库。
+- 收尾同一`--verify`再次通过，并核对60个题目行锚点都指向相应case_id。另将只读链接脚本经PowerShell的`$documentCheck | py -3 -X utf8 -`执行，8份本轮文档的157个本地链接及带行号目标均可定位；没有据此宣称外部网页永久可用。
+- `git diff --check`通过，保留原工作区CRLF提示。本轮只做资料/逻辑审阅和文档检查，按用户规范未运行单元套件、类型检查、构建、浏览器/原生WebView2或真实模型检查；不复用旧切片测试数冒称新结果。
+
+Core60 v1的manifest SHA-256仍为`3595faf98b35865e00ba7f156ba89a21f6f5406f8f1b2908f41df031c3f882cc`，cases仍为`784089a5243bb3dc1cf4b723b351df19c5006ff983d97c3f4e8f9a946bc88806`；needs_human_review保持历史原值，未标全部通过。正式能力集提案为120题（90公开/30保留，含36基础/48中等/36困难），隐藏题不能随public仓库或客户端分发后声称对本机持有者保密。认知场景固定知识/历史/as_of并独立索引，按检索、组装、已给证据后的回答、评分器分别定位；现有未实现的记忆/压缩机制保持系统阻断。
+
+### 停止点
+
+审计和设计交付完成，等待用户确认。建议下一步单独验收Core60 v2质量修订及兼容加载，再回到八片计划；后续正式能力集先少量公开试点而非一次生成120题。实施进度仍为切片3，未启动切片4，不把本轮报告或现有单道开发结果当正式能力排行榜或完整Smoke验收。
+
+## 2026-10-23：Benchmark Phase 1切片3——最小真实执行闭环
+
+用户确认切片2后开始第3片。先复核development、开发标准、原实施计划、Benchmark八片计划、执行/存储/Provider及原生检查；沿用ponytail复用现有解析、SQLite和依赖。当前只实现单模型、单题、一次尝试的开发闭环，不进入切片4的多项排程或恢复开发。60题内容仍待独立人工审阅，本次确认不改变该状态。
+
+### 本轮实际修改文件
+
+应用路径相对`apps/desktop`。切片1/2已有工作区改动继续保留，用户原有desktop.spec.ts状态和reference素材未操作；本表只列本片修改。
+
+| 文件 | 实际改动 |
+| --- | --- |
+| `src-tauri/src/generation.rs`（新增） | 从commands提取一次性共享执行：实际检查/发送事件、NDJSON、250ms检查点、取消/超时/部分保存和终态；聊天/评测检查策略分开，任务占用由调用方持有 |
+| `src-tauri/src/tasks.rs`（新增） | TaskSlot/Lease统一两种任务；按ID/工作区/kind取消，准备阶段摘要、当前执行ID、自动释放和关闭取消 |
+| `src-tauri/src/benchmark/repository.rs`、`runner.rs`（新增） | 独立开发配置/模型快照/事务准备、同launchKey幂等、只开放math-001与zh-006；原文先存、读取已存原文做两种精确判定；专用详情和保存失败记录 |
+| `src-tauri/src/benchmark/repository/tests.rs`（新增） | 必要合成SQLite专项：准备失败回滚、用途拒绝、终态/迟到写入保护、评分边界/幂等、评分写入失败保留输出 |
+| `src-tauri/src/benchmark/mod.rs`、`preflight.rs` | 注册两模块；复用已验证模型参数构造，保持不读写聊天设置 |
+| `src-tauri/src/db.rs` | 提取两种用途共用的insert_execution原子记录；内部事件/检查点/终态按用途及完整运行身份校验；详情读取内部复用，公开聊天范围保留；旧仅测试使用的写入帮助函数限制为cfg(test) |
+| `src-tauri/src/commands.rs`、`models.rs`、`lib.rs` | 聊天改调用共享执行；bootstrap新增有kind的activeTask且activeRun仍仅chat；实现start/get/cancel_benchmark；关闭标志同时拒绝新任务 |
+| `src-tauri/build.rs`、`capabilities/default.json` | 只登记上述3个业务命令，无通用系统权限 |
+| `src/studio.ts` | 仅补Bootstrap.activeTask可选类型；运行时UI、状态操作和样式不变 |
+| `tests/benchmark-runner.spec.ts`（新增）、`playwright.config.ts` | 可选受控原生专项及显式启用的一道真实本地开发题；默认套件不加入真实调用 |
+| `docs/benchmark-execution-slice3.md`（新增） | 单题接口、数据流、占用、判定和失败边界 |
+| `docs/README.md`、`implementation-plan.md`、`test-plan.md`、`benchmark-implementation-plan.md`、`benchmark-architecture.md`、`benchmark-database-schema.md`、`benchmark-evaluation-methodology.md`、`benchmark-provider-design.md`、`benchmark-preflight.md`及本日志 | 对齐本片交付、实际验证和等待验收状态，保留历史记录 |
+
+没有新迁移、依赖或模型标签；dataset/规则/hash保持切片2字节。schema仍8，正式v0.2.0仍schema7。没有打开/升级正式用户库，没有NSIS/Release、提交、推送或标签改动。Gittoken.txt未读取，用户系统设置和已安装模型未改动。
+
+### 实际命令、检查结果与证据
+
+- `git rev-parse --show-toplevel`确认独立仓库`D:/vibecoding/CortexOS`，`rg --files -g AGENTS.md`只有根规范。定向读取现有commands、db、models、Ollama、schema8及相关原生用例，记录旧聊天事件/请求合同后提取。
+- `cargo fmt --all`和`cargo check --lib`通过。第一次共享代码阶段有临时未使用导入/尚未接入模块提示，后续接入及测试辅助函数cfg(test)后最终check无Rust告警；未增加依赖或接口工厂。
+- `cargo test --lib benchmark_development -- --nocapture`：3/3通过，编译12.07秒、用例0.53秒。仅运行必要新增数据专项，没有运行全库单元测试。覆盖事务中途快照写入失败的整体回滚、合法聊天保持、错误用途/工作区拒绝、快照/hash、整数正确/错误/非法格式/输出上限、别名、同标识配置冲突、重复评分不追加、终态后迟到事件/检查点/终态不覆盖、评分插入失败保留原文并记录失败。
+- `npm.cmd run typecheck`通过；`npm.cmd run tauri -- build --debug --no-bundle`通过（含类型检查、Vite和Rust），Rust27.74秒、Vite616毫秒。主JS546.73kB/gzip165.16kB、图谱941.05kB，产物名称与此前相同；保留既有Vite体积和npm更新提示，无Rust构建告警。没有重做UI或重打正式包。
+- 使用已经缓存的prettier.cjs，经require_escalated读取缓存并用node整理新增测试文件，不联网/不安装。收尾再次`npm.cmd run typecheck`通过；`cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --all -- --check`通过。
+- 设置`CORTEXOS_BENCHMARK_RUNNER=1`，运行`npx.cmd playwright test tests/benchmark-runner.spec.ts --project=benchmark-runner --grep 'native development' --output=../../artifacts/benchmark-slice3-native`：1/1通过，总8.0秒、用例6.0秒。验证受控HTTP正文与快照对象/原始字节SHA-256相等、独立64/0参数、用途/跨域/知识保存拒绝、同标识不重发、双向互斥、流中和准备中取消、部分保存、迟到无覆盖、发送前模型替换、坏流不评分。是真实WebView2与SQLite，模型为受控服务。
+- 补强隔离夹具：先建立一段真实走过产品请求链路的受控聊天历史，并创建/审核能被普通聊天preview_context实际命中的知识（含明确测试标记）。相同原生命令输出改为`../../artifacts/benchmark-slice3-native-final`：1/1通过，总7.9秒、用例5.8秒。评测仍只有system+当前题目，未带入两个测试标记，原聊天列表/运行及知识未被评测改写。最终受控HTTP共有5次chat请求：2次日常聊天、3次评测（成功、流中取消、坏流）；重复启动、准备取消和指纹替换均未增加评测请求。证据controlled-runner-evidence.json保存在对应输出子目录。
+- 另设`CORTEXOS_BENCHMARK_REAL_RUN=1`，运行`npx.cmd playwright test tests/benchmark-runner.spec.ts --project=benchmark-runner --grep 'one actual local' --output=../../artifacts/benchmark-slice3-real`：1/1通过，总8.9秒、用例7.0秒。实际已安装qwen3:4b-instruct，digest `0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0`；只执行math-001一次，原文`95`，integer_equal v1的correctness=1、formatValid=true。请求4096容量、64输出上限、温度0、180秒超时是请求值，不冒称实际有效容量。没有问第二题、下载/释放模型或运行代码题。完整证据actual-single-development-case.json含真实事件、请求、原文、规则/hash及评分；这是闭环开发样本，不是模型综合准确率。
+- 共享逻辑改动后，从apps/desktop运行`npx.cmd playwright test tests/chat.spec.ts tests/knowledge.spec.ts tests/retrieval.spec.ts tests/trace.spec.ts tests/sources.spec.ts --project=desktop --grep 'native chat preserves|knowledge drafts|automatic retrieval|execution graph|authorized snapshots' --output=../../artifacts/benchmark-slice3-regression`：5/5通过，总约1.3分钟；聊天44.2秒、知识9.0秒、检索4.4秒、来源6.3秒、执行图9.4秒。覆盖原取消/断流/超时/重启、草稿/审核/冲突、实际检索请求、来源停用、执行图及精确版本/消息定位；是受控服务下的原生业务检查，不冒充真实长期模型或新评测UI验收。
+- `py -3 artifacts/benchmark-slice3/check_scope.py`通过：0001–0007和依赖清单/锁文件与HEAD逐字节相等，0008保持切片1hash，迁移仍8份，数据集manifest保持`3595faf98b35865e00ba7f156ba89a21f6f5406f8f1b2908f41df031c3f882cc`。前端只有Bootstrap类型变更。仅只读实际检查的隔离SQLite，确认执行/尝试/评分各1条、生产知识引用/检索各0条；source_revision为`slice3-core-sha256:a824aa550f8ed7c2285cd08a87c9d52cf9a379208b35b40e35d32c3faa8c1a21`，与当前相关十文件内容指纹一致，hardware快照明确unavailable/not_collected_in_slice3。证据artifacts/benchmark-slice3/scope-check.json。
+- `git diff --check`通过，仅既有CRLF提示。没有视觉改动，所以本轮无截图相似度、系统缩放或新页面布局结论；原150%用户验收不外推未来评测页。
+
+### 本轮边界和停止点
+
+已具备一个模型×一道开发题×一次尝试的实际闭环，两道题可单独选择；没有队列、多模型分组、实验模板、手动续跑、自动重试、导出或新评测页面。源码内容指纹覆盖相关执行模块，不等于完整仓库/Git发布版本。固定60题仍需独立人工内容审核，代码/资料/Schema/原生工具评分及完整指标继续后续切片。
+
+已有启动中断对账保留，尚未新增切片4的批量恢复协议。取消确认的是本地停止接收，不保证远端立即停止计算；Ollama外部标签在最后预检之后仍可能被修改，API没有跨进程模型锁。评分存储失败保留已落盘原文并标实验失败；全面不可写时错误本身可能也无法保存，最终仅能恢复最后检查点，没有做真正耗尽磁盘的实验。硬件资源没有采集，不填零或由当前显存猜峰值。
+
+本轮停在第3/8切片，等待用户验收。确认后才进入切片4“串行排程与恢复”；不在本轮扩展执行范围。
+
+## 2026-10-23：Benchmark Phase 1切片2——题目与模型预检
+
+用户在切片1后要求“做下一步”。复核八片计划、schema8依赖、开发标准和实际Ollama连接；本轮只实施第2片，完成后停在验收门槛。沿用ponytail复用现有rusqlite/serde/sha2/reqwest和本地Provider，无新增依赖、SQL迁移、Runner或UI。未打开正式用户数据库，测试使用新隔离目录；不生成回答，不运行题目代码，不接云端。
+
+### 本轮实际修改文件
+
+下表应用路径相对`apps/desktop`；之前切片1及用户reference/desktop.spec.ts的工作区状态保留，不混作本轮新增内容。
+
+| 文件 | 内容 |
+| --- | --- |
+| `src-tauri/datasets/cortex-core-60/manifest.json`、`cases.json`、`case.schema.json`、`scoring-rules.json`（新增） | 60题审阅草案、明确标准和资料、固定顺序/分布/版本、逐题与文件hash、结构schema及六种规则规格；没有可执行评分引擎 |
+| `src-tauri/src/benchmark/mod.rs`、`dataset.rs`、`preflight.rs`（新增） | 有界字段/规则/行号/hash校验；事务安装、数据库逐题读取及同版本不覆盖；独立模型参数、真实标签/加载快照、能力来源、指纹前后核对与错误分类 |
+| `src-tauri/src/ollama.rs` | 提供内部只读get/show复用入口；既有聊天inspect保持同样请求、错误和本地格式检查，生成/NDJSON逻辑不改 |
+| `src-tauri/src/commands.rs`、`lib.rs`、`build.rs`、`capabilities/default.json` | 实现并注册四个带workspaceId校验的业务命令；无任意HTTP、文件或shell权限 |
+| `tests/benchmark-preflight.spec.ts`（新增）、`playwright.config.ts` | 可选的原生预检专项：受控服务及另行启用的实际模型元数据读取，不加入默认全套 |
+| `docs/benchmark-preflight.md`、`benchmark-dataset-review.md`（新增） | 当前接口/数据/状态契约、限制及60题人工审阅表 |
+| `docs/README.md`、`implementation-plan.md`、`test-plan.md`、`benchmark-implementation-plan.md`、`benchmark-evaluation-methodology.md`、`benchmark-provider-design.md`、`benchmark-database-schema.md`及本日志 | 对齐当前状态、验证范围和切片2停止点 |
+
+只在`benchmark_datasets/cases`事务安装不可变内置定义；非法工作区不写入或访问模型服务。现有chat purpose/历史/知识/图谱接口、全局聊天参数及前端src不改。开发迁移仍0001–0008，0008与切片1字节相同，没有新增DDL所以没有新迁移备份；原备份失败/恢复结果仍是切片1的证据，不冒称本轮重跑。
+
+### 实际命令和检查结果
+
+- 开始时`git rev-parse --show-toplevel`确认`D:/vibecoding/CortexOS`，HEAD仍f146359；没有提交、推送、改标签或发布安装包。没有读取Gittoken.txt。
+- 以标准库Python辅助编写固定草案，命令`py -3 artifacts/benchmark-slice2/author_dataset.py`、`write_review.py`。最终manifest SHA-256为`3595faf98b35865e00ba7f156ba89a21f6f5406f8f1b2908f41df031c3f882cc`，cases文件为`784089a5243bb3dc1cf4b723b351df19c5006ff983d97c3f4e8f9a946bc88806`。脚本及检查证据留本机artifacts，不把生成过程当独立人工审阅。
+- `cargo check --lib`首次发现两个MutexGuard借用类型错误，改为明确借用连接后编译通过。`cargo fmt --all`完成；实际修改范围核对没有带入其他业务格式重写。
+- `cargo test --lib benchmark_bundle -- --nocapture`仅运行必要数据专项，最终2/2通过，Rust编译6.62秒、用例0.13秒。覆盖60题分布/ID/hash、重复ID、实际类别替换、空标准、越界/未知资料行、JSON标准类型/工具名不匹配、规则版本/未知字段；真实SQLite中途插入失败整体回滚、重试/重复读取、重启、跨工作区拒绝、不可变保护、聊天bootstrap/消息和知识/运行表不变。先前几轮同一专项也通过；收尾针对新增边界再验，没有运行全库单元测试。
+- `npm.cmd run typecheck`通过；`npm.cmd run tauri -- build --debug --no-bundle`最终通过，包含TS/Vite和Rust，最终Rust17.26秒、Vite708毫秒。主JS546.73kB/gzip165.16kB、图谱941.05kB，保留既有Vite大块提示及npm更新提示，不安装更新。中间构建同样通过；不生成NSIS/Release。
+- 格式整理首次`npm.cmd exec -- prettier --write tests/benchmark-preflight.spec.ts`受沙箱npm缓存权限限制（EPERM），缓存路径rg也被拒绝；未变更依赖。随后经require_escalated只读取已有缓存的prettier.cjs、用node整理该测试文件，成功，不下载或安装软件。
+- 设置`CORTEXOS_BENCHMARK_PREFLIGHT=1`、`CORTEXOS_BENCHMARK_REAL_MODELS=1`，从apps/desktop运行`npx.cmd playwright test tests/benchmark-preflight.spec.ts --project=benchmark-preflight --output=../../artifacts/benchmark-slice2-native-final`：最终2/2通过，总5.8秒（受控2.1秒、实际元数据1.6秒）。是真实原生WebView2与SQLite，不是浏览器替身；受控模型服务验证未安装、缺失/不固定digest、未知/不支持能力、上下文超限、远程/未知格式、检查期间替换、服务失败和ps失败；断言仅访问tags/version/ps/show且POST只有模型名，非法请求不访问服务，聊天bootstrap保持不变。初轮及中间原生检查也通过；最终规则文件标识调整后重新构建和复验，保存JSON证据文件。
+- 实际服务Ollama0.40.6。读到qwen3:4b-instruct（digest `0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0`）及qwen3:4b（`359d7dd4bcdab3d86b87d73ac27966f4dbb9f5efdfcc75d34a8764a09474fae7`），本次均通过身份/所需completion元数据检查，status为ready_for_probe。两者元数据声明context_length262144，未据此修改请求或声称8GB设备能运行该容量；本次检查参数为4096/512。工具/thinking为自报，JSON Schema保持unknown；没有能力生成探针、下载、预热、释放或模型答题。实际证据在`artifacts/benchmark-slice2-native-final/.../actual-local-model-metadata.json`，受控请求在同轮controlled-preflight.json。
+- 对照Ollama官方tags/show/ps文档，字段链接写入预检契约；缺字段返回未知，不根据Qwen品牌填默认能力。未使用第三方兼容承诺。
+- `py -3 artifacts/benchmark-slice2/check_scope.py`通过：0001–0007与HEAD逐字节相等、0008与切片1hash一致、迁移仍8份，两个依赖清单/锁文件及前端src不变，六份相关文档15个本地链接可定位。证据`artifacts/benchmark-slice2/scope-check.json`。`git diff --check`通过，既有CRLF提示保留。
+
+### 验收边界和下一步
+
+本轮具备题目可读取、模型可预检的后端切片，没有评测入口；未改视觉，所以没有新截图或缩放结论。既有聊天/知识/检索/来源/执行图五项原生业务结果沿用切片1，本轮没有重跑全套；后续提取共享执行时须专项再验。两条实际Qwen记录只是本机两个不同digest，不是跨品牌质量比较。
+
+60题是AI辅助起草的needs_human_review版本1；格式/引用/示例自洽检查不能代替独立人工事实、计算和断言审阅。标准、材料、模板或审阅状态需要修改时另增版本。规则文件仅标记为scoring_specification，程序实现状态与不可变数据分开；没有评分、Docker隔离或性能/质量结果，不能声称完整60题验收通过。模型自报能力仍需实际验证，外部标签在预检后仍可能改变，后续Runner应逐次复核。
+
+停在第2/8切片，等待用户验收。下一步为第3片：共享模型占用及少量明确标记的开发题真实执行闭环；未经确认不进入该片。
+
+## 2026-10-23：Benchmark Phase 1切片1——数据隔离与迁移
+
+用户确认Phase 0及三项推荐，只授权实施八片计划中的第一片，完成后等待验收。复核原总纲、AGENTS、开发标准、当前实施计划及benchmark计划/数据库方案，沿用ponytail的小范围复用。按用户本轮明确要求编写并运行必要数据库测试和现有兼容性专项，未跑单元全套或全部UI套件。没有进入题目/模型预检、Runner、Docker执行或云端阶段。
+
+### 实际修改
+
+| 文件（应用路径相对apps/desktop） | 内容 |
+| --- | --- |
+| `src-tauri/migrations/0008_benchmark_foundation.sql`（新增） | conversations增加不可改用途；10张数据集/配置/实验/模型快照/逻辑项/尝试/评分/资源/事件基础表；作用域复合外键、必要唯一索引、JSON/状态及不可变保护；阻断评测输出成为生产知识、评测使用生产上下文/检索及改聊天检索设置 |
+| `src-tauri/src/db.rs` | 增量登记0008；迁移原算法提取私有migrate以测试真实失败；创建会话显式列名；普通会话、消息、改名、运行、检查点/事件/终态及bootstrap限定chat；终态检查整组运行身份；启动恢复保留两种用途并对账实验/尝试，不重发不评分 |
+| `src-tauri/src/execution.rs` | 普通执行视角写入也检查chat用途；读取沿用已限定的run/messages，阻止评测进入旧“返回对话”路径 |
+| `src-tauri/src/knowledge.rs`、`retrieval.rs` | 评测消息不可作为生产知识起源；已存在会话的检索设置读写必须为chat；新建聊天预览保留原默认检索语义 |
+| `src-tauri/src/db/benchmark_foundation_tests.rs`（新增） | 8项真实SQLite检查；旧7版合成库含消息、运行/事件、请求、已确认/草稿知识、审批、关系历史、来源版本与行证据、FTS、位置/视角和设置；逐表内容指纹与旧checksum比较；失败备份恢复及用途/跨域约束 |
+| `tests/windows-delivery.spec.ts` | 开发版当前迁移终版本期望由7改8，未重跑NSIS安装检查；历史6版输入样本保留 |
+| `docs/benchmark-prd.md`、`benchmark-architecture.md`、`benchmark-database-schema.md`、`benchmark-implementation-plan.md` | 已确认决策、切片1实际状态和剩余范围；说明activeTask/共享占用在实际Runner切片接入，专用评测查询/导出仍在后续切片 |
+| `docs/database-schema.md`、`README.md`、`implementation-plan.md`、`test-plan.md`、`milestone-log.md` | 当前开发schema8、已发布0.2.0仍schema7、检查入口与本轮停止点 |
+
+0001–0007、模型Provider、权限、前端界面、依赖和锁文件均无本轮修改。原有desktop.spec.ts状态、reference素材及上一轮未提交设计稿保留。没有提交/推送或替换公开安装包，也没有打开正式用户数据库。
+
+### 实际命令和结果
+
+Git检查从独立仓库根目录执行；cargo/rustfmt在apps/desktop/src-tauri；npm/Playwright在apps/desktop。
+
+- `git rev-parse --show-toplevel`确认D:/vibecoding/CortexOS。定向检索全部会话/运行读写及知识起源调用，发现并修正无列名会话INSERT。旧迁移和锁文件git diff为空。
+- `rustfmt --edition 2024 src/db.rs src/db/benchmark_foundation_tests.rs src/execution.rs src/knowledge.rs src/retrieval.rs`格式检查与整理，后续仅对改动文件执行。
+- 首次`cargo test --lib benchmark_foundation_tests -- --nocapture`编译发现对临时MutexGuard取引用的类型错误；改为限定块内持锁校验，并在终态事务前释放，未增加新的锁层。修正后8项通过。
+- 追加“所有表在拒绝访问前后相等”、错误消息身份拒绝、未创建会话的知识预览及真实备份恢复检查后，最终同命令8/8通过，测试执行0.24秒、最后编译7.19秒。实际输出保存在artifacts/benchmark-slice1/foundation-tests-final.log。7→8升级旧表/旧checksum逐项一致；迁移前备份为真实7版库，PRAGMA完整性和外键检查通过；故意在0008末尾插入不存在表触发中途失败，DDL/数据回滚，原库仍7版且可重试。备份复制到另一个隔离目录后可重新打开、升级并读回相同旧数据。升级对照证据在各upgrade-UUID/upgrade-evidence.json。
+- 备份失败用不存在的备份目标目录触发实际VACUUM INTO写失败，确认未执行新DDL且仍7版，随后恢复可写位置重试通过；不声称模拟了所有磁盘耗尽/ACL故障。checksum篡改和旧迁移集合读取8版也会在变更前拒绝。
+- `cargo test --lib database_isolates_workspaces_preserves_partial_and_recovers_after_restart -- --nocapture`初次命中旧用例只预期新增1事件，但既有引用协议会追加citations_checked及run_interrupted共2条。改为精确校验新增事件序列，保留末事件、部分输出、迟到完成不覆盖等断言，不改产品事件语义。最终1/1通过，0.05秒，证据chat-compatibility-final.log。
+- `npm.cmd run tauri -- build --debug --no-bundle`两次通过，均包含TypeScript/Vite和实际Windows Rust编译，Rust分别22.61秒、10.43秒。最终主JS546.73kB/gzip165.16kB、图谱941.05kB，与原UI相同，保留既有大块提示。没有构建或更新Release/NSIS包。
+- `npx.cmd playwright test tests/chat.spec.ts tests/knowledge.spec.ts tests/retrieval.spec.ts tests/trace.spec.ts tests/sources.spec.ts --project=desktop --grep 'native chat preserves|knowledge drafts|automatic retrieval|execution graph|authorized snapshots' --output=../../artifacts/benchmark-slice1-native`：首轮4通过、来源专项失败，原因是强化现有会话用途校验后误拦conversationId=null的新聊天知识预览。修正prepare_context_run的已验证工作区新聊天预览分支，并在新增Rust用途测试中覆盖该合法路径及非法工作区，保持已有评测会话拒绝。
+- 最终相同五项原生命令，输出目录`../../artifacts/benchmark-slice1-native-final`：5/5通过、约1.2分钟；聊天39.3秒、知识9.3秒、检索4.7秒、来源6.3秒、执行图9.4秒。是真实WebView2和SQLite下的取消/断流/重启、草稿审批/冲突、来源停用、请求/版本与执行图定位检查，模型为受控本地HTTP替身；不是本轮真实Qwen、Docker或新评测UI验收。
+- `git diff --check`通过（既有CRLF提示保留）。本轮无前端视觉变更，不新增截图相似度或系统缩放结论。所有新运行、库和恢复文件都是隔离合成检查产物。
+- 收尾标准库Python脚本逐字节对照`git show HEAD:...`确认0001–0007与HEAD完全一致，检查六份benchmark文档及21个本地链接通过，迁移共8份；0008的SHA-256为`264e7619afdfceb4606b496321abf208019d09405dea51573d0db378fdf4644b`。前端、Ollama Provider、权限和两个锁文件的差异为空。
+
+### 边界与下一步
+
+已完成数据基础及现有公开接口的用途隔离，尚无评测入口/业务写入命令、题目发布校验、模型预检、共享Runner、自动评分和导出功能。启动恢复只是保存实际中断及已有完成状态，不自动续跑。已发布0.2.0仍schema7，开发库升级到8后旧版应拒绝直接打开；通用恢复UI未提供，本轮备份恢复只在隔离目录验证。
+
+本轮停在切片1等待用户验收，不执行切片2。获确认后才实现“题目与模型预检”：实际Ollama元数据/能力与固定题目版本框架；仍不提前接云端、计费或Key管理。
+
+## 2026-10-23：Benchmark Studio Phase 0审计与架构规划
+
+用户粘贴Benchmark Studio总要求，并明确本轮只执行Phase 0、生成六份设计文档后停止。本轮读取该授权附件、development.md、开发规范/实施计划、当前HTML UI规范、架构/数据契约/安全文档，检查实际前后端与0001–0007迁移。未找到design.md，采用现行docs/design/html-prototype-ui.md和实际Tokens。使用ponytail确定最小接入范围、positive-spec-writing整理可执行规范、ui-ux-pro-max定向查询比较图/表，保持现有视觉体系。
+
+### 交付文件与主要发现
+
+新增benchmark-prd.md、benchmark-architecture.md、benchmark-provider-design.md、benchmark-database-schema.md、benchmark-evaluation-methodology.md、benchmark-implementation-plan.md；同步docs/README.md入口和原实施计划。本轮没有Benchmark业务文件、SQL迁移、依赖/锁文件或UI修改，没有提交/推送或变更已发布版本。
+
+现有只有本地Ollama；会话历史和已确认知识上下文不等于独立长期记忆；FTS5是词法检索，引用检查只判断编号/位置。执行run与会话/消息绑定，首版建议复用既有事实，新增purpose隔离实验会话和评测排程/尝试/评分。统一共享模型占用，避免新Runner绕过聊天并发保护。云端接入还需版本化运行配置解析和快照阅读器，不能直接把云参数塞进ModelSettings。
+
+末轮核对发现db.rs:292的会话写入没有列名，加purpose列时必须同步改显式列名；bootstrap.activeRun、执行图返回对话及按“本机模型”写死的事件解释也有用途/Provider假设，已写入接入与兼容门槛。原逐题state.clear不能用于释放整实验占用。上述均只写设计，未修改产品代码。
+
+候选0008及后续迁移只做设计，当前仍7份SQL。Phase 1计划明确保留取消、重启已保存结果、手动续跑和基础JSON/CSV导出；固定60题中的10道代码题没有隔离环境就标未运行。Phase 3知识版本对照使用独立快照/索引，不修改生产生效版本。实际表、接口、评分分母、费用未知责任和验收边界见六份文档。
+
+### 实际检查与证据
+
+- `git rev-parse --show-toplevel`确认D:/vibecoding/CortexOS，HEAD=f146359。git status保留原desktop.spec.ts状态和reference素材；对src、Rust、migrations、package及Cargo清单/锁文件的git diff为空。
+- `rg --files`及定向`rg -n`核对模块、命令、路由和表。首次按常见名尝试api.ts/model.rs未找到，实际是studio.ts/models.rs；PowerShell中将SQL通配符直接作路径被拒，改成目录加`-g '*.sql'`完成检查，没有文件写入副作用。
+- `npm.cmd run build`（apps/desktop）通过，包含`tsc --noEmit`及Vite。主JS546.73kB/gzip165.16kB、图谱941.05kB，保留既有大块提示；Vite构建869ms。没有Rust业务变更，本轮不重跑原生编译、单元/全套或界面专项；构建通过不代表Benchmark已实现。
+- PowerShell只读查询`GET http://127.0.0.1:11434/api/version`、`/api/tags`、`/api/ps`和两个已安装标签的`POST /api/show`；只输出受限元数据，不保存模型模板或用户内容。Ollama0.40.6，两个Qwen3 4B标签均为GGUF/Q4_K_M，自报tools/thinking/completion；本次ps为空。没有发问答、卸载、预热或下载；模型标签/digest/能力未通过生成探针实测。
+- `nvidia-smi --query-gpu=name,memory.total,memory.used,driver_version --format=csv,noheader,nounits`：RTX4070 Laptop、8188MiB、当前711MiB、驱动610.74，仅整卡单次读数。Get-Command显示本shell PATH没有ollama/docker命令，不据此宣称未安装软件。证据artifacts/benchmark-phase0/environment.json，采集UTC 2026-10-23T03:31:37.9621635Z。
+- `py -3 D:/CodexData/skills/ui-ux-pro-max/scripts/search.py "comparison table missing data" --domain chart`返回类别比较、直接标签及可访问表格建议；选择表格为主，不采用其新配色或额外图表依赖。
+- 联网核查Ollama、OpenAI、Anthropic、Gemini、Windows Credential Manager、Docker和NVIDIA的官方文档，具体链接留在设计稿。Ollama旧show文档地址404，改用官方导航的新地址；两个API大页抓取受大小限制，改查较小官方指南。未配置或调用云API，没有费用，也没有承诺未实测兼容性。
+- `py -3 artifacts/benchmark-phase0/check-documents.py`检查六份文档存在、Phase 0标记、本地链接、JSON示例和尾部空白，通过；并确认迁移仍7份。结果为本地document-check.json。这是文档一致性检查，不是单元、模型或产品功能测试。`git diff --check`通过；保留原有CRLF提示。
+
+停在Phase 0。待用户决定执行记录用途隔离、代码题隔离环境及首轮模型/Provider顺序后，才进入Phase 1。模型下载、系统安装、数据库升级、业务代码及付费测试均未执行；既有150%用户验收不自动覆盖未来评测页面。
+
 ## 2026-10-23：用户完成150%系统缩放验收
 
 用户反馈：“150缩放我验证了所有功能没问题”。按本次v0.2.0的实际使用反馈，将Windows150%系统缩放记为用户验收通过，所有功能正常；不虚构截图、窗口尺寸或自动化结果。真实读屏、干净系统安装和长期真实模型等其他检查仍保留原状态，未据此将全部桌面交付门槛标为完成。

@@ -76,7 +76,7 @@ pub fn rebuild(connection: &Connection) -> AppResult<()> {
     Ok(())
 }
 pub fn enabled(connection: &Connection, workspace: &str, conversation: &str) -> AppResult<bool> {
-    Ok(connection.query_row("SELECT enabled FROM conversation_retrieval_settings WHERE workspace_id=?1 AND conversation_id=?2",params![workspace,conversation],|r|r.get(0)).optional().map_err(error)?.unwrap_or(true))
+    connection.query_row("SELECT COALESCE((SELECT enabled FROM conversation_retrieval_settings WHERE conversation_id=c.id AND workspace_id=c.workspace_id),1) FROM conversations c WHERE c.workspace_id=?1 AND c.id=?2 AND c.purpose='chat'",params![workspace,conversation],|r|r.get(0)).optional().map_err(error)?.ok_or_else(|| "会话不存在或不属于当前对话。".into())
 }
 impl Database {
     pub fn set_conversation_retrieval(
@@ -88,7 +88,7 @@ impl Database {
         let c = self.connection()?;
         let exists: bool = c
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM conversations WHERE workspace_id=?1 AND id=?2)",
+                "SELECT EXISTS(SELECT 1 FROM conversations WHERE workspace_id=?1 AND id=?2 AND purpose='chat')",
                 params![workspace, conversation],
                 |r| r.get(0),
             )

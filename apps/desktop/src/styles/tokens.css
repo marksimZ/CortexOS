@@ -1,5 +1,9 @@
 /* The supplied HTML is the visual source of truth. All surfaces stay local. */
 :root {
+  --radius-panel: 20px;
+  --radius-control: 12px;
+  --menu-inset: 4px;
+  --radius-menu-item: calc(var(--radius-control) - var(--menu-inset));
   color-scheme: light;
   --background: #eef1f7; --mist-blue: #dae2fb; --mist-green: #d4eee8;
   --text: #1b2230; --text-secondary: #3a4456; --muted: #566073;

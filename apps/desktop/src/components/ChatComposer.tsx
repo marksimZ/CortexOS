@@ -34,6 +34,8 @@ export function ChatComposer({
   const textarea = useRef<HTMLTextAreaElement>(null);
   const previewArea = useRef<HTMLDivElement>(null);
   const previousPreview = useRef(false);
+  const composing = useRef(false);
+  const compositionEndedAt = useRef(-Infinity);
   useEffect(() => {
     if (previousPreview.current !== preview) {
       (preview ? previewArea.current : textarea.current)?.focus();
@@ -53,6 +55,11 @@ export function ChatComposer({
           rows={1}
           value={studio.draft}
           onChange={(event) => studio.setDraft(event.target.value)}
+          onCompositionStart={() => { composing.current = true; }}
+          onCompositionEnd={() => {
+            composing.current = false;
+            compositionEndedAt.current = performance.now();
+          }}
           placeholder={
             studio.workspaceId ? "输入问题…" : "创建工作区后，在这里输入问题…"
           }
@@ -64,14 +71,11 @@ export function ChatComposer({
             studio.loadingMessages
           }
           onKeyDown={(event) => {
-            if (
-              event.key === "Enter" &&
-              !event.shiftKey &&
-              !event.nativeEvent.isComposing &&
-              event.keyCode !== 229
-            ) {
+            if (event.key === "Enter" && !event.shiftKey) {
+              // Let the IME consume its own Enter; suppress only the subsequent send.
+              if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return;
               event.preventDefault();
-              if (canSend) void send();
+              if (!event.repeat && performance.now() - compositionEndedAt.current >= 500 && canSend) void send();
             }
           }}
         />

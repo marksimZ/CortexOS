@@ -1,3 +1,5 @@
+import { BrandMark } from "./BrandMark";
+import { AppDialog, openDialog } from "./AppDialog";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PanelLeft, X, Plus, BookOpen } from "lucide-react";
 import type { Studio } from "../studio";
@@ -6,16 +8,16 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { ModelStatus } from "./ModelStatus";
 import { ConversationList } from "./ConversationList";
 import { NavigationIcon } from "./NavigationIcon";
-import { WindowControls, WindowDragRegion } from "./WindowControls";
+import { WindowControls, WindowDragRegion, handleWindowDrag } from "./WindowControls";
 import { AppearanceControl } from "./AppearanceControl";
 import { Toast } from "./Toast";
 export const pages = [
   { id: "chat", label: "对话" }, { id: "knowledge", label: "知识" },
-  { id: "graph", label: "图谱" }, { id: "settings", label: "设置" },
+  { id: "graph", label: "图谱" }, { id: "benchmark", label: "评测" }, { id: "settings", label: "设置" },
 ] as const;
 function Brand() {
   return <a className="prototype-brand" href="#/chat" aria-label="CortexOS 首页">
-    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="none" stroke="var(--primary)" strokeWidth="1.5" /><circle cx="14" cy="14" r="4.5" fill="var(--primary)" /><circle cx="20.5" cy="8" r="2.2" fill="var(--success)" /></svg>
+    <BrandMark />
     <span>CortexOS <span className="brand-dimension">3D</span></span>
   </a>;
 }
@@ -50,10 +52,14 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
   return <div className={`app-shell prototype-shell reference-chat page-${page} ${collapsed ? "sidebar-collapsed" : ""}`}>
     <a className="skip-link" href="#main-content" onClick={event => {event.preventDefault();document.getElementById("main-content")?.focus();}}>跳到主要内容</a>
     <aside id="primary-sidebar" className="prototype-sidebar reference-sidebar">{!mobileOpen && sidebar(false)}</aside>
-    <div className="workspace-stage">
+    <div className="workspace-stage" onMouseDown={event => {
+      if (studio.desktop && event.target instanceof Element && event.target.closest(".prototype-topbar,.page-heading")) {
+        handleWindowDrag(event, studio.reportError);
+      }
+    }}>
       <header className="prototype-topbar">
-        <button className="icon-button navigation-toggle" aria-label={narrow ? "打开导航" : collapsed ? "展开全局导航" : "收起全局导航"} aria-expanded={narrow ? mobileOpen : !collapsed} aria-controls={narrow ? "mobile-navigation" : "primary-sidebar"} aria-haspopup={narrow ? "dialog" : undefined} title="切换侧栏" onClick={() => {
-          if (narrow) { drawer.current?.showModal(); setMobileOpen(true); } else setCollapsed(!collapsed);
+        <button className="icon-button navigation-toggle" aria-label={narrow ? "打开导航" : collapsed ? "展开全局导航" : "收起全局导航"} aria-expanded={narrow ? mobileOpen : !collapsed} aria-controls={narrow ? "mobile-navigation" : "primary-sidebar"} aria-haspopup={narrow ? "dialog" : undefined} title={narrow ? "打开导航" : collapsed ? "展开全局导航" : "收起全局导航"} onClick={() => {
+          if (narrow) { openDialog(drawer.current); setMobileOpen(true); } else setCollapsed(!collapsed);
         }}><PanelLeft size={18} /></button>
         <div className="topbar-title"><strong>{page === "chat" ? conversation?.title ?? "新的对话" : pages.find(item => item.id === page)?.label}</strong><span>{studio.data?.workspaces.find(item => item.id === studio.workspaceId)?.name ?? "本地工作区"}</span></div>
         {studio.desktop ? <WindowDragRegion onError={studio.reportError} /> : <span className="topbar-spacer" />}
@@ -63,10 +69,10 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
       </header>
       {children}
     </div>
-    <dialog id="mobile-navigation" ref={drawer} className="mobile-sidebar panel-dialog" aria-labelledby="mobile-navigation-title" onClose={() => setMobileOpen(false)}>
+    <AppDialog id="mobile-navigation" ref={drawer} className="mobile-sidebar panel-dialog" aria-labelledby="mobile-navigation-title" onClose={() => setMobileOpen(false)}>
       <header className="panel-header"><h2 id="mobile-navigation-title">导航与会话</h2><button className="icon-button" aria-label="关闭导航" onClick={() => drawer.current?.close()}><X size={18} /></button></header>
       <div className="panel-body">{mobileOpen && sidebar(true)}</div>
-    </dialog>
+    </AppDialog>
     <Toast />
   </div>;
 }

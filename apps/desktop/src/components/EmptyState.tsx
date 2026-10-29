@@ -1,3 +1,4 @@
+import { BrandMark } from "./BrandMark";
 import { Plus } from "lucide-react";
 import type { Studio } from "../studio";
 export function EmptyState({
@@ -12,11 +13,7 @@ export function EmptyState({
   return (
     <div className="chat-empty">
       <div className="welcome-heading">
-        <svg className="cognitive-mark" viewBox="0 0 80 80" aria-hidden="true">
-          <circle cx="40" cy="40" r="30" fill="none" stroke="currentColor" strokeWidth="2" />
-          <circle cx="40" cy="40" r="11" fill="currentColor" />
-          <circle cx="58" cy="23" r="6" fill="var(--success)" />
-        </svg>
+        <BrandMark className="cognitive-mark" size={80} />
         <h2>欢迎使用 CortexOS</h2>
       </div>
       <div className="welcome-next">

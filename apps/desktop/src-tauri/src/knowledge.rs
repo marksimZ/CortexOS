@@ -221,7 +221,7 @@ impl Database {
                 &input.source_excerpt,
             ) {
                 (Some(message), Some(excerpt)) => {
-                    let original: Option<(String,String)> = tx.query_row("SELECT conversation_id,content FROM messages WHERE workspace_id=?1 AND id=?2 AND role='assistant' AND status!='streaming'",params![input.workspace_id,message],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(error)?;
+                    let original: Option<(String,String)> = tx.query_row("SELECT conversation_id,content FROM messages WHERE workspace_id=?1 AND id=?2 AND role='assistant' AND status!='streaming' AND conversation_id IN (SELECT id FROM conversations WHERE purpose='chat')",params![input.workspace_id,message],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(error)?;
                     let (conversation, original) = original
                         .ok_or_else(|| "原回答不存在、尚未结束或不属于当前工作区。".to_string())?;
                     if excerpt.trim().is_empty()

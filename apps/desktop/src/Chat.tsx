@@ -1,3 +1,4 @@
+import { AppDialog, openDialog } from "./components/AppDialog";
 import { useEffect, useRef, useState } from "react";
 import { ArrowDown, PanelRight, Pencil } from "lucide-react";
 import { navigate, useNavigation } from "./navigation";
@@ -6,6 +7,8 @@ import { ChatComposer } from "./components/ChatComposer";
 import { EmptyState } from "./components/EmptyState";
 import { CognitiveInspector } from "./components/CognitiveInspector";
 import { ChatEvidence } from "./components/ChatEvidence";
+import { useChatScroll } from "./components/useChatScroll";
+import { PaneDivider, splitStyle } from "./components/PaneDivider";
 import { notify } from "./components/Toast";
 import { errorText, preference, remember, type Message, type Studio } from "./studio";
 
@@ -42,9 +45,9 @@ export function ChatPage({
     !studio.sending &&
     !studio.savingRetrieval &&
     !studio.loadingMessages;
-  const scroller = useRef<HTMLDivElement>(null);
-  const nearBottom = useRef(true);
-  const [showJump, setShowJump] = useState(false);
+  const scroll = useChatScroll(studio.conversationId, studio.messages.length, studio.messages, !!route.message);
+  const splitRoot = useRef<HTMLDivElement>(null);
+  const [splitRatio, setSplitRatio] = useState<number | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const renameDialog = useRef<HTMLDialogElement>(null);
@@ -74,14 +77,6 @@ export function ChatPage({
   const latestRun = [...studio.messages].reverse().find(message => message.role === "assistant" && message.modelRunId)?.modelRunId ?? null;
 
   useEffect(() => {
-    nearBottom.current = true;
-    setShowJump(false);
-  }, [studio.conversationId]);
-  useEffect(() => {
-    if (!route.message && nearBottom.current && scroller.current)
-      scroller.current.scrollTop = scroller.current.scrollHeight;
-  }, [studio.messages]);
-  useEffect(() => {
     if (!currentRunning) setCancelling(false);
   }, [currentRunning]);
   useEffect(() => {
@@ -109,6 +104,8 @@ export function ChatPage({
 
   return (
     <div
+      ref={splitRoot}
+      style={wide && evidenceOpen ? splitStyle(splitRatio, 16) : undefined}
       className={`chat-layout live-chat-layout ${studio.messages.length ? "has-messages" : "is-empty"} ${evidenceOpen ? "evidence-open" : "evidence-closed"}`}
     >
       <section className="chat-main" aria-labelledby="page-title">
@@ -128,7 +125,7 @@ export function ChatPage({
                 onClick={() => {
                   setRenameTitle(conversation.title);
                   setRenameError(null);
-                  renameDialog.current?.showModal();
+                  openDialog(renameDialog.current);
                 }}
               >
                 <Pencil size={17} aria-hidden="true" />
@@ -160,14 +157,13 @@ export function ChatPage({
         )}
         <div
           className="message-scroll"
-          ref={scroller}
-          onScroll={() => {
-            const element = scroller.current!;
-            nearBottom.current =
-              element.scrollHeight - element.scrollTop - element.clientHeight <
-              80;
-            setShowJump(!nearBottom.current);
-          }}
+          ref={scroll.scroller}
+          onScroll={scroll.onScroll}
+          onWheel={scroll.onWheel}
+          onPointerDown={scroll.onPointerDown}
+          onTouchStart={scroll.onTouchStart}
+          onTouchMove={scroll.onTouchMove}
+          onKeyDown={scroll.onKeyDown}
         >
           {studio.loadingMessages ? (
             <p className="inline-loading" role="status">
@@ -198,16 +194,10 @@ export function ChatPage({
             />
           )}
         </div>
-        {showJump && (
+        {scroll.showJump && (
           <button
             className="jump-latest button secondary"
-            onClick={() => {
-              nearBottom.current = true;
-              scroller.current?.scrollTo({
-                top: scroller.current.scrollHeight,
-              });
-              setShowJump(false);
-            }}
+            onClick={scroll.jump}
           >
             <ArrowDown size={15} aria-hidden="true" />
             回到最新内容
@@ -228,7 +218,8 @@ export function ChatPage({
         </p>
       </section>
       {evidenceOpen && <ChatEvidence studio={studio} overlay={!wide} runId={latestRun} onInspect={() => setSelectedRun(latestRun)} onClose={() => setEvidenceOpen(false)} />}
-      <dialog
+      {wide && evidenceOpen && <PaneDivider root={splitRoot} ratio={splitRatio} onChange={setSplitRatio} onCollapse={() => setEvidenceOpen(false)} label="调整回答依据宽度" />}
+      <AppDialog
         className="form-dialog"
         ref={renameDialog}
         aria-labelledby="rename-title"
@@ -274,7 +265,7 @@ export function ChatPage({
             </button>
           </div>
         </form>
-      </dialog>
+      </AppDialog>
       <CognitiveInspector
         runId={selectedRun}
         studio={studio}

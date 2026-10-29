@@ -301,7 +301,7 @@ $afterRect = New-Object DeliveryWindow+Rect
     await app.stop();
     app = undefined;
     const migrated = await snapshot(migrationDirectory);
-    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.schemaVersion).toBe(8);
     for (const table of ["workspaces", "knowledge_nodes", "knowledge_versions"])
       expect(migrated.tables[table]).toEqual(seeded.tables[table]);
     const backups = (await readdir(migrationDirectory)).filter(

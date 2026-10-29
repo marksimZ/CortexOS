@@ -1,3 +1,4 @@
+import { benchmarkReturn } from "./benchmark/reportNavigation";
 import { SelectMenu } from "./components/SelectMenu";
 import { RetrievalSummary } from "./components/RetrievalSummary";
 import { GraphMotionControl } from "./GraphMotionControl";
@@ -175,7 +176,8 @@ function TraceCanvas({ studio, runId }: { studio: GraphStudio; runId: string }) 
       }
     };
     void load();
-    return () => {
+
+  return () => {
       current = false;
       clearTimeout(timer);
     };
@@ -188,9 +190,10 @@ function TraceCanvas({ studio, runId }: { studio: GraphStudio; runId: string }) 
       mode: "execution",
       run: runId,
       event: id,
+      back: route.back,
     });
   };
-  const exitFocus = () => navigate("graph", { workspace: workspaceId, mode: "execution", run: runId });
+  const exitFocus = () => navigate("graph", { workspace: workspaceId, mode: "execution", run: runId, back: route.back });
   const changed = useCallback(() => {
     const capture = api.current?.capture();
     if (capture) {
@@ -229,6 +232,14 @@ function TraceCanvas({ studio, runId }: { studio: GraphStudio; runId: string }) 
     } finally {
       setSaving(false);
     }
+  };
+  const locateAnswer = (message: string) => {
+    if (!data) return;
+    if (data.detail.contextManifest.purpose === "benchmark") {
+      const back = benchmarkReturn(route.back,workspaceId,data.detail.run.id);
+      if(back)window.location.hash=back;
+      else navigate("benchmark",{workspace:workspaceId,view:data.detail.contextManifest.benchmarkScope!=="standard"?"personalized":undefined,batch:data.detail.contextManifest.batchId,trace:data.detail.contextManifest.batchId?data.detail.run.id:undefined});
+    } else navigate("chat",{workspace:workspaceId,conversation:data.detail.run.conversationId,message,back:route.hash});
   };
   return (
     <>
@@ -277,16 +288,9 @@ function TraceCanvas({ studio, runId }: { studio: GraphStudio; runId: string }) 
             </span>
             <button
               className="button text-button"
-              onClick={() =>
-                navigate("chat", {
-                  workspace: workspaceId,
-                  conversation: data.detail.run.conversationId,
-                  message: data.output.id,
-                  back: route.hash,
-                })
-              }
+              onClick={() => locateAnswer(data.output.id)}
             >
-              定位回答
+              {data.detail.contextManifest.purpose === "benchmark" ? "返回评测报告" : "定位回答"}
             </button>
           </div>
           <div className="trace-toolbar">
@@ -415,16 +419,9 @@ function TraceCanvas({ studio, runId }: { studio: GraphStudio; runId: string }) 
                   {selected.messageId && (
                     <button
                       className="button secondary"
-                      onClick={() =>
-                        navigate("chat", {
-                          workspace: workspaceId,
-                          conversation: data.detail.run.conversationId,
-                          message: selected.messageId,
-                          back: route.hash,
-                        })
-                      }
+                      onClick={() => locateAnswer(selected.messageId!)}
                     >
-                      查看对应消息
+                      {data.detail.contextManifest.purpose === "benchmark" ? "返回评测报告" : "查看对应消息"}
                     </button>
                   )}
                   {related.length > 0 && (

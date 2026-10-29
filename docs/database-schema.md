@@ -1,6 +1,6 @@
 # 数据模型契约
 
-> 当前基线（2026-10-22）：已实现 0001–0007 迁移，包含请求快照、执行视角、知识检索与来源证据；回答引用协议复用事件，无新增迁移。后文按实施阶段描述设计，实际结构以 [迁移 SQL](../apps/desktop/src-tauri/migrations/) 为准。
+> 当前开发基线（2026-10-23）：已实现0001–0008迁移，新增Benchmark用途隔离及存储基础，详见[评测数据库](benchmark-database-schema.md)。已发布v0.2.0安装包仍为schema7；本轮没有升级正式用户库或更新安装包。后文保留各阶段历史契约，实际结构以[迁移SQL](../apps/desktop/src-tauri/migrations/)为准。
 
 本文按阶段记录数据库契约，采用 ADR 0002/0003 的语义；后文 0004–0007 记录已实现增量，所有实际结构以迁移 SQL 为准。
 
@@ -99,3 +99,8 @@ source_documents按工作区/规范路径唯一，保存当前版本、启用状
 manifest schemaVersion=4 增加 citationProtocol=knowledge_lines_v1，knowledgeRefs 增加请求内 citationId，原知识/文件版本和正文不变。编号/引用说明也出现在实际 request_json 中，容量计算覆盖完整资料消息。
 
 execution_events 新增实际事件种类 citations_checked：payload.version=1、scope=reference_locations_only、availableCount、references（仅有效引用涉及的固定知识项）、occurrences（输出 UTF-16 起止偏移、原标记、referenceId、1基闭区间 startLine/endLine、错误原因）。同一 finish 事务只对 running→终态成功更新的运行追加一次，继承既有不可变保护。messages API 的 citations 字段为该事件的只读投影，未完成和旧记录返回 null。数据库仍为迁移版本7；既有 SQL 文件校验和不变。
+
+
+## 0008–0010 Benchmark 增量迁移
+
+当前开发数据库为 schema 10；前述 schema 7 段落为历史状态。0008 为用途隔离与评测存储，0009 为工作区偏好版本，0010 为只读项目快照、生成计划与候选修订、人工审核和串行批次。旧迁移保持原文和校验和，沿用迁移前备份与单事务失败回滚。详细字段与边界见 [Benchmark 数据结构](benchmark-database-schema.md)及 [C3–C5 报告](benchmark-phase-c3-c5.md)。评测继续使用 purpose=benchmark，不改变聊天和生产知识。旧程序回退使用升级前备份。

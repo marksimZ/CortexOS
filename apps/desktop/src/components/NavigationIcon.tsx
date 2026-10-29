@@ -34,6 +34,7 @@ export function NavigationIcon({ page }: { page: PageName }) {
           <path d="m9 7 7-1M8 9l5 7m4-8-2 7" />
         </>
       )}
+      {page === "benchmark" && <><path d="M5 19V9m7 10V5m7 14v-7M3 21h18" /><path d="m3 5 4-2 5 1 7-2" /></>}
       {page === "settings" && (
         <>
           <path d="M4 7h7m5 0h4M4 17h3m5 0h8" />

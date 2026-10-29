@@ -1,3 +1,4 @@
+import { AppDialog, openDialog } from "./AppDialog";
 import { useEffect, useRef, useState } from "react";
 import { MarkdownContent } from "./MarkdownContent";
 import { X } from "lucide-react";
@@ -91,14 +92,14 @@ function CitationDetail({
   const located = useRef<HTMLSpanElement>(null);
   const [source, setSource] = useState<SourceRef | null>(null);
   useEffect(() => {
-    dialog.current?.showModal();
+    openDialog(dialog.current);
     located.current?.scrollIntoView({ block: "center" });
   }, []);
   const start = occurrence.startLine ?? 1;
   const end = occurrence.endLine ?? start;
   return (
     <>
-      <dialog
+      <AppDialog
         ref={dialog}
         className="side-drawer citation-drawer panel-dialog"
         aria-labelledby={`citation-${message.id}`}
@@ -198,7 +199,7 @@ function CitationDetail({
           </>
         )}
         </div>
-      </dialog>
+      </AppDialog>
       {source && (
         <SourceBrowser
           workspace={message.workspaceId}
