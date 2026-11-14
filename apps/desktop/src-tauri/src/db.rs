@@ -8,6 +8,10 @@ use std::{
     sync::{Mutex, MutexGuard},
 };
 
+#[cfg(test)]
+#[path = "db/harness_migration_tests.rs"]
+mod harness_migration_tests;
+
 const MIGRATIONS: &[&str] = &[
     MIGRATION,
     include_str!("../migrations/0002_knowledge.sql"),
@@ -19,6 +23,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0008_benchmark_foundation.sql"),
     include_str!("../migrations/0009_benchmark_profiles.sql"),
     include_str!("../migrations/0010_personalized_benchmark.sql"),
+    include_str!("../migrations/0011_harness_document_fit.sql"),
 ];
 const MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const RUN_COLUMNS: &str = "id,workspace_id,conversation_id,assistant_message_id,model_id,status,started_at,finished_at,error_message";
@@ -1026,6 +1031,14 @@ impl Database {
         let mut connection = self.connection()?;
         let transaction = connection.transaction().map_err(error)?;
         let recovered_at = now();
+        transaction.execute("UPDATE benchmark_generation_jobs SET status='interrupted',error='应用已退出，验证不会自动重跑；请检查并清理本次遗留容器。',finished_at=?1 WHERE status='validating' AND json_extract(plan_json,'$.purpose')='harness_programming_validation'",params![recovered_at]).map_err(error)?;
+        transaction.execute("UPDATE benchmark_generation_jobs SET status='interrupted',error='应用已退出，副本不会自动恢复；已收集的修改保留，请清理遗留容器。',finished_at=?1 WHERE status IN ('opening','ready','grading') AND json_extract(plan_json,'$.purpose')='harness_workspace'",params![recovered_at]).map_err(error)?;
+        transaction.execute("UPDATE benchmark_generation_jobs SET status='interrupted',error='应用已退出，隔离检查未完成；请清理本次容器。',finished_at=?1 WHERE status='checking' AND json_extract(plan_json,'$.purpose')='harness_codex_runtime'",params![recovered_at]).map_err(error)?;
+        transaction.execute("UPDATE benchmark_generation_jobs SET status='interrupted',error='应用已退出，Aider程序检查未完成；请清理本次容器。',finished_at=?1 WHERE status='checking' AND json_extract(plan_json,'$.purpose')='harness_aider_runtime'",params![recovered_at]).map_err(error)?;
+        transaction.execute("UPDATE benchmark_generation_jobs SET status='interrupted',error='应用已退出，Claude程序检查未完成；请清理本次容器。',finished_at=?1 WHERE status='checking' AND json_extract(plan_json,'$.purpose')='harness_claude_runtime'",params![recovered_at]).map_err(error)?;
+        transaction.execute("UPDATE benchmark_generation_jobs SET status='interrupted',error='应用已退出，编程任务不会自动重新调用模型；请清理本次副本。',finished_at=?1 WHERE status IN ('running','grading') AND json_extract(plan_json,'$.purpose') IN ('harness_codex_session','harness_claude_session','harness_aider_session')",params![recovered_at]).map_err(error)?;
+        transaction.execute("UPDATE benchmark_generation_jobs SET status='interrupted',error='应用已退出，未启动的组合任务保持未运行。',finished_at=?1 WHERE status='running' AND json_extract(plan_json,'$.purpose')='harness_experiment'",params![recovered_at]).map_err(error)?;
+        transaction.execute("UPDATE benchmark_generation_jobs SET status='interrupted',error='应用已退出，保留已有记录。',finished_at=?1 WHERE status='running' AND json_extract(plan_json,'$.purpose')='harness_readonly_run'",params![recovered_at]).map_err(error)?;
         transaction.execute("UPDATE benchmark_generation_jobs SET status='interrupted',error='Application stopped; request may have been billed. No automatic resend.',finished_at=?1 WHERE status='sending'",params![recovered_at]).map_err(error)?;
         transaction.execute("UPDATE benchmark_batch_items SET run_id=COALESCE(run_id,(SELECT id FROM benchmark_runs WHERE launch_key=benchmark_batch_items.batch_id||':'||benchmark_batch_items.ordinal AND workspace_id=(SELECT workspace_id FROM benchmark_batches WHERE id=benchmark_batch_items.batch_id))),status='interrupted',error='app_restart_no_automatic_replay' WHERE status='running'",[]).map_err(error)?;
         transaction.execute("UPDATE benchmark_batches SET status='interrupted',finished_at=?1 WHERE status IN ('running','stopping')",params![recovered_at]).map_err(error)?;

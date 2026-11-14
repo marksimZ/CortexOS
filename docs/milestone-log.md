@@ -1,5 +1,753 @@
 # 里程碑记录
 
+## 2026-11-14 Phase D 剩余功能与实际补验
+
+新增 `benchmark/harness/programming/project.rs`、`tasks/scenarios.rs` 和前端 `ReadonlyRuns.tsx`，复用原审核、任务库、Docker、CLI 调度和图谱。修改编程草案、实际验证、固定文件副本、Codex/Claude/Aider 会话、运行报告与 Windows 专项。两条精确 Tauri 命令只运行和读取已发布的项目只读题。schema 仍为 11。范围、限制和逐项证据见 [Phase D 补齐交付](harness-fit-phase-d-completion.md)。
+
+- `cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml` 通过。`npm --prefix apps/desktop run build` 初轮发现 TypeScript 的 `Object.hasOwn` 与目标库不符，改用现有目标支持的检查后通过，保留 Vite 包体提示。Python 源文件 AST 语法检查通过。相关 Rust 文件格式化后，`cargo rustc --offline --features tauri/custom-protocol --manifest-path apps/desktop/src-tauri/Cargo.toml --bin cortexos-desktop -- --emit=link=D:/vibecoding/CortexOS/artifacts/cortexos-harness-phase-d.exe` 成功，1 分 12 秒。
+- 在 `apps/desktop`，设 `CORTEXOS_HARNESS_EXPERIMENT=1` 和独立验收程序路径，使用 `npx playwright test --project=harness-experiment --workers=1 --retries=0` 分别检查 `project tasks and native tool requests`、`Codex and Claude edit`、`project regression, SQLite compatibility`、`reopen and export the stored`，依次单项通过约 1.4 分钟、1.3 分钟、1.7 分钟、9.4 秒。首轮助手误点已展开内容后中止，下一轮 Docker Linux 不可用，恢复既有 Linux 服务后通过。固定回复专项和重开导出均无模型推理。
+- 取得两项独立授权后先按 `CORTEXOS_D4_APPROVAL=two-model-two-task-aider` 执行 `harness-experiment` 中 `one authorized two-model two-task Aider comparison`，四会话各实际请求一次，执行结果与容器清理已落盘。末尾界面断言因刷新仍选到旧实验失败，脚本改为按实验 ID 选择，已单独复验并保存原生 JSON/CSV，无重跑。随后设 `CORTEXOS_BENCHMARK_PYTHON_REAL=1`、`CORTEXOS_D0_APPROVAL=qwen3-4b-ten-2048`，`npx playwright test --project=benchmark-python-real --workers=1 --retries=0`，1 项通过，5.8 分钟。D0 实际为 9 截断、1 个 Python 语法错误，历史报告指纹保留。
+- SQLite 只读审计确认五个验收库完整性、外键和归属无异常。四个由既有 Harness 验收库复制的库保留原任务、事件和非评测业务数据。D0 使用新库。按新增任务归属查询 Docker，无遗留容器。未运行全量单元测试。
+- 最终构建重跑 `reopen and export the stored` 专项，通过。独立校验导出内容 SHA-256、CSV 的四条会话及四次请求，结果与存储一致。运行 `node artifacts/phase-d-acceptance/open.cjs`，打开隔离验收副本的同一实验，Windows 窗口可见，PID 26032。系统未授予前置焦点，任务栏可切换。两项操作均未启动模型调用。
+
+## 2026-11-14 Phase D 首版用户验收通过
+
+用户确认当前已交付版本通过验收。已更新实施计划、交付清单及文档索引。原计划尚待完成的扩展任务、真实对照和报告指标继续列在 [交付清单](harness-fit-d4-d5.md)。本轮仅更新文档，未运行测试或模型。
+
+## 2026-11-14 Harness Fit Lab D4–D5 交付与 Phase D 验收
+
+接入串行组合、预算与归属校验、停止和中断恢复、比较报告、3D 任务回放与原生导出。主要文件为后端 `benchmark/harness/session/experiment.rs` 与 `session/experiment/report.rs`、前端 `benchmark/harness/HarnessExperiments.tsx` 和 `HarnessFitLab.tsx`、原生专项 `apps/desktop/tests/harness-experiment.spec.ts` 与保存对话框助手。复用 schema 11、Ollama Provider、任务副本和独立评分器。参见 [D0–D5 范围与证据](harness-fit-d4-d5.md)。
+
+- `npm --prefix apps/desktop run build` 通过类型检查和生产构建，保留包体提示。`cargo rustc --offline --features tauri/custom-protocol --manifest-path apps/desktop/src-tauri/Cargo.toml --bin cortexos-desktop -- --emit=link=D:/vibecoding/CortexOS/artifacts/cortexos-harness-experiment.exe` 生成独立 Windows 验收程序，31.73 秒。
+- 从 `apps/desktop` 设置 `CORTEXOS_HARNESS_EXPERIMENT=1`，执行 `npx playwright test --project=harness-experiment --grep 'fixed replies' --output=../../artifacts/harness-experiment-controlled-final`，1 项通过，约 1.2 分钟。两种模型配置各两次，每题 7/7，覆盖停止、强制重启及越权拒绝。实际截图含三种尺寸的浅深主题。设置 `CORTEXOS_D4_EXPORT_SOURCE` 指向已完成批次的隔离库，同项目同过滤条件在 `artifacts/harness-experiment-report-verified/` 独立复读，1 项通过，9.6 秒。
+- 用户确认三工具各一题后，首次只读预检因 Docker Linux 引擎缺失退出，尚未启动推理。现有引擎恢复后，只读核对模型指纹及无已加载模型，设置 `CORTEXOS_HARNESS_EXPERIMENT=1`、`CORTEXOS_D4_APPROVAL=three-adjust-tasks`，从 `apps/desktop` 执行 `npx playwright test --project=harness-experiment --grep 'one authorized local comparison' --workers=1 --retries=0 --output=../../artifacts/harness-experiment-real`。1 项通过，总计 2.3 分钟。批次 `570c69d2-326c-4949-8a76-68ea196d0a47` 三题各通过 7/7，共 8 次真实推理请求，无重试。运行后只读 `/api/ps` 为空。
+- 对固定回复及真实批次分别执行 `py -3.13 -X utf8 artifacts/harness-experiment-audit/verify.py` 并传对应结果目录名。实际核查 SQLite 完整性、外键、既有 26 条任务及事件、其他业务表和计划哈希均通过，两批的执行及评分容器均无遗留。
+- 真实结果原生窗口已打开。启动辅助首次因按 `region` 查找无语义容器超时，重新连接同一窗口后改用标签定位，实际保存 JSON 与 CSV，核对三条会话、8 次请求及 SHA-256。`node artifacts/harness-experiment-actual-acceptance/review-trace.cjs` 实际打开 Aider 候选节点，查到 `return max(n, 0)`，截取原生 3D 画布并返回报告。Windows 已显示窗口，系统未授予强制前置。证据在 `artifacts/harness-experiment-actual-acceptance/`。
+
+已完成 Phase D 首版的组合与报告闭环，当前交回人工验收。本批每个工具只有一个样本，未给出领先组合。D0 独立补验的历史截断项继续保留待复核，D2 的跨文件、仓库级和其他扩展任务见交付清单。当前 D4–D5 没有运行环境阻断，未运行全量单元测试或第二批真实模型。
+
+## 2026-11-13 Aider 真实单题及离线回放修复
+
+收到一题的明确授权。只读核对指纹与空加载列表后，在 `apps/desktop` 用 `npx playwright test --project=harness-aider-session --grep 'one explicitly authorized' --retries=0 --workers=1 --output=../../artifacts/harness-aider-session-real` 执行一次。Playwright 1 项通过，25.1 秒，总计 30.6 秒。真实会话发出 1 请求，输入 840、输出 21 Token，Ollama 总耗时 8.27 秒。模型回复用了目标完整相对路径，原校验仅接受 basename，任务状态 failed，评分未开始。记录、事件哈希和清理核对通过，既有 26 条任务和事件未变。运行后 `/api/ps` 返回空列表。
+
+修改 `aider_session.py` 和专项，接受同一目标的准确路径别名并规范化给 Aider。默认桌面二进制被旧验收窗口占用，普通构建返回 Windows os error 5。使用 `cargo rustc --offline --features tauri/custom-protocol --manifest-path apps/desktop/src-tauri/Cargo.toml --bin cortexos-desktop -- --emit=link=<artifacts/cortexos-aider-replay.exe绝对路径>` 成功生成独立修复版。用 `CORTEXOS_AIDER_TEST_EXE` 和 `CORTEXOS_AIDER_REPLAY_REPLY` 指向独立程序及真实记录，执行 `npx playwright test --project=harness-aider-session --grep 'fixed reply' --retries=0 --workers=1 --output=../../artifacts/harness-aider-session-replay`，1 项通过，50.3 秒，总计 53.6 秒。实际候选改为 `return max(n, 0)`，独立评分 7/7，越界和恢复复验通过。回放真实推理数为 0，原会话不覆写。D4、D5 仍待后续。
+
+
+## 2026-11-13 D3-3d.2 Aider 单题执行接入
+
+接通固定镜像内的真实 Aider、回环和 stdio、受控 Provider、任务副本及独立评分；增加三个精确 Tauri 命令，复用单题 UI 和会话存储。新增回复文件名与单函数签名校验，收集时继续核对文件权限和哈希。schema 仍为 11。详情见[Aider 交付](harness-fit-d3-aider-transport.md)。
+
+- `cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml` 通过。
+- `npm --prefix apps/desktop run build` 通过，保留包体大小提示。
+- `cargo build --offline --features tauri/custom-protocol --manifest-path apps/desktop/src-tauri/Cargo.toml` 通过。
+- 从 `apps/desktop` 设 `CORTEXOS_HARNESS_AIDER_SESSION=1`，运行 `npx playwright test --project=harness-aider-session --grep 'fixed reply' --output=../../artifacts/harness-aider-session-final`，1 项通过，49.5 秒，总计 51.7 秒。首轮 Aider 误用 Claude relay 导致 FileNotFoundError，失败单独保留；修正后实测一题 7/7、越界文件名和额外顶层函数拒绝、停止恢复，三尺寸浅深截图六张。
+- `py -3.13 -X utf8 artifacts/harness-aider-session-audit/verify.py` 通过，数据库完整性正常，旧任务及事件 26 条不变，新增 5 条记录的计划与事件哈希通过。按 Aider 会话用途查询 Docker 容器返回空。
+
+共享会话改动后，`CORTEXOS_HARNESS_CLAUDE_SESSION=1` 下运行 `npx playwright test --project=harness-claude-session --grep 'controlled transport' --output=../../artifacts/harness-aider-claude-regression`，1 项通过，37.3 秒，总计 42.6 秒。
+
+`CORTEXOS_HARNESS_SESSION=1` 下运行 `npx playwright test --project=harness-codex-session --grep 'controlled transport' --output=../../artifacts/harness-aider-codex-regression`，1 项通过，37.2 秒，总计 39.3 秒。按五条新增任务的归属标签逐条确认执行与评分容器无残留。打开独立 QA 验收窗口，PID 9684，窗口可见，系统未授予强制前置。
+
+已发出真实模型单题确认弹窗，待明确回复。固定回复专项实际模型调用数为 0。
+
+
+## 2026-11-10：Aider Provider 转发函数接入
+
+用户要求开始接入。修改aider_channel.rs，新增verify_aider_provider.py，复用Ollama目录/chat方法，新增取消与有界HTTP响应，未改旧session文件或历史计划。`cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml`通过，5项未接入代码警告保留。实际 `py -3.13 -X utf8 scripts/harness/verify_aider_provider.py`：首轮失败定位旧false通知误判取消，独立保留first-cancel-failure.log；改为只在true/通道关闭时取消后，重跑1项通过、100过滤，服务端核对唯一假chat请求的固定预算参数。没有本地模型推理、下载或云端；没有完整单测、UI改动或桌面更新。证据及未完成项见[Aider进度](harness-fit-d3-aider-transport.md)。剩余容器stdio/worker、受限副本/独立评分、存储/UI、原生回归及另批真实单题，d.2尚未完成，无新增外部阻断。
+
+## 2026-11-10：D3-3d.2 后端协议边界
+
+用户要求继续，新增aider_channel.rs及harness/mod.rs注册，具体限制与未接入项见[Aider进度](harness-fit-d3-aider-transport.md)。保留旧session.rs、bridge、descriptor及文件IO内容，无数据库/UI/依赖修改。实际 `rustfmt --edition 2024 apps/desktop/src-tauri/src/benchmark/harness/aider_channel.rs` 完成。首次cargo test带--exact导致0项匹配，未计通过；移除后执行 `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml aider_boundary_budget_and_response`，1项通过、99项过滤，编译通过，保留4项尚未接入的dead_code警告。此专项是模型/执行信任边界所必需，不运行完整单测。没有模型调用、下载、前端构建或原生界面检查。
+
+已完成本步协议/预算边界函数；剩余Provider调度与真正取消/超时、受限副本和独立评分、存储/UI和原生回归，最后实际模型单题另弹窗。尚无完整Aider会话入口，d.2未完成；没有新增安装或模型授权阻断，当前待办是实现接线。未提交推送。
+
+## 2026-11-10：D3-3d.2 协议观察与固定回复编辑
+
+用户验收d.1后继续。复核development、开发规范、实施计划和既有session桥；沿用ponytail复用原则。新增 `scripts/harness/probe_aider_transport.py` 与 [进度说明](harness-fit-d3-aider-transport.md)。实际运行 `py -3.13 -X utf8 scripts/harness/probe_aider_transport.py`：配置错误退出2保留，修正后观察固定400请求；再次改为固定200回复后真实编辑与明确断言通过。外层docker命令退出0不代替内部程序结果，均分别记录。新增明确镜像指纹/本地端点/路径/请求数和大小拒绝后，执行最终脚本复核。无模型、无下载、不运行候选代码，无单元测试或前端修改。d.2生产接入尚未完成，剩余详见进度说明；未提交推送。
+
+## 2026-11-10：D3-3d.1 Aider 无模型检查交付
+
+实际范围与文件见 [交付说明](harness-fit-d3-aider.md)。沿用 ponytail 最小复用；没有新数据库迁移或新UI框架。工具准备已获准，用户已关闭旧窗口；全程无本地推理、云端模型、模型下载或个人登录。未提交推送，保留原D1–D3未提交变更。
+
+实际执行（仓库根，注明者除外）：
+
+- 隐藏启动已有 Docker Desktop；只读发现上次准备容器退出137、OOMKilled=false，仅清理指定任务容器，未推断退出原因。
+- `py -3.13 scripts/harness/prepare_aider.py`：首次仍在 Docker cp 阶段失败，完整输出保留。修复为容器内固定代码导出有界归档后重跑成功：108个wheel、125519775字节、全部官方文件hash一致；最终Docker build使用network=none、固定BASE digest、pull=false，pip check无依赖冲突。最终镜像及锁指纹见交付说明。没有放宽实际运行限额。
+- `npm --prefix apps/desktop run build`：类型检查、Vite构建通过，保留大包提示；源码顺序调整后重新构建通过。
+- `cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml`：通过（11月9日）。`cargo build --offline --features tauri/custom-protocol --manifest-path apps/desktop/src-tauri/Cargo.toml`：通过；固定镜像/锁及版本判定修改后分别重建通过，末轮31.66秒。
+- 在 `apps/desktop`，追加现有Docker CLI路径并设置 `CORTEXOS_HARNESS_AIDER_RUNTIME=1`，执行 `npx playwright test --project=harness-aider-runtime --output=../../artifacts/harness-aider-native`：1通过，30.7秒/总34.0秒。流程检查通过，但版本观察误判为blocked：实际 `python -I -m aider --version` 输出 `__main__.py 0.86.2`。修正明确匹配此实际入口输出，不改写已保存结果。
+- 同目录，额外设置 `CORTEXOS_AIDER_PRIOR_DATA` 为首轮独立QA库目录，执行 `npx playwright test --project=harness-aider-runtime --output=../../artifacts/harness-aider-native-final`：1通过，18.0秒/总20.3秒。版本/10项参数/七项外层检查通过，错误任务、镜像、确认、额外策略、跨用途/工作区请求拒绝，停止、强杀恢复清理通过。旧Claude与首轮Aider记录逐项相等。没有运行完整单测集。
+- `py -3.13 -X utf8 artifacts/harness-aider-audit/verify.py`：integrity ok、外键空，23条旧任务及其事件逐列相同；其余业务表与schema/迁移一致，3条新检查计划及事件hash正确。设置/新增QA工作区属于预期变化，生产库未访问。
+- 两次 `docker ... ps -a` 分别按本片用途label和准备容器名前缀检查，输出为空。两份Python脚本AST检查通过。
+- 原生截图6张：1366×768、1600×900、1920×1080浅深主题，无横向溢出；查看1366浅色、1920深色。不是系统150%缩放、读屏或手动拖动验证；不另跑浏览器专项。
+- `node artifacts/harness-aider-acceptance/launch.cjs`：打开独立QA结果，读取记录和历史数不变，无新模型/容器；`powershell.exe -NoProfile -ExecutionPolicy Bypass -File artifacts/harness-aider-acceptance/show.ps1 -AppProcessId 24804`：visible=true，foregroundGranted=false。窗口已可见，系统未授予强制前置。
+
+D3-3d.1 完成，停在人工验收。剩余：d.2受控Aider模型通道、固定回复/单题与独立评分，D4组合对照，D5报告/图谱。实际门槛为工具内层能力和模型通道尚未验证，canRun=false，任务Not Run；无新模型批次授权。准备脚本/窗口启动辅助曾遇到编码问题，UTF-8读取后修复；没有把辅助失败列为通过。
+
+
+## 2026-11-10：D3-3d.1 Aider 准备恢复（进行中）
+
+用户已批准 Python 3.12、Aider 0.86.2 与基础依赖准备，并关闭验收窗口。新增固定用途和共享运行前检查 UI；未增加数据库迁移。已执行 `cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml`、`npm --prefix apps/desktop run build`，均通过；前端保留大包提示。实际 CLI、原生专项、桌面构建尚待完成，不提前标记通过。
+
+准备脚本初次遇到 Docker 未启动、只读根下临时目录缺失、Windows 日志解码和停止容器 tmpfs 无法复制问题，已分别定位，日志保留在 `artifacts/harness-aider-runtime/last-command.log`。改为容器运行期间下载和复制后清理；未放宽运行检查限额。跨日恢复发现旧准备容器已退出 137，OOMKilled=false，无法据此推断退出原因；只清理该已识别的任务容器。隐藏启动已安装 Docker Desktop，继续原授权工具准备。无模型、个人登录或项目代码执行。
+
+
+## 2026-11-09：进入Aider工具准备，许可前核对
+
+用户在D3-3c交付后要求继续。复核原D3顺序、development、开发规范、实施计划和既有runtime/session；沿用ponytail最小复用。查阅官方脚本、参数、Docker说明和PyPI元数据，确认Aider0.86.2要求>=3.10,<3.13，主wheel大小377009及SHA-256。宿主初次PyPI请求TLS认证失败，正常升级权限只读请求成功，未关闭TLS校验。形成[Aider方案](harness-fit-d3-aider-plan.md)：先独立Python3.12工具环境/无模型检查，原3.13评分不改；后接受控单题。当前未下载镜像/包，未运行Aider或任何模型，无应用源码修改；不跑无关单测。剩余本片工具准备/无模型验收、d.2真实通道/单题、D4组合、D5报告图谱。
+
+## 2026-11-09：D3-3c真实单题收尾与验收窗口
+
+用户批准的2026-11-05一次真实Claude/Qwen会话已完成：4请求、7/7独立Python断言通过、实际文件修改及失败工具命令保留、未写回原项目。专项1条通过约1.1分钟；具体命令、Token/时间口径和限制见[交付说明](harness-fit-d3-claude-session.md)。上次窗口启动因自动审批额度失败未执行，本轮正常审批恢复后仅审计历史和打开窗口，无新模型调用。只读数据库对照19条旧任务及事件、其他表一致，hash通过。验收启动脚本成功，PID19724，visible=true/foregroundGranted=false；截图已查看、选中结果与快照一致、历史数量未变。无业务代码修改，不重复单测；未提交推送。停在D3-3c验收，剩余Aider、组合对照、报告/图谱。
+
+## 2026-11-05：D3-3c实现与无模型验证，真实单题待许可
+
+用户已关闭验收窗口并要求继续。沿用ponytail最小复用和现有UI规范，完成[Claude本地单题通道](harness-fit-d3-claude-session.md)所列文件、用途隔离、真实CLI固定回复专项和Codex回归。执行命令、首次失败及修复、截图和数据审计见该说明；实际两项协议边界通过、前端/内嵌桌面构建通过、Claude原生42.8秒与Codex回归39.7秒通过。没有跑完整单测，没有任何真实推理/云端/模型下载。19条旧任务及全部事件不变，5条新受控会话hash核对，其他领域表内容不变，两类会话容器无残留。
+
+Docker原先未启动，隐藏启动既有Docker Desktop后Linux引擎29.9.2可读。Ollama原先拒绝连接，隐藏启动既有serve PID4920，仅回环、关闭cloud、单并行；只读tags/ps核对实际模型指纹且loaded列表为空。本批模型许可弹窗已发出，等待答复，不将历史许可复用。当前未启动最终验收窗口，未进入Aider/D4/D5，未提交推送。
+
+
+## 2026-11-03：D3-3b Claude依赖、独立兼容策略与实际Bash隔离
+
+用户在D3-3a后要求“往下做”，按[本片方案](harness-fit-d3-claude-sandbox-plan.md)继续；实际范围、文件清单及限制见[交付说明](harness-fit-d3-claude-sandbox.md)。复核AGENTS、development、开发/实施规范和现有调用链，沿用ponytail的最小复用和ui-ux-pro-max的标签/确认/真实反馈原则，没有新设计系统或页面重排。git根仍D:/vibecoding/CortexOS，保留原D1–D3未提交改动，不提交/推送，不读取Gittoken。用户先后明确批准两项独立范围：官方Debian依赖镜像；最多三组固定内核规则对照且证据通过后仅用于Claude。没有本地推理、向量、云端、个人登录或项目任务。
+
+### 准备、只读诊断与真实失败
+
+实际查阅Claude CLI/headless/sandbox文档、官方SRT源码、Debian bubblewrap/socat、对应bubblewrap0.12.0源码及Linux user_namespaces/no_new_privs。只读mmap检查已缓存的固定CLI，发现max-turns参数定义；这不作为实际解析或预算执行证据。首次`py -3.13 -X utf8 artifacts/harness-claude-sandbox/inspect.py`因Docker引擎管道不存在退出1，未创建容器。只读确认已有Docker Desktop路径后，`Start-Process -FilePath <现有程序> -WindowStyle Hidden`启动，无安装/系统设置。再执行同命令退出0、自有容器清理。
+
+真实系统为Debian13/trixie。两组固定参数（控制组、加max-turns 1组）均在`--cortexos-invalid-option`退出1、stdout空，print/help退出0；证明参数被解析，未启动模型会话。原始inspection.json保留。不能把这个检查当实际模型回合预算已执行。
+
+用户批准依赖下载后，从根执行：
+
+```powershell
+$env:PATH = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin;$env:PATH"
+py -3.13 -X utf8 scripts/harness/prepare_claude_sandbox.py
+py -3.13 -X utf8 artifacts/harness-claude-sandbox/inspect.py --dependencies
+```
+
+构建前核对原Claude标签准确Image ID，使用HTTPS Debian官方源、已有archive keyring及APT签名/包hash校验。实际下载约10.1MB索引、536kB包；bubblewrap0.12.0-1~deb13u1、socat1.8.0.3-1+deb13u1、libwrap0 7.6.q-36新增，0升级/删除、无procps推荐包。debconf按无TTY降为Noninteractive，不当作安装失败。镜像2258d386fb20be9cc16f1d6867e1e34cc6d3c2e13f33ca07af7fbdc370dba89f构建退出0，原镜像55de5386...不变。仅APT准备阶段联网，不称本次依赖构建为离线；运行检查全部network=none。包hash/版本/来源实际读取保留。依赖可用但原默认bwrap仍因namespace权限退出1，自有容器已清理。
+
+### 三配置组与能力字段审查
+
+`py -3.13 -X utf8 artifacts/harness-claude-sandbox/prepare-review.py`只准备独立评审文件，不应用配置。基线为已核验的官方Moby快照，明确不是安装引擎过滤器导出。用户另行确认具体unshare/clone/mount/umount2/pivot_root/chroot及最多三组可信无模型对照后执行：
+
+```powershell
+py -3.13 -X utf8 scripts/harness/check_claude_seccomp.py
+```
+
+三组（显式官方基线、userns、bubblewrap）均记录准确归属并完成清理。基线及userns下实际Claude Bash结果仍为bwrap错误；即使CLI最终退出0也没有标通过。bubblewrap候选可运行真实Bash工具，目录/网络等保护通过，但初轮将内层CapBnd与实际可用能力混作全0条件，因此检查未通过，comparison.json完整保留。
+
+同一第三组规则内补充只读字段和反向检查，没有增加第四种配置或放宽权限，分别执行：
+
+```powershell
+py -3.13 -X utf8 scripts/harness/check_claude_seccomp.py --candidate-details
+py -3.13 -X utf8 scripts/harness/check_claude_seccomp.py --candidate-boundary
+```
+
+两次各有一个自有诊断容器，独立comparison-details.json/comparison-boundary.json保存，不覆盖初轮或声称总共只有3个容器。明细确认外层CapEff/CapBnd=0，内层UID65534、CapEff/Prm/Amb=0，CapBnd=000001ffffffffff。按Linux文档区分能力上限与已有能力，新固定协议另加nestedUserNamespaceDenied：unshare(NEWUSER)与clone(NEWUSER)实测均EPERM。外层全0、内层无可用能力、NNP=1及13项反向保护全部通过；原未通过的结果保留，不将非零CapBnd写成0。初轮部分memory max回收计数非0，所有实际OOM/oom_kill均0，256MiB限额未扩大。
+
+固定夹具仅在容器内部回环返回最多两条预设Messages消息，唯一命令为可信隔离检查；没有连接Ollama/外部模型或个人认证。不安装额外SRT/模型来冒充当前Claude程序。实际CLI使用严格沙盒配置和固定命令的明确允许规则，没有bypassPermissions、acceptEdits、未隔离重试或弱化嵌套。夹具模型名、Token及CLI估算费用仅为调试原文，不是真实模型计费或成绩。
+
+### 实施与实际可执行检查
+
+复用原worker、计划/事件/用途/归属及临时文件机制，Claude固定策略ID/描述/清理文件名单独限定；Codex公开ID仍不接受Claude，反向亦然。新计划claude-runtime-check-2、probe2保存源码hash，旧check1/probe1仍按原定义读取。基础/依赖镜像与默认/兼容策略选择及确认沿用现有控件，当前记录单独标实际策略及旧版。不新增Tauri命令/权限、数据库迁移、依赖、锁文件或CSS，不修改知识/聊天/3D逻辑。
+
+- 仅对修改的Rust文件执行`rustfmt --edition 2024 --config skip_children=true ...`；`cargo check --offline`通过55.14秒。`npm.cmd run typecheck`通过。
+- 必要边界`cargo test claude_gate_ --lib --offline -- --nocapture`：2通过/96过滤，编译31.86秒、测试0.02秒，覆盖缺失/伪造证明不能通过、模型调用协议拒绝、两个公开策略互拒及临时文件互不删除。既有`cargo test codex_policy_is_fixed --lib --offline -- --nocapture`：1通过/97过滤，编译9.24秒、测试0.03秒。没有跑无关全套单元。
+- `npm.cmd run tauri -- build --debug --no-bundle`通过，Vite15.84秒、Rust41.19秒；index-BoV_YWSl.js、CSS仍index-CCwtNeOJ.css，保留已有chunk大小警告。npm新版本提示没有触发升级。
+
+从apps/desktop执行：
+
+```powershell
+$env:PATH = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin;$env:PATH"
+$env:CORTEXOS_HARNESS_CLAUDE_RUNTIME = '1'
+$env:CORTEXOS_HARNESS_CLAUDE_PREPARED = '1'
+$env:CORTEXOS_CLAUDE_COMPATIBLE = '1'
+npx.cmd playwright test --project=harness-claude-runtime --output=../../artifacts/harness-claude-sandbox-native
+```
+
+**1通过，场景32.3秒/总34.8秒**。SQLite backup原D3-3a QA库，实际WebView2/CLI/固定回复，旧Claude和Codex完整结果不变、错误确认/hash/策略/用途/工作区拒绝、完成、停止、暂停自己容器后强杀自己QA进程、重开interrupted及手动清理均通过。新完成5c478974...、停止0335ac13...、中断后清理96091ada...。最终sandboxReady=true仅为固定无模型检查，canRun=false，模型通道未验证，项目任务Not Run。保存1366×768/1600×900/1920×1080浅深6图及主题/无横向溢出断言，人工查看1366浅色、1920深色；没有新Windows缩放/读屏实测。
+
+`py -3.13 -X utf8 artifacts/harness-claude-sandbox-native/verify.py`退出0：integrity ok、FK空、schema11/迁移checksum相等，11条旧Claude/Codex检查/会话及事件逐列不变，新旧6条Claude计划/事件hash及新检查源码hash相符，自有容器和临时策略文件均无残留；messages/knowledge_nodes/knowledge_versions/execution_runs/context_snapshots/benchmark_runs均0且不变。database-verification.json保存。没有模型加载/推理或生产数据写入。
+
+### 验收窗口与阶段剩余
+
+`node --check artifacts/harness-claude-sandbox-acceptance/launch.cjs`通过；执行该launch.cjs打开新版进程17176、CDP63305，独立QA库，定位项目适配→4.测试任务→Claude运行前检查。切换旧版记录“旧版检查”可见，再回新通过记录，selected完整对象及history数量保持。只读操作，不新建检查、容器或模型。legacy.png/ready.png保存，ready已查看。`powershell.exe -NoProfile -File artifacts/harness-claude-sandbox-acceptance/show.ps1 -AppProcessId 17176`确认visible=true、foregroundGranted=false；窗口保留，任务栏可切换，不声称抢到前台。
+
+本片计划/交付、实施、数据/UI/测试与文档索引同步。`git diff --check`通过，仅已有CRLF归一提示；标准库AST检查4份Python源文件语法通过，本片两份文档3处相对链接有效。当前固定环境的D3-3b门槛已交付，停止验收；真实模型通道及任务仍阻断于未实现的D3-3c。剩余：D3-3c受控本地Messages/实际预算/唯一单题（模型逐批弹窗）、D3-3d Aider、D4组合对照、D5报告/图谱。完整仓库/跨文件、更多模型和长期压力继续后置。
+
+## 2026-11-02：D3-3a 获准工具准备，真实无模型检查交付
+
+用户明确答复“允许下载并完成无模型检查（推荐）”，覆盖官方Linux Claude Code 2.1.309、项目缓存、已有Python镜像离线构建及无模型版本/参数/隔离观察。本轮没有系统安装、个人认证、推理、向量生成、项目任务或付费API，不扩展Docker权限。按[本片计划](harness-fit-d3-claude-plan.md)完成[交付与阻断说明](harness-fit-d3-claude.md)，停在D3-3a验收。下文同日“工具准备待确认”条目保留为取得本次答复前的历史记录。
+
+### 准备命令与失败记录
+
+`git rev-parse --show-toplevel`再确认D:/vibecoding/CortexOS。保留D1–D3已有未提交改动，未提交、推送或读取Gittoken。
+
+首次PowerShell缓存路径保护循环误用`Split-Path -LiteralPath ... -Parent`，重复参数集错误；停止自己会话59235（Ctrl-C、退出1），当时尚未下载。改用现有Python `guard()`检查目录及固定目标，无链接/联接后建缓存。获准HTTPS下载使用`Invoke-WebRequest`固定URL/OutFile，二进制Timeout900秒；另取同版本manifest.json、manifest.json.sig和官方keys/claude-code.asc，文件仅在artifacts/harness-claude-runtime/。
+
+首次`prepare_claude.py --build`因Git MSYS GPG不识别Windows绝对反斜杠路径而在import退出2；未跳过签名或构建。脚本改为受保护缓存cwd下的固定相对文件名、独立verification-keyring、原`--no-options`及禁止自动取钥参数，兼容现有GPG，不读取个人公钥环。修正后从仓库根执行：
+
+```powershell
+$env:PATH = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin;$env:PATH"
+py -3.13 -X utf8 scripts/harness/prepare_claude.py --gpg E:\Git\usr\bin\gpg.exe --build
+```
+
+实际退出0。二进制293469552字节，SHA-256 `4d704a8aecbe038affa3000f498ae17c1b4f753add8facb8764120affc99b658`；清单签名和固定主公钥指纹`31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE`通过。基础Python ID核对不变；network=none、pull=false、Dockerfile无RUN安装，构建专用镜像`sha256:55de5386970372e49b2d221e15d870e36902c1e5d3e37eab9118fe4e9919f32e`。BuildKit开始有一次http2 pipe closed警告，后续构建完整退出0，不写成构建失败。未准备bwrap/socat或套用Codex策略。
+
+### 真实程序、停止恢复与数据证据
+
+入口实现阶段已经通过类型检查、离线Rust检查、桌面构建、单个必要claude_gate_边界、空镜像原生专项和旧Codex无模型回归，见下节。本次只修改准备脚本的GPG路径及交付文档，未重复无关单元或模型验证。
+
+从apps/desktop执行：
+
+```powershell
+$env:PATH = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin;$env:PATH"
+$env:CORTEXOS_HARNESS_CLAUDE_RUNTIME = '1'
+$env:CORTEXOS_HARNESS_CLAUDE_PREPARED = '1'
+npx.cmd playwright test --project=harness-claude-runtime --output=../../artifacts/harness-claude-runtime-prepared
+```
+
+**1通过，场景16.2秒/总19.2秒**。真实WebView2和独立QA库（从上次实跑库SQLite backup），实际Claude程序固定探针；确认弹窗、任务/hash/用途/工作区拒绝、错误跨Codex API拒绝、停止、暂停自己容器后强杀自己QA进程、重开interrupted/未清理、手动清理closed均通过。旧完成记录与Codex实跑结果保持。实际三条Claude记录为260a45f2...完成、c7dacdaa...停止、14fc129a...中断后清理，modelCalls=0、taskExecution=Not Run。专项流程通过不代表所有环境条件通过：
+
+- 文件指纹通过，版本命令退出0且输出2.1.309 (Claude Code)。
+- 帮助命令退出0，22311字符；普通帮助中未列出`--max-turns`，自动化参数维持blocked。没有据此断言隐藏参数完全不支持，也未删除必要预算条件来换取通过。
+- bwrap/socat均null；默认策略下unshare(NEWUSER)返回errno1。没有下载依赖或放宽权限。
+- 实际UID65534、CapEff/CapBnd均0、NoNewPrivs1、Seccomp2、无Docker Socket；实际配置无网络/宿主挂载，资源限额保留，memory.events的OOM计数0。没有真正运行Claude内层Bash沙盒，模型通道尚未实现，sandboxReady/canRun始终false。
+
+专项截取1366×768、1600×900、1920×1080 CSS视口各浅深6图并核对主题属性、无横向溢出；实际查看1366浅色与1920深色，没有新系统缩放/读屏实测。证据artifacts/harness-claude-runtime-prepared/内runtime.json及截图。
+
+`py -3.13 -X utf8 artifacts/harness-claude-runtime-prepared/verify.py`首次普通沙盒因启动Docker的WinError5退出1；经执行审批后原命令只读复核退出0：integrity ok、FK空、schema11及迁移checksum不变，三条计划/事件hash正确、相关容器无残留；源库8条Codex检查/会话及事件逐列字节相等，messages/knowledge_nodes/knowledge_versions/execution_runs/context_snapshots/benchmark_runs均0且不变。两份Python AST语法检查通过。只写独立证据database-verification.json，不修改数据库。
+
+### 验收窗口与剩余
+
+`node --check artifacts/harness-claude-runtime-acceptance/launch.cjs`通过。执行`node artifacts/harness-claude-runtime-acceptance/launch.cjs`打开调试版，进程15516、CDP65512，使用本次独立QA库，定位评测→项目适配→4.测试任务→Claude Code运行前检查，选择已有完成记录。再次核对selected完整对象和history数量不变，未发起新检查、代码或模型调用。ready.png已实际查看。
+
+`powershell.exe -NoProfile -File artifacts/harness-claude-runtime-acceptance/show.ps1 -AppProcessId 15516`：visible=true、foregroundGranted=false，窗口保留供验收，不声称已抢到前台，可从任务栏切换。
+
+文档同步实际状态、数据/UI/测试规范和阶段剩余；`git diff --check`通过，仅已有CRLF归一提示。Python标准库只读核对本片计划/交付的3处相对文档链接均有效。当前D3-3a交付后停止。实际阻断为普通帮助缺预算参数证据、bwrap/socat缺失、默认命名空间拒绝；后续D3-3b先解决安全门槛（下载/策略变化另确认）、D3-3c受控Messages/预算/唯一真实任务（每批模型另弹窗）、D3-3d Aider，之后D4组合对照与D5报告/图谱。完整仓库/跨文件、额外模型和云端后置。
+
+## 2026-11-02：D3-3a Claude入口与共用检查流程，工具准备待确认
+
+用户在D3-2c交付后要求“做”。复核新版AGENTS、development.md、开发/实施规范及D3顺序，按[本轮计划](harness-fit-d3-claude-plan.md)先做Claude，再单独接Aider。实际范围/文件/未完成项见[harness-fit-d3-claude.md](harness-fit-d3-claude.md)。本片**尚未完成真实Claude验证**，不标为D3-3a已验收；工具下载弹窗仍待用户答复，不推定其同意。
+
+### 核实与实施
+
+`git rev-parse --show-toplevel`确认D:/vibecoding/CortexOS；保留此前D1–D3未提交工作，没有提交或推送，未读取Gittoken。`rg`少量PowerShell路径通配写法未命中，随后定向读取文件，不把失败当检查通过。本轮继续ponytail的最小复用及ui-ux-pro-max的可见反馈、表单标签/恢复建议，沿用现有样式。
+
+实际查阅Claude官方headless、CLI、setup、sandboxing及Ollama官方Claude接入文档。确认Messages协议不同于Codex Responses；Linux sandbox依赖bwrap/socat，默认缺依赖可能回退，后续须failIfUnavailable并禁止非沙盒重试。文档的64k+建议没有应用到本机4k参数，不运行可能自动下载模型的ollama launch，不读取个人Claude登录或Provider密钥。
+
+官方stable页面web抓取不可访问；获准只读HTTPS的Invoke-RestMethod取得stable=2.1.309及manifest，Linux x64293469552字节/hash4d704a8aecbe038affa3000f498ae17c1b4f753add8facb8764120affc99b658。npm registry latest元数据是2.1.316，未用latest替换stable。普通Get-Command未发现宿主Claude，未扫描个人目录。已有Git位于E:/Git，普通权限未读到gpg，进一步只读确认E:/Git/usr/bin/gpg.exe与gpgv.exe存在。没有执行gpg导入/验签或下载公钥。
+
+形成精确下载/缓存/镜像方案后，通过交互弹窗请求仅准备官方Linux工具约293MB、固定Python镜像离线构建、无模型检查的许可。当前没有收到答复，因此**未下载Claude二进制/签名/公钥，未构建Claude镜像、未运行CLI**。prepare_claude.py和Dockerfile已实现固定大小/hash、专用公钥环/固定签名指纹、原有基础镜像核对与离线构建；这些执行路径尚未实测，不声称验签完成。
+
+实现四个精确Claude业务接口、直接已发布函数版本准入和harness_claude_runtime用途。原runtime worker、事件/历史/hash/终态、关闭清理以内部Codex/Claude两个固定枚举复用；旧Codex公开接口、v1/v2读取及原始时间保持，Claude只允许默认Docker策略。schema仍11，无迁移/依赖/锁文件变化，不写聊天、知识或模型成绩。固定Claude探针只包含version/help/环境观察，内层沙盒与模型通道始终未验证，不把依赖/参数当安全执行证明。新增UI沿用任务折叠段/SelectMenu/FitStatus/AppDialog；镜像未准备时禁用检查，错误和下一步可见。
+
+### 实际执行的检查
+
+- `cargo check --offline`通过，59.97秒；`npm.cmd run typecheck`通过。
+- `cargo test claude_gate_ --lib --offline -- --nocapture`：**1通过、96过滤**，测试0秒/编译46.21秒。仅新信任边界：错误程序指纹、混入模型调用拒绝，依赖/命名空间存在不能把真正Claude sandbox或模型通道标为已通过；构造数据不当真实环境证据。没有跑无关全套单元。
+- `npm.cmd run tauri -- build --debug --no-bundle`通过，Vite15.60秒、Rust47.00秒；index-u9XVt_L9.js，CSS仍index-CCwtNeOJ.css。保留已有大chunk提示，不升级依赖或发安装包。
+- Docker初次info无法连接管道；按既有许可隐藏启动已安装Docker Desktop，后续只读info确认linux，无重新安装或系统设置变化。
+- 设置`CORTEXOS_HARNESS_CLAUDE_RUNTIME=1`执行`npx.cmd playwright test --project=harness-claude-runtime --output=../../artifacts/harness-claude-runtime-empty`：**1通过，4.5秒/总6.4秒**。没有设置PREPARED，实际仅验证真实WebView2/独立库的空镜像/禁用、输入/hash/用途/工作区拒绝、旧Codex实跑记录原样及三尺寸浅深6图/无横向溢出。没有Claude程序/停止恢复或模型调用，不能把测试名中的prepared恢复分支算作已运行。
+- 共用worker/记录改变，定向执行既有无模型回归：设置`CORTEXOS_HARNESS_CODEX_RUNTIME_REAL=1 CORTEXOS_CODEX_COMPATIBLE=1`，`npx.cmd playwright test --project=harness-codex-runtime --output=../../artifacts/harness-claude-codex-regression`：**1通过，16.9秒/总18.8秒**。真实旧Codex/Docker的专用策略/十项探针、v1/v2历史、停止、强杀恢复/手动清理均通过，未将策略套给Claude，无模型调用。
+- 标准库Python只读核对上述两份独立QA库：integrity ok、FK空、schema11及迁移checksum与原库一致；普通messages/knowledge_nodes/knowledge_versions/execution_runs/context_snapshots/benchmark_runs均0不变，Claude检查记录0。首份库的旧真实Codex会话105d3b8e...及事件逐列字节相等；检查计划hash正确。证据artifacts/harness-claude-runtime-empty/database-verification.json。
+
+实际截图已查看1366浅色与1920深色，其他两尺寸分别留图；属于WebView2 CSS视口，不是新系统缩放/读屏验证。没有打开最终验收窗口，当前本片仍待工具准备和真实CLI检查。未做付费API、模型推理、向量生成、项目代码任务或其他模型下载。
+
+### 当前剩余与门槛
+
+已完成代码、空态及旧流程验证。实际阻断是**工具准备许可待回复，Claude程序/镜像尚未准备**；尚不能把可能的依赖、权限或资源限制说成实际发现。确认后依次下载/验签/构建、显式PREPARED分支验证真实程序/停止恢复，再交付D3-3a验收。后续D3-3b内层安全条件、D3-3c受控Messages/预算/单题（模型另弹窗）、D3-3d Aider，再D4组合和D5报告/图谱，保持分片。
+
+## 2026-11-01：D3-2c 受控模型通道与首个真实单题
+
+用户授权继续，并要求每步交付列出当前阶段剩余步骤；已同步AGENTS。保存关闭旧窗口后继续，保留此前D1–D3未提交改动，未提交或推送。复核development.md、开发/实施规范、D3计划、实际Provider/TaskSlot/Docker/任务及评分调用链，沿用ponytail和现有UI组件。交付及文件清单见[harness-fit-d3-session.md](harness-fit-d3-session.md)，本片方案见[harness-fit-d3-session-plan.md](harness-fit-d3-session-plan.md)。
+
+### 协议与隔离实现
+
+新增harness_codex_session用途、三个精确业务接口、计划/事件hash、模型/检查/任务归属准入、停止/关闭/中断清理。复用原表、TaskSlot、Docker控制器、Ollama、选定函数包、范围校验与独立逐断言评分；schema仍11，无依赖/锁文件或旧迁移修改，不写聊天、长期记忆、知识库、原项目或普通BenchmarkRun。前端使用SelectMenu/FitStatus/AppDialog及折叠段，原始检查标历史快照，未就绪仍能读执行历史。
+
+已实际查阅Codex官方Provider/config-reference和Ollama官方OpenAI兼容文档。Ollama兼容接口不能直接限制上下文，选择有界Responses文本/函数→原生chat适配，不假设Codex窗口参数能约束显存。容器保持无网络，无宿主挂载/Socket/端口映射；仅容器回环HTTP，经Docker stdin/stdout送Rust，固定已有Provider。不读取个人认证。每任务最多4次请求、编程阶段180秒、单次120秒；原生num_ctx4096/num_predict512/temp0/keep_alive0。缓冲响应后发SSE，不宣称逐Token首字延迟。
+
+真实无模型探针确认CLI0.166.0的非交互exec自动拒绝提权，保留workspace-write内层保护；禁用联网搜索、多代理与目标自动续跑后获得实际函数工具清单。文本配置2只向模型提供exec_command/write_stdin，记录relay/IO/bridge/workflow源码hash和真实副本路径。普通文本不会转成工具调用，错误参数/名称和额外权限被拒绝。
+
+### 实际失败与修正
+
+- 首次`python scripts/harness/probe_codex_transport.py`遇默认Python2.7缺pathlib，未执行容器；改用现有`py -3.13`。Docker首次管道离线，按已有许可隐藏启动已安装Docker Desktop，无重装/下载/系统修改。Ollama此前未运行；隐藏启动已安装serve，进程16188，仅127.0.0.1、关闭云端，GET元数据时loadedModels为空，未加载/预热。
+- `cargo check --offline`首次报告cancel可变/不可变借用冲突，移出初始状态读取后通过5.63秒。第一次原生受控检查7.5秒失败于测试create_workspace参数，修正name。
+- 后一次用普通`cargo build --offline`误生成开发URL版本，原生启动等待tauri.localhost而停在127.0.0.1:1420。结束仅本轮QA进程21808，改回Tauri完整构建；该轮2.4分钟失败保留。后续均等待构建完成再启动。
+- 受控v3实际CLI启动退出-25，尚无模型请求。同原限制无模型探针证明state_5.sqlite-wal触及1MiB文件限制，SIGXFSZ；仅Codex会话fsize调至原HOME4MiB额度内，CPU/内存/PID/目录总额与默认Python限制不变。复验日志为2,154,792字节、CLI可发到固定错误响应器，不接模型。
+- 受控v4可走协议但文件未修改，独立测试4/7失败，正确保留失败。实际工具输出为bwrap不能建立/workspace/.git。预建四个空root/0555保护目录，仅Codex采用固定目录策略；不放开额外文件/子目录。移除不必要的常驻stdin读线程，避免失败退出时Python buffered-reader锁错误。
+- 受控v5全部行为通过37.2秒/总39.4秒，但直接写错主题属性，所谓dark截图仍浅色，不据此声称深色验证。最终改用真实“外观”控件并断言data-color-scheme，再检三尺寸。
+
+### 实际命令与结果
+
+- `git rev-parse --show-toplevel`确认D:/vibecoding/CortexOS；git status保留旧工作，Gittoken未读取/输出。
+- `py -3.13 scripts/harness/probe_codex_transport.py`：固定错误响应器、无模型请求，实际协议和资源失败/修复观察位于artifacts/harness-codex-transport。早期默认Python和PowerShell路径glob/权限读取失败不记作成功。
+- `npm.cmd run typecheck`通过；后续每次Tauri构建也含类型检查和Vite。`cargo check --offline`修正后通过。必要`cargo test codex_bridge_ --lib --offline -- --nocapture`：1通过、95过滤；最终0.01秒/编译29.46秒。没有跑无关全套单元。
+- `npm.cmd run tauri -- build --debug --no-bundle`最终通过，Rust39.31秒、Vite0.778秒；index-1Zo_NmyA.js、原CSS index-CCwtNeOJ.css。已有大chunk警告保留，无升级依赖或安装包发布。
+- `CORTEXOS_HARNESS_SESSION=1 CORTEXOS_HARNESS_SESSION_LEGACY=1`后执行`npx.cmd playwright test --project=harness-codex-session --grep 'controlled transport' --output=../../artifacts/harness-codex-session-controlled-final`：**1通过46.0秒，总48.3秒**。真实Codex/Docker/WebView2，受控Provider，真实模型调用0；命令修改+7断言、四请求截停、未知工具名拒绝、取消、强杀恢复/手动清理、旧真实失败原样、三尺寸浅深6图及无溢出均通过。此前v1–v4失败及v5主题问题单独保留，不覆盖为通过。
+
+### 两次分别授权的真实本地单题
+
+实际模型列表确认Ollama0.40.9，qwen3:4b-instruct digest0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0，另有base标签但没有调用。每批都先按AGENTS弹窗说明模型、唯一adjust(n)任务和4请求/4096/512/120/180秒上限；两批各获用户明确答复。无付费云端、下载或自动重试。
+
+1. `CORTEXOS_HARNESS_SESSION_REAL=qwen3:4b-instruct`，真实专项输出artifacts/harness-codex-session-real：Playwright预算/清理检查1通过33.7秒/总35.7秒，**题目没有通过**。会话7bf018fc-f2d3-46e6-9485-6710a244d9e1实际4请求，模型选错view_image和路径，再误用无效会话；最后达到512上限，failed/model_output_limit，文件未改、测试Not Run。输入8017、输出743 Token；保留原文/工具输出/文件与失败。副本清理，GET/api/ps为空。
+2. 将副本准确路径与通用文本工具范围写清，不改题目/答案/断言；另行弹窗取得新一批确认。再执行同一真实专项，另设LEGACY=1从首批独立库backup、输出artifacts/harness-codex-session-real-text2：**1通过32.0秒，总34.1秒，真实题目独立7/7 Passed**。会话105d3b8e-7bd1-4247-b7aa-ceebea136071，3请求（读文件/写文件/完成），输入4974、输出357 Token，候选return max(0,n)。7个独立评分容器全部移除。上一批失败原样保留，不拿受控替身成绩冒充模型成绩，也不把单题当排行榜。
+
+### 交付核对与验收窗口
+
+`py -3.13 -X utf8 scripts/harness/verify_session_delivery.py`只读核对三份隔离QA库：integrity ok、FK空、schema11及迁移checksum一致，所有本用途plan/event hash正确。首批原始job/event字节在新库与受控库相等；messages/knowledge_nodes/knowledge_versions/execution_runs/context_snapshots/benchmark_runs均0且不变。本次归属容器、临时策略文件均不存在，GET/api/ps为空；没有额外推理或清理其他容器。
+
+最终仅整理前端历史提示和未就绪时仍可读的入口后完成构建，不再次调用模型。`node artifacts/harness-codex-session-acceptance/launch.cjs`打开新版：进程18044、CDP60580、独立真实QA库。实际WebView2再次核对未就绪历史仍可读且禁止新任务、正确条件可启用、确认返回不新增job/请求、旧失败“未修改”和新通过可切换，当前新通过记录与JSON完全相等。confirmation/previous-failure/ready三图保留。`show.ps1 -AppProcessId 18044`确认visible=true、foregroundGranted=false；不强抢前台，可从任务栏切换。窗口只展示已有结果，不启动新容器/代码/模型。
+
+`git diff --check`通过，仅既有CRLF归一提示。没有完整180秒等待、耗尽磁盘、实际Windows缩放/读屏或更多任务/模型验证。Docker CLI需在应用进程PATH可用；验收只给当前进程补已有程序目录，不修改系统PATH。当前停在D3-2c验收；Phase D剩余D3-3逐个接Claude Code/Aider、D4组合对照、D5报告/图谱；完整仓库/跨文件仍后置。本轮不自动进入下一片。
+
+## 2026-10-31：D3-2b内层沙盒兼容与十项反向验证
+
+用户在D3-2a后要求继续。复核development.md、开发/实施规范、D3计划、固定CLI/副本控制器和原探针；先形成[兼容审查方案](harness-fit-d3-sandbox-plan.md)及准确候选差异，再弹窗取得用户明确批准：最多三组无模型策略对照，反向检查通过后仅用于Codex专用检查容器。实际交付见[harness-fit-d3-sandbox.md](harness-fit-d3-sandbox.md)。没有本地模型、Embedding、Agent会话或项目代码调用；D3-2整体尚未完成。
+
+### 诊断、来源和有界对照
+
+`git rev-parse --show-toplevel`确认D:/vibecoding/CortexOS，保留此前未提交改动。Docker管道当前未启动；按既有许可Start-Process已安装Docker Desktop并WindowStyle Hidden（PID4528），未安装/重启或更改系统设置。只读info/version确认Server29.9.2、SecurityOptions为内置seccomp及cgroupns，固定镜像仍71d63...。
+
+可信namespace_probe在原受限容器运行，UID65534、CapEff/CapBnd均0、NoNewPrivs1、Seccomp2/filters2，user.max_user_namespaces31182；unshare(0)/unshare(NEWUSER)均EPERM。没有更改sysctl。实际查阅Docker seccomp官方文档和Moby规则，以及OpenAI官方Sandbox/Agent approvals说明；不执行其中宽权限建议。
+
+PowerShell/urllib读取GitHub遇TLS EOF，普通curl报撤销服务离线、raw域名请求超时；均没有据此伪造来源。系统curl仅对公开文档使用--ssl-revoke-best-effort（保留HTTPS证书校验，无全局设置），通过GitHub官方内容API取得固定提交4b8214fc4971e06172938a1f1554ccff6647ee80、blob6e5e47...及原JSON。原文件SHA-256为6416b47770785a41ac59073cdc77d9fe98517df2799dc83ef207e622de3053f6，Apache-2.0许可一并保留。不声称该官方快照是安装引擎内置过滤器的精确导出。
+
+`py -3 -X utf8 scripts/harness/prepare_codex_seccomp.py`仅生成候选及review.json，无执行或应用动作。用户确认后`py -3 -X utf8 scripts/harness/check_codex_seccomp.py`执行三种固定策略组，9.32秒、全部clean=true，comparison.json保留准确归属、配置与原始输出：官方基线复现阻断；仅受限unshare让0/NEWUSER调用均成功，但bwrap仍失败；完整六类调用候选让Codex越过原阻断，但旧探针随后因execvp linux失败而退出101，未记为通过。没有增加capability、setns、关闭seccomp、全权限或旧Landlock回退。
+
+`codex --help`及`codex help sandbox`实际显示0.166.0参数格式，证明原探针多传linux，先前被更早的限制错误遮住。去掉该参数后，越界写入确实被拒绝，但原助手只捕获PermissionError，实际EROFS30导致探针失败。修正为只接受EPERM/EACCES/EROFS，并扩充十项反向观察；同一已批准第三组策略复验，不增加新策略种类。bubblewrap-safety.json实际exitCode0，十项均true、UID65534：允许目录写入、目录外及系统写入拒绝、内层访问外层已证明可达监听端口拒绝、mount/BPF拒绝、零capabilities、no-new-privileges、seccomp启用、无Docker Socket。目录拒绝errno30，mount/BPF errno1。旧失败证据保留，不回改D3-2a。
+
+### 实际修改与兼容
+
+- 新scripts/harness/{namespace_probe.py,prepare_codex_seccomp.py,check_codex_seccomp.py}，固定可信诊断/规则生成/三组对照；不安装或调用模型。
+- 新src-tauri/catalogs/codex-seccomp/{profile-v1.json,README.md,LICENSE}与benchmark/python/codex_policy.rs，固定策略ID codex-bwrap-1、hash46a3ec985105a85a8d6bb5d21974a5dd5093f176411d766f8acf51bf5f2d9f13。只追加受限unshare/clone及mount/umount2/pivot_root/chroot，保留上游默认拒绝。Docker默认仍为默认选择，原Python评分和人工副本create_args调用链不改。
+- 修改codex.rs/codex_probe.py、python.rs、harness/runtime.rs和records.rs：新protocol2/probeVersion；必须十项证据全部满足。固定临时策略文件按已持久化owner UUID命名、create_new写入，容器创建后清理；退出/恢复按名字、类型、重定向属性/hash核对，只清理本任务文件。实际SecurityOpt必须与嵌入规则语义完全相符，保存实际保护配置。新计划codex-runtime-check-2绑定策略/hash/来源，v1只读不重算。schema仍11，没有依赖/锁文件/迁移/新Tauri能力。
+- CodexRuntime.tsx只加固定策略选择、明确的风险确认、当前记录策略和通过但任务未运行的状态，沿用现有控件/列表，无新CSS或全局布局调整。扩充原生专项兼容模式及v1真实历史；同步说明、实施计划/索引、设计/检查/数据库契约。
+
+### 实际检查和构建
+
+先代码逻辑审阅，仅运行必要安全边界，不跑无关全量单元。`npm.cmd run typecheck`通过；`cargo check --lib --offline`通过51.31秒，收尾后4.46秒通过。rustfmt只格式化本片Rust模块及子文件。
+
+`cargo test codex_ --lib --offline -- --nocapture`：2通过、93未运行，首次0.01秒（编译34.93秒）；补充临时文件恢复清理后同两项复验0.03秒（编译13.14秒）。覆盖缺失/错误反向证据、命名空间分类、未知/禁用/篡改策略拒绝及临时文件创建/幂等清理；不把合成观察当真实Docker证据。
+
+`npm.cmd run tauri -- build --debug --no-bundle`通过，Rust46.46秒、Vite14.27秒；assets index-CCwtNeOJ.css/index-CWcwHUr2.js。既有大块/npm版本提示保留，未升级依赖。`py -3 -X utf8 -`用ast.parse解析四个可信Python助手，4通过，没有宿主执行项目代码。
+
+### 实际WebView2、恢复、历史及截图
+
+测试进程仅补既有Docker CLI到PATH。CORTEXOS_HARNESS_CODEX_RUNTIME_REAL=1、CORTEXOS_CODEX_COMPATIBLE=1，执行`npx.cmd playwright test --project=harness-codex-runtime harness-codex-runtime.spec.ts --output=../../artifacts/harness-codex-policy-native`：1通过，28.4秒（场景25.1秒）。从原D3-2a QA库SQLite backup创建新库，未操作生产库。
+
+实际覆盖：v1完成记录逐字段保持、新策略明确选择/确认、真实十项保护及实际SecurityOpt/hash、错误hash/未确认/工作区/用途/检查归属/未知策略拒绝、清理幂等、取消、重开不重跑；只暂停本专项容器并强杀自有QA进程，重开interrupted、阻止新检查、UI清理后closed，旧完成/停止记录不变。completed=5aa5dd48-3fa5-420c-89b5-1545e084ad4b，cancelled=2cfe36f6-454f-4496-9872-e17a93a0bfea，恢复closed=f9ab4a64-01a4-4b99-9cad-34b43911595d，均clean=true。
+
+证据目录artifacts/harness-codex-policy-native/harness-codex-runtime-Linu-f820c-oped-cleanup-without-models-harness-codex-runtime。runtime.json和六张runtime-{light,dark}-{1366,1600,1920}.png保留；已实际查看浅1366、深1920，三尺寸无横向溢出。只读数据库检查messages/knowledge_nodes/execution_runs/benchmark_runs均0、schema11、FK检查空、integrity=ok；三个新owner的策略临时文件均不存在，另存database-verification.json。普通Python容器策略未修改，因此未重复旧模型评测或无关UI全套。
+
+### 窗口、风险及下一步
+
+`node --check artifacts/harness-codex-policy-acceptance/launch.cjs`通过；执行脚本打开最终PID10052、CDP50383，使用上述独立QA数据定位实际已通过记录，仅只读展示，没有新容器/代码/模型。`pwsh.exe -NoProfile -File .../show.ps1 -AppProcessId 10052`返回visible=true、foregroundGranted=false，可从任务栏进入；ready.png/launch.json保留。最终docker ps -a --filter name=cortexos-bench- --format {{.Names}}无输出。没有提交、推送、发布或更改用户模型/原项目。
+
+专用策略增加内核接口暴露面，反向探针不是完整安全证明；原默认策略仍可选。内层沙盒兼容门槛现已通过，但受控模型通道、请求/时间/输出预算、真实任务JSONL/补丁/独立评分及Model×Harness成绩仍未完成。真实Windows缩放/读屏/IME未由截图代替。本轮停在D3-2b等待验收；下一片D3-2c接通道与唯一任务，实际加载/调用本地模型前仍单独弹窗确认。
+
+## 2026-10-31：D3-2a Codex镜像、隔离检查与实际阻断
+
+用户在D3-1后要求继续；复核development.md、开发/实施规范、D3计划、上片副本/控制器和Phase D原文，按[本片方案](harness-fit-d3-codex-plan.md)推进。用户另行弹窗批准下载官方Linux CLI到项目缓存并构建专用镜像；未申请模型调用授权，亦未发起推理、Embedding、Agent任务或云端调用。[交付、修改文件和剩余门槛](harness-fit-d3-codex-runtime.md)。D3-2整体尚未完成。
+
+### 实现与来源
+
+新scripts/harness/{prepare_codex.py,codex.Dockerfile}固定验证和提取四个官方普通文件，不运行安装脚本。新benchmark/python/{codex.rs,codex_probe.py}复用原bounded Docker命令、create_args、配置校验和归属清理；保持原无网络/非root/readonly root/CPU1/256MiB/PID64/cap-drop ALL/no-new-privileges/默认seccomp/无宿主挂载及Socket，只增加2MiB测试目录与4MiB空home tmpfs。全部程序/附属文件hash核对后，仅执行version、exec help及固定目录权限探针。
+
+新benchmark/harness/runtime.rs和runtime/records.rs以harness_codex_runtime复用jobs/cases，创建前记录不可变计划及端点/名字/镜像/owner；实际观察、错误和清理只追加，状态/恢复单独处理。修改harness/mod.rs、python.rs、db.rs、lib.rs、build.rs、capabilities/default.json，仅四个精确业务命令和本用途退出/恢复；schema仍11，无新表/迁移/Runner/依赖/锁文件。新CodexRuntime.tsx接入ExecutionPreflight，复用现有SelectMenu/AppDialog/FitStatus及列表，无新CSS或页面重排。新原生专项与opt-in项目，同步实施/数据库/设计/检查规范和索引。没有提交、推送或改正式发布物，之前所有改动保留。
+
+沿用ponytail及ui-ux-pro-max；实际UX查询`py -3 D:/CodexData/skills/ui-ux-pro-max/scripts/search.py 'error recovery progress cancellation' --domain ux`，应用原有恢复、进度和可访问反馈。实际读取OpenAI官方非交互、CLI参数、配置、permissions及sandboxing页面，链接在本片文档；系统设置建议不自动构成操作授权。
+
+### 工具准备、首次失败与实际环境
+
+`git rev-parse --show-toplevel`确认D:/vibecoding/CortexOS。只读GET /api/tags和/api/version确认现有两Qwen4B及Ollama0.40.9，没有加载模型。首次`npm.cmd view @openai/codex version`因受限全局npm-cache mkdir EPERM失败；普通Invoke-RestMethod读registry因TLS认证失败。获准联网的registry只读请求成功，固定正式版0.166.0与平台包元数据，未安装npm依赖或更改cache。
+
+官方codex-0.166.0-linux-x64.tgz下载到artifacts/harness-codex-runtime，172325449字节；SHA-512与官方版本元数据一致，完整值和四文件SHA-256在runtime.json及交付文档。未独立验证npm签名或构建来源证明，不把hash核对当验签。
+
+`py -3 -X utf8 scripts/harness/prepare_codex.py --build`首次因Docker Linux管道未启动失败；按既有授权Start-Process已安装Docker Desktop并WindowStyle Hidden（PID27760），未重装/重启。实际Server29.9.2、Desktop4.97.0、Linux amd64、WSL内核6.18.54.1。下一次FROM原始imageID被BuildKit解释为名为sha256的远程仓库，registry HEAD TLS超时而失败，没有下载新基础镜像。修为构建前核对本地python:3.13-slim标签再使用该标签；实际BuildKit绑定原digest2d447...，--network=none --pull=false通过。空home调整后最终镜像构建通过：sha256:71d63ab98eec120322e718fc0faf631cf1008bb3e938ee0554d830cecfbf480b。Dockerfile仅COPY/ENV/LABEL/USER，无RUN安装。
+
+初始独立docker run的沙盒help探针因CODEX_HOME未创建失败；可信临时助手创建home后version通过，但/tmp下助手别名警告且bwrap命名空间失败，JSON保留artifacts/harness-codex-runtime/probe.json。正式实现采用/home/cortexos空tmpfs并核对全部四文件，仍实际返回`No permissions to create a new namespace`，固定测试命令stdout为空，目录内允许/目录外拒绝写入均未验证。没有放宽seccomp、增加特权、全权限或旧Landlock回退；未进一步精确归因于某一内核/LSM/seccomp层。
+
+### 类型检查、构建及必要检查
+
+- `npm.cmd run typecheck`通过，2.22秒；桌面构建内再次通过。
+- `cargo check --lib --offline`首次发现Connection/MutexGuard借用不匹配，改为局部持有/释放连接后通过，6.51秒。
+- `rustfmt --edition 2024 src/benchmark/harness/runtime.rs src/benchmark/python/codex.rs`仅本片模块及子文件，无全库格式化。
+- `cargo test codex_runtime_checks_reject_missing_boundary_proof_and_namespace_failure --lib --offline -- --nocapture`：1通过、93未运行、0.00秒，编译44.62秒。只检验新判定边界及错误协议，合成输入不当Docker证据；未跑无关全量单元。
+- `npm.cmd run tauri -- build --debug --no-bundle`通过，Rust54.05秒（含等待前述Cargo锁），Vite11.81秒；index-CCwtNeOJ.css/index-Dv0Y0o5I.js。原大块/npm版本提示保留，未升级依赖。
+- 最终`py -3 -X utf8 -`以ast.parse解析可信prepare_codex.py/codex_probe.py，通过；未在宿主执行项目代码。准备脚本路径守卫收尾后未重复构建镜像，已测运行内容和CLI未变。
+
+### 原生WebView2、Docker与旧功能
+
+测试进程PATH补入既有Docker resources/bin；显式CORTEXOS_HARNESS_CODEX_RUNTIME_REAL=1。用SQLite backup复制此前独立D3-0 QA库到新目录，不操作生产库。
+
+`npx.cmd playwright test --project=harness-codex-runtime harness-codex-runtime.spec.ts --output=../../artifacts/harness-codex-runtime-native`：1通过，15.4秒（场景12.5秒）。真实程序/四文件指纹、版本0.166.0、自动化参数已核对；内层命名空间失败准确保留sandboxReady=false、canRun=false、taskExecution=Not Run、modelCalls=0。未确认/错误hash/跨工作区操作前拒绝，跨用途/其他任务检查读取拒绝；清理幂等，旧快照不改；停止后cancelled/clean，重开不自动探测；三尺寸×浅深六张实际截图及无横向溢出通过。
+
+为覆盖新增恢复SQL，追加暂停仅自有QA探针容器→强杀自有QA进程→重开→UI手动清理。复验同一专项到`../../artifacts/harness-codex-runtime-recovery`：1通过，19.0秒（场景17.0秒），不累计为新用例数量。completed=2595f192-fabe-4265-b389-096751eb1024，cancelled=fdc02240-6c23-4185-bdb0-eec79395fa45；f7d39a38-20a4-4ec8-9d7f-5a7cac1d88da重开为interrupted，阻止新检查，UI清理后closed/clean=true，无probe完成记录；原完成/停止记录逐项不变。
+
+因触及共用退出清理，仅复验原D3-1相关场景：CORTEXOS_HARNESS_WORKSPACE_REAL=1，`npx.cmd playwright test --project=harness-workspace-real harness-workspace.spec.ts --grep 'rejects foreign files' --output=../../artifacts/harness-codex-workspace-regression`：1通过，25.2秒（场景23.1秒）。原额外文件拒绝、人工循环代码停止、正常关闭清理及强杀恢复/手动清理保持。没有重复其他无关套件或模型评测。
+
+最终证据为artifacts/harness-codex-runtime-recovery/harness-codex-runtime-Linu-a2957-oped-cleanup-without-models-harness-codex-runtime/runtime.json及runtime-{light,dark}-{1366,1600,1920}.png，实际查看浅1366/深1920。只读QA库：messages/knowledge_nodes/execution_runs/benchmark_runs均0，schema_migrations max11、foreign_key_check空、integrity_check=ok；本用途completed/cancelled/closed各1。另存database-verification.json。
+
+### 验收窗口与未完成项
+
+`node --check artifacts/harness-codex-runtime-acceptance/launch.cjs`通过；执行脚本打开最终PID24084、CDP58683，使用本轮独立QA数据定位Codex隔离检查并显示真实未就绪记录。只读展示，没有新容器、代码或模型调用。ready.png和launch.json留存；`pwsh.exe -NoProfile -File artifacts/harness-codex-runtime-acceptance/show.ps1 -AppProcessId 24084`返回visible=true、foregroundGranted=false，用户可从任务栏进入，不声称Windows已允许抢前台。最终只读docker ps -a --filter name=cortexos-bench- --format {{.Names}}无输出，没有全局删除操作。
+
+内层沙盒兼容、受控模型通道/预算、真实任务JSONL、自动补丁/独立评分和Model×Harness成绩均未完成。下一片先审查兼容方案，安全配置如需变化先形成可审阅最小差异和反向检查、另行确认；模型调用仍须独立弹窗。真实系统150%/IME/读屏未由本轮截图替代。本轮停在D3-2a环境门槛验收，不进入下一Harness或D4/D5。
+
+## 2026-10-30：D3-1任务范围副本、人工交接与独立测试
+
+用户授权继续D3-1，并通过交互弹窗确认已保存关闭旧验收窗口。复核AGENTS、development.md、开发/实施规范、D3分片及已有检查、不可变任务、Python控制器和退出处理，先写[本片方案](harness-fit-d3-workspace-plan.md)，交付说明见[harness-fit-d3-workspace.md](harness-fit-d3-workspace.md)。沿用ponytail与ui-ux-pro-max，查询`py -3 D:/CodexData/skills/ui-ux-pro-max/scripts/search.py 'code review destructive confirmation' --domain ux`用于确认和结果反馈，不引入视觉体系。实际打开Docker官方tmpfs/exec文档核对固定文件传输和容器内权限，不把文档配置当实测。
+
+### 实际修改
+
+- 新`apps/desktop/src-tauri/src/benchmark/harness/workspace.rs`及`workspace/{records,package}.rs`：按工作区、已保存检查、发布任务/hash/审核及来源准备任务范围包；复用TaskSlot和已有表，人工提交/收集/独立评分、停止清理与历史。包仅含题目、签名/类型、路径/原范围及函数原文；参考/错误实现、examples/预期答案留在评分侧。按原范围生成完整文件提案并记录前后hash，原范围外字节保留，不写原项目。
+- 新`benchmark/python/workspace.rs`及`workspace_io.py`，原python.rs仅接入子模块。复用原bounded命令、create_args、configuration_valid、环境、score_owned及按归属清理；仅增加2MiB /workspace tmpfs，固定600秒无Agent常驻。可信初始化器只写文字并设置权限，实际项目代码仅在后续独立评分容器执行。题目/目录root只读、目标函数文件原地可写；盘点拒绝链接、硬链接、额外/缺失文件、hash/权限不符，无通用执行入口或宿主挂载。
+- 修改harness/mod.rs、src/lib.rs、build.rs、capabilities/default.json接入4个精确命令；db.rs仅恢复本用途opening/ready/grading为interrupted。正常退出等待活动任务并尽力清理本应用记录的副本；commands.rs的close_cleanup原子标记防止重复关闭抢在清理前退出，失败保留待清理。没有新迁移，schema_migrations最大版本仍11。
+- 新`src/benchmark/harness/WorkspaceHandoff.tsx`，ExecutionPreflight.tsx接入，harness.css局部样式：确认、准备/停止、历史、人工代码、修改对照、实际评分、关闭清理与其他检查下的未关闭副本入口。未提交编辑保留进程内草稿，提交保存与进入grading在同一事务；已保存代码/错误/取消记录保留。完成后代码按需展开，测试结果优先；弹窗固定关闭，沿用现有Tokens/控件，无导航/知识/图谱重构。
+- 扩充原validation/tests.rs信任边界与package必要检查；新`tests/harness-workspace.spec.ts`和opt-in配置。tests/native.ts仅增加通过实际窗口关闭按钮退出的检查助手，原关闭助手保持。同步方案/交付、实施/数据库/设计/检查规范及索引。复用generation_jobs/generated_cases，以harness_workspace隔离；无新Runner、依赖或锁文件改动，没有提交/推送/更新正式发布物。
+
+### 代码检查及实际构建
+
+`git rev-parse --show-toplevel`确认D:/vibecoding/CortexOS。先逻辑审阅，仅执行新增信任/事务/范围检查，不跑无关全套单元。
+
+- `npm.cmd run typecheck`三次随实现变更通过，最终构建也包含类型检查。
+- `cargo check --lib --offline`首轮发现records子模块两方法可见性不足（伴随类型推断错误），修为harness内部可见后通过，5.89秒；移除未使用collect入口并完成退出标记后复查通过，4.24秒，无警告。没有改行为以绕过编译检查。
+- `cargo test workspace_bundle_and_file_inventory_preserve_scope_without_answer_fields --lib --offline -- --nocapture`：1通过、92未运行，执行0.00秒；添加CRLF/中文范围保护后同一专项复验通过（编译1.60秒），不累计为新用例。覆盖答案字段排除、额外文件/错误hash/权限拒绝及原范围外字节保留。
+- `cargo test programming_controls_bind_evidence_reject_stale_approval_and_preserve_versions --lib --offline -- --nocapture`：1通过、92未运行，0.41秒（编译37.51秒）。扩充副本用途/工作区、检查hash、单个活动副本、未确认/错hash/无修改/重复提交、未清理终态拒绝、强制提交INSERT失败的事务回滚及重开interrupted；合成观察明确testOnly，不冒充Docker记录。
+- `py -3 -X utf8 -`通过ast.parse检查可信workspace_io.py语法，仅解析本项目助手，不运行提交代码。
+- `npm.cmd run tauri -- build --debug --no-bundle`三次通过：首次Rust1分47秒；增加阶段错误记录后29.18秒；最终UI收尾34.10秒。最终Vite718毫秒，assets index-CCwtNeOJ.css/index-BHdcQiNj.js；既有大块提示及npm更新提示保留，未升级依赖。
+
+### 真实原生/Docker首轮失败与复验
+
+显式CORTEXOS_HARNESS_WORKSPACE_REAL=1，测试进程PATH补入已安装Docker resources/bin；SQLite backup从D3-0实际QA库创建新的独立测试库，没有打开生产库。镜像保持原已下载的Python3.13固定Image ID，无模型、Codex或其他CLI任务、宿主仓库脚本和新镜像下载。
+
+首次`npx.cmd playwright test --project=harness-workspace-real --project=desktop harness-workspace.spec.ts harness-tasks.spec.ts --output=../../artifacts/harness-workspace-native`：**2失败、1通过，3.1分钟**。正常交接场景第一次准备在5秒有界操作中wall_timeout，记录失败并清理，未进入测试；当时未细分阶段，无法据此确定是创建/启动/初始化哪一步，后续补上workspace_create/start/init/copy分段原因，保持原时限，无自动重试或扩大评分预算。第二场景实际越界拒绝、停止及清理已执行，随后Windows PowerShell关闭助手返回4294901760，退出验证未通过；单独只读退出0探针成功，未确定更细的系统助手原因。改用应用自己的关闭按钮并等待进程退出，直接验证用户路径。旧D2a发布专项通过，19.9秒。初轮证据保留，不记为通过。
+
+复验仅受影响的两场景：`npx.cmd playwright test --project=harness-workspace-real harness-workspace.spec.ts --output=../../artifacts/harness-workspace-fixed` **2通过，1.0分钟**（31.0秒、28.6秒），旧D2a不重复。配置和评分时限保持，首轮准备超时在本次未复现。
+
+实际观察包括：
+
+- Linux临时副本非root UID65534、network none、readonly root、CPU1/256MiB/PID64、无宿主bind/Socket，只有task.json和project/src/value.py；原生真实权限尝试确认题目及新文件写入被拒绝，允许包无答案字段。
+- 正确人工代码实际独立测试**7/7通过**，错误实现**4/7通过、最终Failed**；两次操作均正常结束且清理，历史成绩保留。副本先清理再创建评分容器，每个断言独立；没有Model×Harness成绩。
+- 刻意由受控root测试探针加入额外文件后，收集真实拒绝workspace_unexpected_file，未生成候选/评分；循环修改停止后Cancelled，提交代码保留、待清理列表为空。
+- 通过真实“关闭窗口”按钮退出时闲置副本清理且状态closed；重新打开不恢复副本。只强杀自有测试进程后再打开，ready恢复为interrupted，禁止新建直到手动清理；清理只处理记录的owner/name/image/endpoint，四次历史及先前错误/取消结果不变。
+- 已发布v2读取与操作前完全相同，四类业务表messages/knowledge_nodes/execution_runs/benchmark_runs均0；schema_migrations max=11、foreign_key_check为0。未改聊天、知识、标准评测或图谱数据。
+
+正常/错误交接证据：`artifacts/harness-workspace-fixed/harness-workspace-task-cop-acf97-n-fresh-isolated-containers-harness-workspace-real/workspace.json`，实际通过job12af5da5-e4a7-4574-b330-972bc480670b、错误job2329b213-6621-4f68-bfed-6209311b40a7。恢复证据在同根`harness-workspace-task-cop-1e758--and-forced-restart-history-harness-workspace-real/recovery.json`。实际三种视口浅深6张原生截图及无横向溢出检查通过；已查看浅1366与深1920。
+
+### 最终界面、验收窗口与停止点
+
+截图后仅将完成的代码框改为按需展开，并用普通话显示操作超限/失败；不重复Docker评分和已通过的停止恢复。最终构建后的原生只读检查验证两条历史对应不同代码、折叠/展开、修改弹窗关闭和三尺寸浅深6图；这与前述真实执行专项分别记录。`node --check artifacts/harness-workspace-acceptance/launch.cjs`通过，运行该脚本复用正常交接QA库，未新建容器、探针或模型请求。最终6图workspace-final-{light,dark}-{1366,1600,1920}.png和ui-verification.json、ready.png在artifacts/harness-workspace-acceptance，已实际查看浅1366与深1920。
+
+末次docker ps按cortexos-bench-前缀观察无容器，专项也已按每个任务的实际端点/owner label确认无残留。验收进程PID2772、CDP52481，定位“任务副本与独立测试”及7/7通过记录；`pwsh.exe -NoProfile -File artifacts/harness-workspace-acceptance/show.ps1 -AppProcessId 2772`实际visible=true、foregroundGranted=false，用户可从任务栏切入。最终git diff --check通过，仅已有CRLF提示。
+
+保留限制：当前只有已审核单文件函数的范围副本和人工交接，不是完整仓库或真实编程工具；600秒仅核对固定配置，未等待/测量完整600秒。正常退出清理为有界尽力，Docker不可用/强杀仍需保留归属并后续清理。实际系统缩放/读屏/输入法及跨硬件未在本片复验；固定用例不证明全部语义或全面副作用安全。D3-2真实运行镜像、模型通道/授权、预算、CLI事件另行确认。本片完成后停止验收，不进入D3-2/D4/D5。
+
+用户在收尾补充反馈此前意外退出为显存不足，要求以后本地模型操作先弹窗。已同步AGENTS.md和development-standards.md：开发/验证实际推理、向量生成、评测或可能加载本地模型前说明模型/范围并等待本次明确确认，继续开发及历史许可不替代；只读健康/列表/元数据可继续。本片实际没有本地模型调用。
+
+## 2026-10-30：D3-0 Codex检测与执行前检查
+
+用户在D2b-1后要求“继续”，据此推进下一个增量，不一次实现D3全阶段。复核development.md、开发规范、实施计划、用户Phase D原附件、D2计划/实际交付、表与控制器。按[harness-fit-d3-plan.md](harness-fit-d3-plan.md)交付[执行前检查](harness-fit-d3-preflight.md)，完成后停止验收；D3-1独立项目副本/修改结果交接、D3-2真实CLI任务、D3-3下一工具和D4/D5继续后置。更广D2任务类型仍未完成，没有借本轮把它们标为完成。
+
+沿用ponytail与ui-ux-pro-max，UX查询`py -3 D:/CodexData/skills/ui-ux-pro-max/scripts/search.py 'prerequisite checklist blocked status' --domain ux`返回真实提交反馈和单一上下文状态播报建议，用于检查/读取与结果列表，不新建设计体系。OpenAI Docs已实际查阅[非交互模式](https://learn.chatgpt.com/docs/non-interactive-mode)、[CLI命令](https://learn.chatgpt.com/docs/developer-commands?surface=cli)和安全页；资料支持仅用于分片与安全设计，不冒充本机JSONL/模型任务调用。没有安装CLI、新执行镜像或下载模型，也未探测个人登录/凭据。
+
+### 实际文件与数据
+
+- 新`apps/desktop/src-tauri/src/benchmark/harness/preflight.rs`、`preflight/codex.rs`。核对已发布Python任务的工作区/分析/version/hash/审核/固定来源，显式执行原生Codex固定--version探针，复用python::harness_environment读取本地Docker/发布镜像。程序输入由后端固定，无任意路径/参数入口；宿主版本与未来Agent运行环境分开。
+- 修改harness/mod.rs接入；programming/validation.rs仅放宽programming_taskset在crate内可见性用于复用读取；发布/评分逻辑保持。src/lib.rs、build.rs及capabilities/default.json新增读取/执行前检查两个精确命令，无通用终端权限。
+- 新`src/benchmark/harness/ExecutionPreflight.tsx`，修改TaskWorkbench.tsx和harness.css嵌入默认折叠区。任务/版本选择、实际检查、历史、状态列表、错误重读、原始依据按需展开；切换任务先清除旧结果，历史同步任务选择器。主列表把宿主/CLI/Agent等转为本机/程序/编程工具，原记录和原始详情保持原样，不更改旧hash或推荐。
+- 检查复用generation_jobs，以purpose=harness_execution_preflight保存完成的plan/hash；canRun=false、taskExecution=Not Run。历史最多30条、已发布版本最多100项，工作区/分析/用途查询隔离。schema仍11，没有迁移、依赖或锁文件改动，不创建BenchmarkRun、执行事件、聊天、知识或成绩。环境/认证/模型/预算未实际验证的项目分别保留未就绪或未检查。
+- 新`tests/harness-preflight.spec.ts`和Playwright opt-in项目；在已有validation/tests.rs追加必要的快照信任边界断言。同步D3方案/交付、实施/数据库/设计/检查文档与索引。此前D1/D2未提交变更完整保留，没有提交、推送或发布。
+
+### 实际命令与失败恢复
+
+`git rev-parse --show-toplevel`确认独立D:/vibecoding/CortexOS；读取AGENTS和项目相关文件，不读取Gittoken.txt或个人认证文件。两次`cargo check --lib --offline`（含一次沙箱外重试）均因本机Cargo registry缓存缺失找不到既有chrono而失败；只读检查确认cache中尚无index/src。没有据此改版本。`cargo check --lib --locked`按Cargo.lock恢复原有包，实际通过，1分23秒；没有新增/升级依赖，锁文件不变。该联网仅恢复项目既有构建依赖。
+
+- `npm.cmd run typecheck`通过（两次实施检查，随后构建也含类型检查）。
+- `cargo test programming_controls_bind_evidence_reject_stale_approval_and_preserve_versions --lib --offline -- --nocapture`：1通过、91未运行，0.20秒（编译40.96秒）。复用原已发布fixture并新增跨工作区/错误hash/缺失版本拒绝、旧用途读取拒绝、计划不可变、环境变化后旧检查不变、即使合成CLI/Docker可用仍禁止运行。合成观察明确testOnly，不当真实环境证据。
+- `cargo test preflight_version_protocol_rejects_extra_output_and_relative_search --lib --offline -- --nocapture`：1通过、91未运行，0.00秒（编译2.12秒），覆盖合法正式/预发行版本、额外输出/非版本字符串、相对路径/UNC拒绝。不跑无关全套单元。
+- `npm.cmd run tauri -- build --debug --no-bundle`首次通过，Rust42.39秒。真实检查发现本机Codex文件368970544字节，超过最初256MiB校验上限，未执行版本探针而正确保留cli_too_large；改为512MiB并增加实际累计读取量检查后重建通过，Rust34.00秒。探针仍固定参数、空配置环境、5秒及每流4096字节输出限制，CLI失败不保存任意原始输出。
+- 最后只改显示词汇时replaceAll被项目现有TypeScript库目标拒绝，构建在前端检查阶段失败；改用全局replace正则，不改变编译目标或新增polyfill。最终完整构建通过，Rust27.55秒、Vite739毫秒；最终assets为index-CPRT-CXa.css/index-7FEmJPQa.js。原有>500kB块提示及npm更新提示保留，未为此升级依赖。
+
+### 真实原生环境与界面
+
+显式CORTEXOS_HARNESS_PREFLIGHT=1，当前检查进程PATH补入已安装Docker resources/bin。测试通过Python SQLite backup把D2b-1最终实际QA数据库复制到新的独立目录，未读取生产库；保留原真实任务/审核/对照，不伪造新任务或重新跑评分。
+
+首轮`npx.cmd playwright test --project=harness-preflight --project=desktop harness-preflight.spec.ts harness-tasks.spec.ts --output=../../artifacts/harness-preflight-native`：旧D2a任务专项通过（8.9秒），新增检查在断言CLI应识别时失败（4.1秒），合计1失败/1通过。实际已记录cli_too_large，Docker同时记录docker_environment_error。只读docker version进一步确认本地Linux管道不存在，Docker Desktop/backend均未运行；没有把环境失败当成功或抹掉该检查记录。
+
+按既有安装/使用授权，仅`Start-Process .../Docker Desktop.exe -WindowStyle Hidden`启动已安装程序，PID6368；没有重装、下载镜像或重启系统。实际docker version确认Linux Engine29.9.2、Desktop4.97.0、amd64。调整程序文件上限后，只复验受影响的新增场景：`npx.cmd playwright test --project=harness-preflight harness-preflight.spec.ts --output=../../artifacts/harness-preflight-fixed` **1通过，35.9秒**（场景33.9秒），未无故重复已通过的旧任务专项。
+
+本机实际Codex版本为0.166.0-alpha.5.1，SHA2563097c909fb6d5cd63510d44aceb1d42df9f6e85722a3e447e477def1ecf60e16，来自固定--version探针，临时目录已清理。Docker读取的发布时Image ID仍sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb；只读元数据，不启动评分容器。
+
+真实场景覆盖空工作区/无任务、选择两版实际发布任务、错误hash/跨工作区在探针前拒绝、两条独立检查、切版本隐藏旧结果、选历史同步版本、旧检查/发布v1不变、重开仍两条且不自动探测、三尺寸浅深截图及无横向溢出。独立库最终messages、knowledge_nodes、execution_runs和benchmark_runs均0，检查结果保持taskExecution=Not Run。证据为`artifacts/harness-preflight-fixed/harness-preflight-Codex-pr-ea7ea-ions-without-starting-tasks-harness-preflight/preflight.json`及6张preflight-{light,dark}-{1366,1600,1920}.png；失败证据保留在harness-preflight-native。
+
+### 最终窗口、截图和保留限制
+
+词汇显示调整后没有重复执行全部探针或单元；最终构建使用已有两条实际记录做原生读取及六尺寸/主题截图检查。`node --check artifacts/harness-preflight-acceptance/launch.cjs`通过；执行脚本启动新版PID22824、CDP61826，定位“4.测试任务 → Codex执行前检查”，两条历史可查看；没有新版本探针、模型或代码执行。最终6张preflight-final-{light,dark}-{1366,1600,1920}.png及ready.png在artifacts/harness-preflight-acceptance，已实际查看浅1366、深1920。显示翻译不改后台快照，最后切回浅色和原生窗口尺寸。
+
+`pwsh.exe -NoProfile -File artifacts/harness-preflight-acceptance/show.ps1 -AppProcessId 22824`实际visible=true、foregroundGranted=false；用户可从任务栏进入，不声称Windows已允许抢前台。最终git diff --check通过，只有已有CRLF提示。
+
+当前仅确认本机原生程序版本及Docker元数据；Windows PATH外、脚本启动形式、其他OS/认证/模型兼容和真实系统缩放/读屏未完成本轮验收。Codex预发行版本被识别不等于真实任务或Linux镜像兼容通过。隔离编程工具镜像、独立项目副本、受控模型通道、预算、修改结果与独立评分交接尚未建立，因此不能运行任务。无个人账号复用、付费云端、仓库脚本或D4/D5调用。本轮停在D3-0等待验收。
+
+## 2026-10-30：D2b-1真实编程对照、停止恢复与人工发布
+
+用户在D2b-0验收后要求继续。复核development.md、开发/实施规范、D2b方案及已有草案、Python控制器与表结构，按[harness-fit-d2b-validation-plan.md](harness-fit-d2b-validation-plan.md)实施本切片；交付说明见[harness-fit-d2b-validation.md](harness-fit-d2b-validation.md)。沿用ponytail和ui-ux-pro-max；本地UX查询`py -3 D:/CodexData/skills/ui-ux-pro-max/scripts/search.py 'asynchronous progress cancel form' --domain ux`用于真实进度、停止反馈和表单可达性。没有更换设计体系、下载模型、调用模型或进入D3。
+
+### 实际修改
+
+- 新`apps/desktop/src-tauri/src/benchmark/harness/programming/validation.rs`及`validation/tests.rs`；`programming.rs`接入子模块。验证用途harness_programming_validation复用generation_jobs/generated_cases，绑定固定草案修订/hash、三份代码hash、固定镜像、策略与评分版本；保存真实环境、逐容器归属、三组逐用例结果。发布用途harness_programming_tasks复用datasets/reviews，人工批准当前成功修订后追加不可变版本，旧版本不覆盖，taskExecution仍Not Run。
+- `benchmark/python.rs`增加本机Python3.13镜像列表、环境记录、带所有者的既有评分入口和受限遗留容器清理；仅本地Docker端点，固定Image ID，创建前记录归属并写实际容器label。清理核对端点、名字、label及镜像，不做全局prune。资源/网络/挂载策略沿用原控制器，不执行仓库脚本或宿主Python。
+- `python_tests.rs`增加CLI各阶段取消专项；`evaluation.rs`引擎从2.1升2.2，标识准备/握手前取消分类修复，答案规则不改，旧评分不复算。
+- `db.rs`仅为本用途validating增加恢复到interrupted；schema仍11，没有新迁移、历史迁移或依赖改动。`build.rs`、`src/lib.rs`和`capabilities/default.json`只增加7个精确业务命令，无通用终端权限。
+- 新`src/benchmark/harness/ProgrammingValidation.tsx`，修改`ProgrammingDrafts.tsx`、`programmingTypes.ts`和`harness.css`：独立组件、真实进度/停止/清理、三组结果表优先、逐用例与版本按需展开、审核批准和只读发布历史。轮询串行并防过期响应；修订变化后清除批准。复用现有Tokens、AppDialog、SelectMenu、FitStatus；预期失败显示“未通过（符合预期）”，不改真实Failed结果。
+- 新`tests/harness-programming-validation.spec.ts`与opt-in Playwright项目。同步本轮方案/交付、实施计划、数据库契约、设计/检查规范、草案历史指引及文档索引。保留此前D1/D2变更，没有提交、推送或修改正式发布物。
+
+### 实际命令与检查
+
+- `git rev-parse --show-toplevel`确认独立D:/vibecoding/CortexOS。代码审阅复核用途/工作区、过期修订、独立数据和不可变记录；只执行必要的信任边界与新增交互专项，没有无关全套单元。
+- `npm.cmd run typecheck`通过；`cargo check --lib --offline`首轮26.20秒，去掉unused import后复查4.10秒通过。
+- `cargo test programming_controls_bind_evidence_reject_stale_approval_and_preserve_versions --lib --offline -- --nocapture`：1通过、89未运行，执行0.17秒。受控合成观察只用于边界测试，不冒充Docker证据；覆盖未验证/伪造hash/旧修订/未批准拒绝、工作区和用途隔离、对照规则、不可变两版、恢复及聊天/知识/执行零写入。
+- 新取消专项`cargo test scoring_python_cancellation_is_preserved_before_handshake_in_every_cli_phase --lib --offline -- --nocapture`：1通过、90未运行，0.15秒。随后仅扩展相关共享控制器`cargo test scoring_python_ --lib --offline -- --nocapture`：5通过、3显式忽略、83未运行，0.40秒。忽略的旧真实Docker测试没有在此命令执行；后续独立原生Docker场景另列。输出中synthetic controller error为预定catch_unwind异常测试，最终通过。
+- `npm.cmd run tauri -- build --debug --no-bundle`三次通过（随控制器修复及界面调整重建），最终Rust28.07秒，前端`index-yn_TJqDt.css`/`index-0kqG8DIN.js`。构建内TypeScript/Vite通过；原有>500kB块提示保留，没有因npm提示升级依赖。
+
+### 真实原生检查、初轮失败与修复
+
+使用真实已安装Docker Linux/Python3.13.18固定镜像，独立测试数据库和WebView2；不打开生产数据库、不请求模型。命令前设置CORTEXOS_HARNESS_DOCKER_REAL=1并把已安装Docker的resources/bin加入本次进程PATH。
+
+首轮`npx.cmd playwright test --project=harness-docker-real --output=../../artifacts/harness-validation-real`两项未通过：成功流程在镜像/开始按钮尚未就绪时触发5秒断言，尚未创建验证；改为明确等待实际镜像选择器及启用按钮，未伪造环境，未确定更细的延迟根因。停止场景则真实发现容器启动后、Python握手前取消被误记Execution Error/python_did_not_start；现保留各CLI阶段termination reason并优先分类Cancelled，清理失败仍单独报错。失败证据保留，不记为通过。
+
+修复后同一真实项目命令输出到`artifacts/harness-validation-fixed`：**2项通过，1.6分钟**（54.7秒与36.5秒）。成功场景实际执行每修订3×7断言，两次验证、人工批准发布v1/v2，旧v1全文不变；旧验证拒绝批准新修订、跨工作区拒绝、普通聊天为空、来源嵌套详情与固定关闭按钮通过。另一场景实际错误参考拒绝发布、循环实现取消清理、运行中强杀仅测试进程、重开保留interrupted、UI只清理本次拥有容器，3次验证历史保留。`recovery.json`保存真实恢复观察。
+
+人工查看浅色1366与深色1920截图后，把7个发布条件收进展开区，三组表提前；原代码/错误实现按预期失败单独标注。此UI变更后执行最后必要回归：
+
+`npx.cmd playwright test --project=harness-docker-real --project=desktop harness-programming-validation.spec.ts harness-programming.spec.ts harness-tasks.spec.ts --grep 'real controls, human approval|programming drafts keep|project tasks bind' --output=../../artifacts/harness-validation-final`
+
+最终**3项通过**（`.last-run.json`为passed、failedTests为空，三个场景均留下成功元信息）：真实两版对照/发布、原草案修订/保护、旧D2a只读审核发布。此前已通过的强杀场景未因纯UI调整重复运行。独立场景共4种，不把重复复验累加成新用例。三种视口1366×768、1600×900、1920×1080浅/深6张实际原生截图及横向溢出检查通过；最终已查看浅1366、深1920原图。
+
+最终证据入口：`artifacts/harness-validation-final/harness-programming-valida-f8e50-ound-to-each-draft-revision-harness-docker-real/acceptance.json`和`validation-{light,dark}-{1366,1600,1920}.png`。实际workspace=6094f530-c6ad-4bbd-9867-692cb6d0e713，draft=03d419ce-ce1f-462b-b237-8fb8d0c5749a，第二次验证=75fad6de-06b1-443c-a0ec-0d2cbc8352ba；发布2版，无模型调用。恢复场景证据在`artifacts/harness-validation-fixed/harness-programming-valida-bd335-clean-only-owned-containers-harness-docker-real/recovery.json`。
+
+### 剩余限制与验收点
+
+本切片只覆盖已有纯函数的变更，未完成新空函数、跨文件补丁、完整仓库构建或D3第三方Harness执行。用户仍须审核用例语义/覆盖，受控对照成功不代表真实模型能力。强杀整个应用会结束宿主超时控制器，遗留容器保留资源/网络/挂载限制，需回到记录手动清理；中断结果不得发布。Windows实际系统缩放、实体输入法和读屏本轮未复验，视口截图不替代这些人工检查。Core60历史题库与D2b-0旧20项记录未被此切片读取或重写，没有模型、云端或额外下载。
+
+验收窗口：只读`docker ps -a --filter name=cortexos-bench- --format {{.Names}}`观察无本次前缀容器。`node --check artifacts/harness-validation-acceptance/launch.cjs`通过，执行该脚本打开最终成功专项的独立QA数据，PID4048、CDP57210，界面定位“4.测试任务/编程任务草案/验证与发布”，修订2及已发布2版可查看。没有新模型请求或重新执行代码。`pwsh.exe -NoProfile -File artifacts/harness-validation-acceptance/show.ps1 -AppProcessId 4048`返回visible=true、foregroundGranted=false；窗口已显示但Windows未允许抢占前台，用户可从任务栏进入。ready.png和launch.json保留实际状态。最终`git diff --check`通过，仅已有CRLF提示。本轮停在D2b-1等待确认，不进入D3。
+
+## 2026-10-30：修复Docker启动、完成D2b-0真实隔离与20项独立补验
+
+用户完整Windows重启后提供Docker Desktop“getting backend binary path / cannot find registry key”截图。实际LastBootUpTime已为2026-10-30T02:10:49.5000000Z、HypervisorPresent=true、CBS RebootPending=false，WSL2前提就绪。按原安装授权完成修复、固定镜像和实际验收；未重复索要原安装授权，也没有修改CortexOS业务数据/评分规则/迁移或提前进入D3。详细环境及结果见[harness-runtime-setup.md](harness-runtime-setup.md)、[harness-docker-verification.md](harness-docker-verification.md)。
+
+### 安装恢复的实际依据
+
+Docker文件及HKCU卸载登记存在，HKCU/HKLM的Registry32/Registry64均缺截图指定键，启动日志同样报错。当前工具与普通Windows Shell两次独立只读探针结果一致，进程均无包身份（GetCurrentPackageFullName=15700），物理文件位置真实，未把公开Issue关于MSIX的猜测用于本机结论。原完整安装包重新核验SHA2562668273f…59744与Docker Inc签名Valid。实际wsl --list --verbose无发行版，D盘和默认Docker/wsl路径均无VHDX，符合本次新安装尚未创建Docker数据的事实。
+
+在原当前用户、WSL2、D盘范围内，签名完整安装包直接install返回3，缺失状态未恢复，未将其算作成功；内部具体返回3原因没有完整日志，不将推断写作确定事实。保留旧日志/卸载登记后，按Docker官方当前用户卸载入口执行已签名uninstall --quiet，退出0；原完整包以`install --user --quiet --backend=wsl-2 --wsl-default-data-root=D:\CortexOSRuntime\DockerData`重装，退出0。只进行一次受控卸载重装，不手工改注册表、不删目录、不切全用户安装，不触及CortexOS/Ollama数据。随后实际启动成功，日志已拉起com.docker.backend，docker version得到Linux Server29.9.2；旧注册表键仍不存在，因此不能声称“补回了该键”，具体恢复机制尚未定位。
+
+实际磁盘在D:\CortexOSRuntime\DockerData\disk\docker_data.vhdx和main\ext4.vhdx，C盘默认Docker/wsl无VHDX。用户PATH登记及当前进程docker可见性确认。`docker pull python:3.13-slim`真实成功，实际Python3.13.18，linux/amd64，Image ID/RepoDigest为sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb。完整版本、端点、cgroup2及身份在artifacts/harness-runtime-setup/docker-environment.json；修复脚本/结果与原日志在同目录docker-repair-attempt。安装脚本未使用accept-license，未自动确认协议、登录、改BIOS/启动项或重启。
+
+### 源码修改与真实安全验证
+
+本轮产品侧只在`apps/desktop/src-tauri/src/benchmark/python.rs`追加cfg(test)模块登记；新增`python_live_tests.rs`两个显式忽略的真实Docker集成检查。复用原environment/create/inspect/score/有界command与cleanup，没有第二套执行器、模拟Docker响应或宿主Python回退。标准Case、评分规则、数据库迁移与前端界面未修改。
+
+- `cargo test scoring_python_live_docker_limits_and_cleanup --lib --offline -- --ignored --nocapture`：最终1项通过、87项筛除，实际91.08秒，编译13.93秒；通过CORTEXOS_PYTHON_IMAGE固定实际ID，PATH仅为检查进程补入Docker目录。覆盖正确、错误、bool类型、修改输入、容器内实际UID/NoNewPrivs/CapEff/cgroup/网络/只读/Socket、超量输出、真实OOM、5秒超时、取消及清理。各场景expected/actual、逐断言、实际inspect与移除前State都保存到artifacts/harness-docker-live。
+- 首轮同一检查实际正确实现已Passed，但证据筛选把context inspect的端点字符串误当容器inspect，测试失败（编译54.04秒，运行6.81秒）。只修正测试筛选排除context，并要求实际容器配置非空后复验；未变更运行参数或业务判定，不将失败算作通过。该轮已创建容器同样清理。
+- `cargo test scoring_python_live_case_deadline --lib --offline -- --ignored --nocapture`：1项通过、88项筛除，运行60.24秒，编译14.43秒。受控合成32断言任务实际60.217秒触发Execution Error / case_wall_timeout，记录11项真实超时结果，其余未执行；容器全部清理。未修改原Core60题目。
+- 最终10场景的所有实际拥有容器均已清理；评分正常/错误/类型等场景保留真实Passed/Failed，取消为Cancelled，整题超时为Execution Error，不混入普通正确率。额外docker ps按cortexos-bench名称筛选无遗留。CPU/PID配置与内核实际cgroup值检查通过，内存另有真实OOM；不宣称证明容器绝对安全或函数纯度。
+
+### 标准题独立补验与构建
+
+新增`apps/desktop/tests/benchmark-python-real.spec.ts`及Playwright独立显式opt-in项目，默认不运行真实模型。它先要求上述安全证据，复核原报告SHA256、原模型tag/digest、原Case/Dataset hash，固定Python ID，然后创建独立SQLite/Profile及新计划。没有改写旧20项。
+
+- `npm.cmd run typecheck`通过。`npm.cmd run tauri -- build --debug --no-bundle`通过（含TypeScript，Rust33.97秒，Vite10.56秒）；前端资产保持index-D4XkGKGj.css / index-Bad9TjYB.js。原>500kB块提示保留，另有Vite回调计时提示；npm升级提示未触发升级。
+- `CORTEXOS_BENCHMARK_PYTHON_REAL=1`后执行`npx.cmd playwright test --project=benchmark-python-real --output=../../artifacts/benchmark-python-real`，**1项通过，4.2分钟**。真实Ollama0.40.9及两原模型digest与历史一致，原4096/1024/temp0/120秒参数保留，未下载模型或调用云端。
+- 新批次8a933739-988e-42c1-aac8-6d22cf0a9aba：20/20请求finished，qwen3:4b-instruct的10/10题通过、93/93真实断言通过；qwen3:4b的10/10因output_truncated保持Needs Review，未执行Python断言。调用覆盖100%、评分覆盖50%；后者正确率不适用，不能称0%或20题全通过。SQLite实际评分原因分别python_assertions_completed×10、output_truncated×10，无新Docker/评分器错误。
+- 保存20组旧runId→新runId及case hash，原报告前后SHA256始终29b8f0d51f045f63492fbcb59340e24de72fe6d926bf5365e891793b7245a047。隔离库只含20条benchmark用途会话，普通聊天为空、knowledge_nodes=0，全局设置未改。
+- 报告/每项详情/关联/实际环境/acceptance.json及原生截图路径：`artifacts/benchmark-python-real/benchmark-python-real-Pyth-98815-ut-changing-historical-runs-benchmark-python-real/`。已实际查看python-rerun-report.png，模型两组的正确率与评分覆盖分开呈现。一次只读摘要命令因转义失败未执行，改用PowerShell here-string后正确读出上述SQL结果，无数据修改。
+- `git diff --check`通过，仅既有CRLF提示。未跑无关全套单元，无新依赖/锁文件/迁移；已有D1/D2a/D2b草案变更保留，没有提交、推送或Release。
+
+当前停在D2b-0验收。草案的参考/原代码/错误实现对照、人工批准和正式发布仍为下一切片；不提前开发D3 Adapter。输出截断可后续独立增加预算作对照，不能覆盖当前基线。Windows系统缩放/读屏及长期跨硬件验收本轮未运行。
+
+结果窗口已打开：`node artifacts/benchmark-python-acceptance/launch.cjs`复用本轮已完成的独立库，PID7552，未发送新模型生成；show.ps1确认Win32 visible=true，Windows置前请求返回false，不声称已置顶。用户可从任务栏进入查看。ready.png/launch.json及最终进度`artifacts/harness-runtime-setup/progress.json`记录交付点；Docker Desktop保持运行。
+
+## 2026-10-30：恢复D2b-0，重启后环境仍未就绪
+
+用户表示“重启好了”，恢复WSL/Docker的原安装授权，无需重复询问安装权限。重新阅读总纲/开发规范、实施计划、D2b方案、安装恢复及本机进度；没有修改应用业务代码或进入D3。
+
+实际执行：Get-Process未发现Docker Desktop/com.docker.backend/CortexOS；Get-Command未找到PATH中的docker，故用已安装的绝对CLI路径，不能据PATH缺失假称未安装。提升只读Get-CimInstance Win32_OperatingSystem与安装前wsl-baseline.json对比，LastBootUpTime仍为2026-10-29T08:07:25.5000000Z。`C:\Program Files\WSL\wsl.exe --version`显示3.0.3.0及内核6.18.54.1；初次终端把UTF-16作为其他编码显示，随后用Python subprocess仅捕获/UTF-16解码`wsl --status`，取得真实报错“WSL2无法启动，因为此计算机上未启用虚拟化”，退出0。该退出码未当作就绪。
+
+`Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform`返回Enabled；JSON明确读取固件虚拟化=true、SLAT=true、HypervisorPresent=false、CBS RebootPending=true、WindowsUpdate RebootRequired=false。`bcdedit.exe /enum '{current}'`仅查询，未显示显式hypervisorlaunchtype Off，未执行任何/set。已安装Docker CLI29.9.2运行`version --format '{{json .}}'`返回Client但Server=null，并报告本地docker_engine管道不存在；Docker settings-store.json尚不存在。D:\CortexOSRuntime\DockerData仍存在，实际磁盘位置未核验。
+
+已实际查阅微软[WSL故障排查](https://learn.microsoft.com/en-us/windows/wsl/troubleshooting)，其0x80370102部分要求启用VirtualMachinePlatform后重新启动，并检查启动配置；当前没有据此盲目更改BIOS或启动项。向用户询问刚才使用Windows“重新启动”、关机再开机还是应用重启，以确定后续路径。系统仍报告待重启，不推断用户操作错误或环境已成功。
+
+诊断保存在`artifacts/harness-runtime-setup/post-reboot-check.json`；恢复/实施文档同步。未启动Docker或容器、拉镜像、执行代码/模型、改旧20项、运行单元/构建或触发自动重启。保留下一步实际Linux服务、D盘磁盘、固定Python镜像及隔离实测门槛。
+
+用户随后确认是Windows关机后再开机；实际查阅微软[System power states](https://learn.microsoft.com/en-us/windows/win32/power/system-power-states)，其中快速启动保留内核会话、Restart进行完整启动的说明与本机时间未变现象吻合。没有额外读取或更改快速启动/BIOS设置。已明确请用户通过开始菜单→电源→重新启动，再打开Docker Desktop；保存恢复点后等该外部步骤，不自动触发重启。
+
+## 2026-10-30：D2b草案准备，暂存重启门槛
+
+用户要求“暂存该步骤，先把不需要重启的做了”。保留WSL/Docker已安装的恢复记录和全部未验收项，按[D2b方案调整](harness-fit-d2b-plan.md)提前交付[Python任务草案](harness-fit-d2b-drafts.md)，不进入D3或实际代码执行。复核development.md、开发/实施/界面规范、D2a数据与UI、现有Python控制器和评分合同，沿用ponytail与ui-ux-pro-max的最小复用/可访问表单原则；本地UX查询`py -3 D:/CodexData/skills/ui-ux-pro-max/scripts/search.py 'progressive disclosure form validation' --domain ux`返回表单标签、提交反馈与字段检查建议，未生成新视觉体系或依赖。
+
+### 实际修改
+
+- 新`apps/desktop/src-tauri/src/benchmark/harness/programming.rs`及`programming/tests.rs`：人工草案、固定分析/项目/文件范围、评分合同静态验证、目标/边界/回归用例、参考/错误代码文本、来源与内容hash、追加修订/重开和发布隔离。复用D2a快照检查、Case验证/封装及现有Python资源策略；代码字符串不执行。
+- 修改`harness/mod.rs`和`harness/tasks.rs`，仅接入模块并将快照校验共享到同一模块范围；Approval字段同范围可见用于必要发布拒绝检查。`src-tauri/build.rs`、`src-tauri/src/lib.rs`及`capabilities/default.json`只增加读取/保存编程草案两个业务命令和精确权限，没有通用文件/终端权限。
+- 新`src/benchmark/harness/ProgrammingDrafts.tsx`、`programmingTypes.ts`，修改`TaskWorkbench.tsx`与`harness.css`，默认折叠嵌入现有步骤；类型/用例/代码、历史只读、切页草稿、关闭/放弃确认、来源查看和错误恢复。沿用页面列宽、Tokens、SelectMenu/AppDialog/FitStatus，未增加重复标题或卡片体系。
+- 新`tests/harness-programming.spec.ts`并登记Playwright desktop项目。同步D2b计划、运行恢复、实施/数据库/设计/检查文档及文档索引。没有新迁移或依赖，schema仍11；既有0001–0010与HEAD无差异。此前D1/D2a未提交变更完整保留，没有提交、推送或更新正式发布物。
+
+`harness_programming_drafts`用途复用generation_jobs/generated_cases，所有读写限定工作区与用途；计划及修订沿用不可变触发器，旧修订拒绝覆盖。草案不进入普通模型/只读任务发布，不写入聊天、知识、执行或正式题库。容器/任务执行及正反对照实际状态均为Not Run，publishable=false；结构合法不代表语法、行为或题目覆盖充分。
+
+### 实际命令与结果
+
+- `git rev-parse --show-toplevel`确认D:/vibecoding/CortexOS；`git diff --check`通过，仅既有CRLF转换提示。
+- `npm.cmd run typecheck`通过；两次最终构建也含TypeScript检查。
+- `cargo check --lib --offline`通过，27.23秒。
+- 必要信任边界专项`cargo test harness_programming_drafts_preserve_scope_history_and_execution_gate --lib --offline -- --nocapture`：最终1项通过、86项未运行（执行0.08秒，编译7.53秒）。最初测试错误假设新库已初始化2个内置题库，实际尚未惰性加载、计数0；已将期望修正为草案路径不新增题库，并保留其他表零写入检查。没有为通过测试改业务行为；没有运行无关全套单元。
+- `rustfmt --edition 2024 src/benchmark/harness/programming.rs`只格式化新增模块及其测试。`npm.cmd run tauri -- build --debug --no-bundle`两次通过；最终Rust24.65秒，前端`index-D4XkGKGj.css`/`index-Bad9TjYB.js`。原Vite>500kB块提示保留；npm版本提示未触发任何升级。
+- 原生首次`harness-programming.spec.ts`发现第二次保存时新revision先到、旧元数据尚未刷新，渲染对不存在修订取值导致空白；SQLite已正确保留两版。保留初次失败及一次诊断重现，随后改为只渲染当前确实存在的修订详情，不改保存语义，未将失败记作通过。失败目录`artifacts/harness-programming-drafts`与`artifacts/harness-programming-drafts-debug`。
+- 修复后`npx.cmd playwright test --project=desktop harness-programming.spec.ts harness-tasks.spec.ts --output=../../artifacts/harness-programming-verified` **2项通过，17.4秒**（新草案7.9秒、旧D2a7.5秒）。新草案覆盖真实系统ZIP选取、类型错误恢复、保存/追加、发布拒绝、切页草稿/关闭提醒、放弃取消、历史只读、来源行、重载和原修订不变；旧D2a审核/修订/两版发布通过。两者都使用独立测试库，不执行导入代码或模型。
+- 人工审阅截图发现新检查脚本只写data-theme，未操作实际data-color-scheme，初轮所谓dark图仍为浅色，未将其记为深色验证通过。改为应用“外观”选择器并断言实际根属性，重新执行`npx.cmd playwright test --project=desktop harness-programming.spec.ts --output=../../artifacts/harness-programming-final` **1项通过，9.7秒**（场景7.6秒）。它是同一场景复验，不累计为新增用例。最终1366×768、1600×900、1920×1080浅/深6张原生截图和横向溢出检查通过；已实际查看浅色1366与深色1920原图。路径`artifacts/harness-programming-final/harness-programming-progra-719ad-fuse-unverified-publication-desktop/drafts-{light,dark}-{1366,1600,1920}.png`，元信息`programming.json`。
+
+### 保留门槛
+
+本轮未继续Linux服务启动、数据磁盘位置核验、Python镜像下载、安全容器执行、原20项Python题补验、云端或第三方Harness调用。原安装授权与已安装文件保留，不重启用户电脑。实际Windows系统缩放、实体中文输入法及读屏本轮未验收；视口截图不替代这些检查。草案代码只有静态结构检查，正式容器对照/人工批准及发布后续继续；本轮停在草案准备验收点。
+
+验收窗口：`node artifacts/harness-programming-acceptance/launch.cjs`成功启动调试版PID11328，复用最终专项的独立QA数据库，显示第2次草案修订和浅色界面，未生成或批准新任务。`pwsh.exe -NoProfile -File artifacts/harness-programming-acceptance/show.ps1 -AppProcessId 11328`确认Win32 visible=true，SetForegroundWindow返回false；后续标准WScript.Shell.AppActivate返回true，但实际前台PID仍非11328，不能声称已置顶。用户可通过任务栏切到该窗口；ready.png及launch.json保留真实状态。没有强制置顶、发送全局按键或关闭其他窗口。
+
+## 2026-10-29：D2b-0官方运行环境安装，待重启
+
+用户明确批准官方WSL2、当前用户Docker Desktop及Python3.13镜像下载，数据拟放D盘。按[恢复记录](harness-runtime-setup.md)执行系统安装；本轮没有应用业务源码、迁移或依赖变化。
+
+### 实际执行与失败恢复
+
+- 安装前确认官方默认用户/系统路径均无Docker，D:\CortexOSRuntime尚不存在。下载/日志及拟定数据目录只使用该用户批准的新目录。
+- 首次Get-WindowsOptionalFeature传数组因API只接收单一名称失败；改为逐项读取，保存真实Disabled基线。`wsl --install --no-distribution --web-download`退出1，未安装成功；按Docker官方文档的MSI途径从微软稳定发布绑定3.0.3。
+- `Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -All -NoRestart`成功，返回RestartNeeded=true；功能显示Enabled。没有调用重启，没有额外安装Ubuntu或为WSL1启用旧组件。
+- Docker/WSL官方大文件遇到慢连接及WSL curl56 TLS中断；只停止经进程名/命令核对属于本任务的下载父子进程，保留部分数据。使用8路、8MiB有界Range、固定官方版本地址与重试续传，90段最终完成；没有关闭TLS验证或使用第三方镜像。下载辅助脚本仅位于ignored artifacts，不进入产品。
+- Docker官方更新XML/校验文件确认4.97.0 build244584、620496816字节、SHA256 2668273f82b342a058a28f9ab53ea7bddde10bb6d51307ce2ec54c2d36459744；微软稳定发布API确认WSL3.0.3、367575040字节、SHA256 ae977286974255bd26bf925f00f40f5692c6b2084155cbc0563c09aea091f211。合并后两个完整hash与官方一致，Get-AuthenticodeSignature均Valid，发布者分别Docker Inc、Microsoft Corporation。
+- 一次较长的只读安装后检查因自动审批审查超过时限而未执行，不代表安装失败；按工具允许的单次重试缩小为两个已装程序文件版本读取后成功。没有为了检查而读取个人Docker凭据或启动容器。
+
+### 实际安装与当前门槛
+
+PowerShell安装脚本先语法检查（未执行），随后在再次验证完整大小/hash/签名后执行：WSL MSI `/qn /norestart REBOOT=ReallySuppress`退出0；Docker `install --user --quiet --backend=wsl-2 --wsl-default-data-root=...`退出0，未使用--accept-license。Windows文件路径会规范化重复分隔符，恢复脚本已统一使用规范写法；只读确认目标为D:\CortexOSRuntime\DockerData。
+
+实际文件`C:\Program Files\WSL\wsl.exe`版本3.0.3.0，当前用户`AppData\Local\Programs\DockerDesktop\Docker Desktop.exe`版本4.97.0.244584。安装结果JSON明确LinuxRuntimeVerified=false、PythonImageDownloaded=false、RebootRequestedByAgent=false；数据目录创建与安装参数不替代首次启动后VM磁盘路径验证。
+
+Windows已要求一次手动重启。本轮止于此真实依赖门槛，不启动Linux容器、不下载尚无服务可承接的Python镜像、不执行模型或仓库脚本。下一步用户保存编辑并重启、打开Docker Desktop并自行确认首次协议，之后继续服务/镜像/安全与原20项补验。无需再询问安装授权。
+
+通过读取原report.json，保存旧20项docker_unavailable的模型、case/run/hash引用到`artifacts/harness-runtime-setup/previous-python-blocks.json`，原报告hash及历史数据未改。没有运行无关单元、前端构建或模型测试；项目无应用源码变更，只有准备/恢复文档与本机安装操作，不伪造D2b任务或D3执行通过。`git diff --check`用于文档空白检查。
+
+## 2026-10-29：Phase D继续，D2b安装前复核
+
+用户要求“往下做phased”。重读Phase D附件、D2分片/交付、D0就绪报告和实施/开发规范，复核`benchmark/python.rs`的本地Docker检查、固定Image ID、受限create/inspect/score/cleanup及Runner入口，未新建执行器。新增[harness-fit-d2b-plan.md](harness-fit-d2b-plan.md)，以安装和安全环境验收作为下一切片。
+
+实际Get-Command仅找到wsl.exe，未找到docker/winget；Python只读捕获`wsl.exe --status`，退出50且UTF-16解码明确提示WSL未安装。沙箱内CIM被拒绝，提升后只读核对Windows11专业版build26200、64位、VirtualizationFirmwareEnabled/SLAT均true；该检查进程具管理员权限。盘剩余C23.5GiB/D581.7GiB为本次观测，不保证之后不变。没有据沙箱内False推断实际用户无管理员权限。
+
+已实际打开Docker官方Windows安装/参数、微软WSL安装及基本命令文档，确认可按当前用户、WSL2后端和no-distribution方式准备。补充只读核对物理内存15.7GiB，LanmanServer为Running/Automatic，无需为此更改服务设置。拟将Docker镜像数据放D:\CortexOSRuntime\DockerData，具体命令/验证/恢复门槛已写计划，等待用户按development.md第0节批准系统安装；尚未下载安装包、启用系统功能、拉镜像、运行编程题或修改宿主环境。本轮未运行单元/模型测试，不伪造安全环境通过。
+
+## 2026-10-29：项目适配状态独立标签
+
+用户要求状态不再用“·”与名称拼接，安装版本未知等提示使用单独红框。新增仅用于本模块的纯呈现FitStatus组件与既有语义Tokens样式，统一目录列表/能力详情、静态比较、任务未运行、审核及评分规则检查状态。未知、未运行、待核实、明确不兼容和检查失败保留各自文字；红色只作提示，不改为Failed或“未安装”。已人工批准/规则检查通过有独立成功标签；评分负对照被正确拒绝仍为符合预期，不因实际答案结果为Failed而冒充评分器失败。元数据/引用定位与原始资料内容保持原语义。
+
+修改范围：`harness/FitStatus.tsx`、`HarnessFitLab.tsx`、`FitReport.tsx`、`TaskWorkbench.tsx`、`TaskReview.tsx`及`harness.css`；D1原生专项增加五个未知版本标签检查和浅深目录截图，界面规范同步。没有数据结构、评分规则、模型请求或新依赖变化。
+
+用户确认关闭当前窗口后，`npm.cmd run tauri -- build --debug --no-bundle`通过（含TypeScript，Rust24.52秒），资产index-BXXv1-Af.css / index-B7M9RPgG.js；Vite原分块提示保留。`npx.cmd playwright test --project=desktop harness-fit.spec.ts harness-tasks.spec.ts --output=../../artifacts/harness-status-labels` **2项通过（21.1秒）**：D1场景11.3秒、D2场景7.5秒，保留三尺寸浅深、步骤对齐、原文/保存/审核发布。未运行单元或无关全套测试；新失败提示分支以逻辑检查为主，实际UI场景为未知版本、未验证/运行、人工批准与规则检查通过，不虚构真实失败运行。
+
+已查看`artifacts/harness-status-labels/harness-fit-local-document-edc9c--reviewed-evidence-versions-desktop/catalog-status-{light,dark}.png`及D2浅色1366实际原图：工具名正常文字，五个“安装版本未知”红色细框独立对齐；未运行与人工批准也分开显示。状态有文字，不依靠颜色，非交互标签不加入实时播报。只读UI检查没有自动检测/安装任何第三方工具，仍处于D2a验收。`git diff --check`通过，重新打开原独立QA数据供查看。
+
+## 2026-10-29：四步布局稳定与重复标题移除
+
+用户反馈第四步测试任务页面左移，并要求取消上方入口已经表达的重复页面标题。代码确认根因为第四步隐藏资料aside、切换单列，导致正文左缘改变。最终四步共享相同资料列/间距/正文轨道，第四步保留资料摘要并限制修改，返回项目资料后再编辑，固定任务来源不被意外改动。四步导航和原版本/保存操作合并为透明操作行，删除“项目适配”和“项目任务/文档分析 · 本地处理”的重复介绍。第四步分析保存按钮保留占位并隐藏，导航和版本控件不会因按钮消失重排；任务仍通过原审核栏发布。
+
+实际修改限`harness/HarnessFitLab.tsx`、`harness/harness.css`、两个原生专项及界面规范/本文；没有后端、数据库或依赖变化。`npm.cmd run tauri -- build --debug --no-bundle`通过（含TypeScript，Rust46.38秒），资产index-BNvH4Sly.css / index-DDIM6dHE.js；原Vite分块提示保留。用户确认关闭原验收窗口后更新程序。
+
+`npx.cmd playwright test --project=desktop harness-fit.spec.ts harness-tasks.spec.ts --output=../../artifacts/harness-layout-stable` **2项通过（20.0秒）**，D1场景10.3秒、D2场景7.5秒。在1366×768、1600×900、1920×1080分别实测第三→第四→第二步的导航/正文/资料列/版本操作横坐标与宽度，前后差异均小于1 CSS px；确认没有同名页面heading，另复核原文、保存/历史、草稿及任务审核发布。截图覆盖三尺寸浅深，已查看浅色1366和深色1920实际原图，目录`artifacts/harness-layout-stable/harness-tasks-project-task-887cc-isolated-immutable-versions-desktop`。未运行单元或无关全套测试。
+
+正文继续独立滚动，步骤和版本操作常驻，原任务未运行状态保持。重新打开原D2独立QA数据供验收，不自动出题、不推进D2b。`git diff --check`通过。
+
+## 2026-10-29：移除项目适配标题底色块
+
+用户继续反馈“项目适配”标题所在区域突兀。本次直接移除标题的背景，不再用近似颜色模拟页面底色。标题及版本/保存操作置于滚动区外，正文新增透明fit-scroll滚动区；任务审核栏在正文顶部固定，标题和正文不重叠。删除原标题ResizeObserver/高度变量，不改业务状态、后端、数据库或依赖。
+
+实际修改：`src/benchmark/BenchmarkPage.tsx`仅为项目适配分支增加宿主布局类；`harness/HarnessFitLab.tsx`调整标题/正文容器并删除测高；`harness/harness.css`设置透明标题与独立滚动；`tests/harness-tasks.spec.ts`改用实际滚动区，并核对滚动前后标题位置不变；界面规范同步记录最终规则。
+
+用户确认关闭原窗口后，`npm.cmd run tauri -- build --debug --no-bundle`通过（含TypeScript，Rust21.24秒），资产index-CWImVkxQ.css / index-Bd6B25KJ.js。`npx.cmd playwright test --project=desktop harness-fit.spec.ts harness-tasks.spec.ts --output=../../artifacts/harness-title-transparent` **2项通过（20.3秒）**，覆盖文档导入/原文、保存版本/历史、任务修订发布/草稿、三尺寸浅深截图，以及滚动后保存/审核操作可达、标题位置稳定；未跑单元或无关全套检查。
+
+已实际查看`artifacts/harness-title-transparent/harness-tasks-project-task-887cc-isolated-immutable-versions-desktop/tasks-light-1920.png`及`tasks-dark-1366.png`：标题直接显示在连续页面底色上，没有独立矩形填充。`git diff --check`通过，原Vite大块提示保留；本轮不推进D2b。验收助手改为复位fit-scroll，重新打开原独立QA数据供用户查看，不生成新任务。
+
+## 2026-10-29：项目适配固定栏底色修正
+
+用户指出项目适配标题、逐题审核两条固定栏与底色不符。本轮仅修改`apps/desktop/src/benchmark/harness/harness.css`及界面规范/本文，保留全部布局、固定高度测量和业务代码。旧surface叠加background过亮；最终统一使用现有glass叠加background形成不透明、接近外层页面的浅深底色，滚动文字不会穿透，没有新增边框或卡片。
+
+初次尝试3%微色层及嵌套24px背景模糊，原生截图仍有泛白，未将它当作最终视觉通过；改用现有玻璃颜色直接合成，不做第二层backdrop-filter。预览addStyleTag被现有CSP拒绝，未放宽CSP；随后通过元素CSS属性检查效果，再写入样式并重新构建。用户已确认关闭原验收窗口；中间预览进程在检查无未保存草稿后正常关闭，没有强制结束进程。
+
+最终`npm.cmd run tauri -- build --debug --no-bundle`通过（含TypeScript，Rust20.20秒），资产index-CMRUB8CS.css / index-DUkYY_A8.js；原Vite大块提示保留。`npx.cmd playwright test --project=desktop harness-tasks.spec.ts --output=../../artifacts/harness-surface-final` 1项通过（9.5秒，场景7.4秒），包括原文、修订发布、历史、三尺寸浅深截图和固定栏实际命中。未运行单元或无关全套测试。已实际查看最终浅色1920/深色1366原图，路径为`artifacts/harness-surface-final/harness-tasks-project-task-887cc-isolated-immutable-versions-desktop/tasks-{light,dark}-{1366,1600,1920}.png`。`git diff --check`通过；没有数据库、模型、Runner或新依赖变更。
+
+最终窗口重新使用原D2独立QA数据与Profile，不生成或批准新任务。D2a验收门槛保持，不进入D2b。
+
+## 2026-10-29：Harness Fit Lab D2a任务生成与审核
+
+D1后用户授权“往下做”，并明确选择“先交付任务生成与审核闭环（推荐）”。先重读Phase D附件、总纲/规范/实施计划和D1实际交付，复核Phase C扫描器、候选/发布/Runner链路。Get-Command未检测到docker；本轮不重新声称WSL或真实执行已就绪。按[harness-fit-d2-plan.md](harness-fit-d2-plan.md)限定D2a，详细文件与边界见[harness-fit-d2.md](harness-fit-d2.md)。基线仍0a1c7a9，上轮D1变更原样保留，没有提交/推送/发布。
+
+### 实现与逻辑检查
+
+从保存的D1确认要求生成规范原文题，从用户明确导入的项目快照生成代码片段定位题。标准答案/合法重复路径从真实来源导出；带来源hash/行号、分析/仓库版本和只读合同，最多12项/30行/8KB片段。复用现有exact_alias v2，实际检查每个参考答案Passed、空答/错误答/多余工具调用Failed；记录输入与实际结果，任务仍为Not Run。相同片段产生重复题时拒绝，不编造Bug、修复或调用链语义。
+
+复用Phase C四张计划/候选/审核/题库表，JSON purpose=harness_tasks。普通个性化查询/读取只接受personalized，缺省旧记录继续兼容；项目任务不插入普通benchmark_cases，Runner读取明确拒绝。修订/任务集只追加，事务复核最新revision/expectedVersion，任务发布Case绑定任务集version/hash。逻辑审阅发现最新候选若按修订rowid排序会错配原始来源，已在首次验证前改为该题最初rowid稳定顺序；检查覆盖连续修订不同题及来源不串位。
+
+共享已有项目选择/扫描帮助函数，保持原云端入口前后guard，本地导入不要求云端密钥；C项目列表排除仅文档快照，避免摘要字段不足。新增七个实际业务命令，无通用文件/终端权限。前端复用第四步、列表/details/SelectMenu/AppDialog与现有Tokens；统一父级批准状态，修订/重读失效旧批准，跨步骤保留草稿及关闭提醒。截图复核后把审核栏偏移改为测量实际标题高度，消除固定70px假设；没有全局UI重构或新依赖。
+
+### 实际执行的验证
+
+- `git rev-parse --show-toplevel`确认D:/vibecoding/CortexOS；按用户要求仅必要专项，不跑无关全量单元。
+- `cargo check --lib --offline`通过（54.42秒）。`npm.cmd run typecheck`独立检查通过，最终桌面构建也包含TypeScript检查。
+- `cargo test harness_tasks_ --lib --offline -- --nocapture`最终2项通过、84项未运行（0.16秒；编译12.03秒）。覆盖用途/工作区、无效来源/未确认/行号、重复任务、多合法答案、对照判定、修订并发及来源稳定、发布版本/内容hash、不可变/重开和普通聊天/题库兼容。多轮仅因新增重复题及发布版本校验复验，不累计为更多用例。
+- `cargo test personalized_publication_revisions_are_immutable_and_reuse_existing_scoring_and_trace --lib --offline -- --nocapture`已有兼容专项1项通过（0.14秒，85项未运行）。无云端真实请求。
+- `npm.cmd run tauri -- build --debug --no-bundle`最终通过，Rust24.67秒；资产index--oG4WsOd.js 693.46kB / index-tKdnOMtb.css 67.17kB。仍有既有Vite大于500kB分块提示，不额外引入构建优化或安装包工作。
+- 首轮 `npx.cmd playwright test --project=desktop harness-tasks.spec.ts cloud-native.spec.ts --output=../../artifacts/harness-d2-native` 2项通过（13.5秒）。实际截图核对后增量补齐动态固定栏/草稿/批准状态，完成新构建再复验。
+- 最终 `npx.cmd playwright test --project=desktop harness-tasks.spec.ts harness-fit.spec.ts cloud-native.spec.ts --output=../../artifacts/harness-d2-verified` **3项通过（22.0秒）**：C准入4.0秒、D1实际文件选择/历史9.1秒、D2实际ZIP导入/审核6.6秒。D2导入development.md使用Debug指定路径实际读取，未冒充该次由系统选择；ZIP使用真实系统文件选择器，文件内容为自建受控源码，不执行它。D1回归仍使用真实系统选择/取消。
+- D2验证来源逐行定位、重复片段两合法文件、修订、跨步骤草稿/关闭提醒、两版发布/只读历史、旧版不变、跨工作区拒绝、三尺寸浅深截图、固定栏实际命中/不被标题覆盖、无普通聊天/运行以及无页面console错误。原生截图目录：`artifacts/harness-d2-verified/harness-tasks-project-task-887cc-isolated-immutable-versions-desktop/tasks-{light,dark}-{1366,1600,1920}.png`；已实际查看浅色1920/深色1366原图。没有独立浏览器替身检查，不把CDP视口尺寸称为系统缩放。
+- 只读SQLite核对：schema11，D1分析1、来源快照2、任务计划1、候选修订4、发布审核2，任务集v1有2项/v2有1项；execution_runs/knowledge_nodes/source_documents均0，foreign_key_check无错误。验收操作是QA数据，不是用户对真实项目任务的批准。
+- `git diff --check`通过（既有CRLF提示），新D2源码空白检查通过；逐字节比较0001–0010与HEAD相同，0011未修改，无D2迁移、依赖或锁文件变更。
+
+### 门槛与后续
+
+本轮仅D2a。D2b功能/修复/跨文件/回归/兼容/工具/安全行为仍需安全环境、失败基线、参考补丁与负对照；没有运行第三方Harness或模型Task Performance，也没有付费/安装/下载。系统150%与读屏本轮未重测。Docker缺失及历史20项编程阻断保持；完成后停在D2a等待验收，不自动进入D2b或D3。
+
+验收窗口17012使用harness-d2-verified下的独立QA数据，另设WebView2 Profile，展示“评测 → 项目适配 → 测试任务”；当前代码项目是受控小型示例，规范来自实际development.md，不是原用户库。打开助手首次在about:blank阶段过早写hash导致定位超时，属于验收脚本问题；已加载实际tauri.localhost并补上等待应用URL/导航，重新定位成功，没有改动产品代码或重写任务。Win32确认visible=true、foregroundGranted=true；`artifacts/harness-d2-acceptance/ready.png`已实际查看。未自动生成/批准新任务；任务版本仍为检查时的两版。
+
+## 2026-10-29：Harness Fit Lab D0–D1
+
+用户通过附件授权先D0、无文档分析阻断后进入D1，完成后停止。基线0a1c7a9，初始工作区干净。完整阅读附件及项目总纲/规范、Phase C及本机120项验收证据，按实际代码复核；D0输出[harness-execution-readiness.md](harness-execution-readiness.md)，D1方案/文件/接口/边界见[harness-fit-d1-plan.md](harness-fit-d1-plan.md)及[harness-fit-d1.md](harness-fit-d1.md)。没有把C3–C5替身/受控验证当作真实付费云端验收。
+
+### 审计、资料及范围
+
+Get-Command未发现docker，wsl.exe --status退出50，按UTF-16LE解码明确提示WSL未安装；最初PowerShell管道显示乱码，后用只读Python子进程捕获纠正，没有执行安装。当前允许D1本地文档处理，D3执行继续阻断。根design.md实际不存在，采用AGENTS.md指定HTML规范和既有Soft Glass Tokens。复用ponytail/ui-ux-pro-max及OpenAI Docs；官方页面已实际打开核对，不仅使用搜索摘要。两次本地“progressive disclosure”UX搜索未找到精确匹配，未把不相关结果作为规范依据，折叠/固定操作延续既有界面规则。
+
+本轮查阅Codex非交互/Windows/项目指令、Claude程序化/Windows/记忆、Aider脚本/Ollama/安装/编码约定、OpenHands终端/headless、Cursor CLI/输出格式等官方资料，目录逐事实绑定URL和查阅日。若URL失败（早期Aider脚本路径、Codex agents-md路径），改查实际可访问官方页面，未将404页面当证据。目录实际安装版本/运行认证均未知，不因CortexOS自身可运行或已配置API Key标为Harness兼容。未运行任何第三方Harness、付费推理、依赖/模型下载或宿主安装。
+
+### 实际实现
+
+新增benchmark/harness的extract/fit/mod和版本化JSON目录；复用sources::read_selected及benchmark_repository_snapshots，不写生产知识。12类原文线索、行/hash/引用、提取置信和用户确认/修改可保存；否定/未来/可选/举例不自动关联成正向要求。硬性不兼容排除，未知保持待核实；四类权重0–5、相同能力只计一次，展示支持下界/未知上界、证据覆盖及来源，实测数量0。只查看已保存结果不重算，不产生未保存提示。
+
+0011只增加harness_fit_assessments追加版本表，expectedVersion保护并发，正文绑定目录快照/规则/用户修改和前hash；旧迁移不改。lib/build/capabilities仅登记5个本地业务命令。前端新增HarnessFitLab/RequirementEditor/FitReport/types/CSS，BenchmarkPage增加项目适配子页；长需求按类别折叠，保存栏固定，源文件用原AppDialog逐行定位。没有第二套Runner、Provider、评分器或图谱。
+
+### 实际命令与验证
+
+- `git rev-parse --show-toplevel`确认D:/vibecoding/CortexOS。npm命令在apps/desktop，Cargo在src-tauri；测试数据和Profile均使用仓库artifacts隔离目录，不操作正式用户库。
+- 首次Rust check发现MutexGuard借用及Result错误类型推断问题，修正后 `cargo check --lib --offline`通过（6.86秒；格式化后5.26秒）。新增检查首次编译又发现数据库方法名和usize FromSql不匹配，只修正检查代码，未虚构执行通过。
+- 必要 `cargo test harness_ --lib --offline -- --nocapture` 3项先后随置信字段、保守映射和大小写后缀修订复验通过，最后0.08秒，81项未运行。覆盖否定/未来候选、未知和硬过滤/去重计权、来源防伪、工作区隔离、追加/并发/不可变/历史和重开；迁移专项从schema10/旧聊天故意失败、检查备份可读/回滚，再应用11，旧聊天保留。没有无关全套单元测试。
+- 类型检查初次因新原生检查的未使用类型导入失败，移除后通过。`npm.cmd run tauri -- build --debug --no-bundle`各次成功（Rust51.77/28.15/32.25/最终29.88秒），分别覆盖初版、折叠固定栏、保守映射及只读查看修正。最终含TypeScript/Vite通过：主块index-Ct0nUFbQ.js 677.49kB、样式index-Cxp4D9RX.css 65.46kB、GraphViewport941.05kB；保留既有大块提示，没有生成安装包或改变依赖。
+- `npx.cmd playwright test --project=desktop harness-fit.spec.ts cloud-native.spec.ts --output=../../artifacts/harness-d1-native`：2项通过（20.3秒；4.1/13.0秒）。真实系统窗口取消/选取development.md，Rust/SQLite需求分析、原文定位、硬要求、权重、两版/旧版本/重载和三尺寸浅深；原个性化直接调用仍被Guard拒绝，固定题库和原四页导航可用。旧cloud-native页面标题断言按此前去重设计改为顶部标题，没有恢复重复标题。UIA助手仅增加可选窗口标题/打开按钮匹配，默认保存行为和指定进程/仓库路径限制保持。
+- 后续针对折叠/固定栏、保守提取及只读浏览的具体改动，仅顺序复验D1场景：harness-d1-native-final 1项通过16.7秒、harness-d1-delivery 1项通过12.5秒、最终harness-d1-verified 1项通过19.8秒（场景17.5秒）。不累计重复运行作为不同场景。最后验证只读进入结果不会产生beforeunload草稿提示，保存按钮实际命中未被遮挡。
+- 只读SQLite核对最终库schema11、2个分析版本、1份项目资料快照、0个ExecutionRun/知识节点/知识来源，PRAGMA foreign_key_check为空。没有用模拟生成文字冒充本轮适配事实，也没有创建虚构执行轨迹。查看实际深色1366/浅色1920及最终验收窗口图；六尺寸/主题截图由真实WebView2生成。没有独立浏览器D1替身检查，未声称做过。
+
+### 验收窗口与剩余门槛
+
+用户已确认关闭所有旧验收窗口。最终启动进程3480，复用独立D1真实文档/自动化审核验收库及新WebView Profile，进入“评测→项目适配”。show.ps1返回visible=true、foregroundGranted=true；截图artifacts/harness-d1-acceptance/ready.png已查看。只读准备没有增加分析版本或模型调用，生产库及原验收库保持原样。实际窗口可供用户继续导入/编辑/检查来源。
+
+规则分析不是完备自然语言理解，未关联的复杂约束需用户确认；本轮无Harness安装/版本/模型兼容/权限运行实测。Docker/WSL和此前20项编程题复测仍待授权环境准备；系统150%/读屏、跨硬件未测。D2任务生成、D3终端/补丁执行、D4组合实验、D5图谱联动均未启用。D1交付后停止等待验收，不自动提交/推送或发布。
+
 ## 2026-10-29：Benchmark 8——真实本地完整计划与交付
 
 用户授权按原计划执行最后一步，7作为已验收依赖。完成[切片8](benchmark-acceptance-slice8.md)本机可执行范围，停止等待用户验收；Docker Linux/跨厂商等环境门槛保留未完成。没有修改生产业务代码、数据库迁移、题库、标准答案或依赖，没有发布/提交/推送。新增tests/benchmark-acceptance-real.spec.ts，playwright.config.ts只增加显式开关，阶段/实施/测试/索引文档同步。

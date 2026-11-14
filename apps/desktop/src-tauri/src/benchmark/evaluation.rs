@@ -5,7 +5,7 @@ use super::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-pub const ENGINE_VERSION: &str = "core60-runtime-2.1";
+pub const ENGINE_VERSION: &str = "core60-runtime-2.2";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum State {
     Passed,

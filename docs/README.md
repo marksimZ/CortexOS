@@ -1,5 +1,17 @@
 # CortexOS 文档
 
+> 2026-11-14 [Harness Fit Lab Phase D 补齐交付](harness-fit-phase-d-completion.md)，包含多文件任务、仓库验证、权限记录、真实两模型对照、历史十题补验和报告导出。
+
+> 2026-11-14 [Harness Fit Lab Phase D 首版](harness-fit-d4-d5.md) 已通过用户验收。交付记录包含三工具真实对照、报告与 3D 回放、JSON/CSV 导出及原计划剩余项。
+
+> 2026-11-10当前交付：[Aider工具准备与无模型检查](harness-fit-d3-aider.md)，[分片计划](harness-fit-d3-aider-plan.md)。固定依赖、实际CLI、用途隔离、停止恢复及原生验收通过；工具自身隔离和模型通道仍未验证，停在d.1验收。此前[Claude本地单题](harness-fit-d3-claude-session.md)已验收。
+
+> 2026-11-03当前交付：[D3-3b Claude沙盒方案](harness-fit-d3-claude-sandbox-plan.md)与[实际结果](harness-fit-d3-claude-sandbox.md)。依赖/独立权限已分别获准，固定回复驱动真实CLI的13项反向保护、原生恢复与历史兼容通过；没有模型调用或项目任务。停在3b验收，剩余模型通道/单题、Aider、组合、报告/图谱。
+
+> 2026-11-02当前交付：[D3-3 Claude计划](harness-fit-d3-claude-plan.md)与[实际状态](harness-fit-d3-claude.md)。D3-3a官方工具验签/离线镜像、真实CLI与停止恢复、数据兼容及三尺寸浅深检查已完成，停在验收。自动化帮助、沙盒依赖/默认权限仍有阻断，内层沙盒和模型通道未验证；无本地模型调用，不自动进入下一片。
+
+> 2026-11-01当前交付：[D3-2c受控本地单题](harness-fit-d3-session.md)、[本片计划](harness-fit-d3-session-plan.md)。真实Codex/Ollama三请求完成一个审核函数，独立7/7，旧失败保留。停在验收，下一执行器/组合/报告继续分片。实际模型逐批弹窗确认。
+
 当前版本为 [v0.2.0 预发布版](https://github.com/marksimZ/CortexOS/releases/tag/v0.2.0)，状态更新于 2026-10-23。
 
 ## 使用与下载
@@ -15,7 +27,13 @@
 
 ## 开发与贡献
 
-当前最新交付：[窗口控制修复与标准批量评测](benchmark-standard-batches.md)，等待本切片验收。此前 [Phase C 适配计划](benchmark-phase-c-plan.md)、[C3–C5 项目导入、出题与专属评测](benchmark-phase-c3-c5.md)。C1/C2 已验收；当前开发版交给用户验证，真实云端推理与 Docker 实测仍待验收，正式 v0.2.0 发布物保持原样。
+2026-10-31当前交付：[D3-2b内层沙盒兼容](harness-fit-d3-sandbox.md)。用户批准后完成固定策略对照与反向探针，接入仅用于Codex的策略选择、版本/hash及原始历史兼容；必要边界、原生停止/恢复/清理和三尺寸浅深截图通过。没有模型或Agent任务，D3-2整体未完成，下一片再接受控模型通道。实际原生结果与窗口见里程碑；下文为历史交付。
+
+2026-10-31当前交付：[D3-2a Codex镜像与隔离检查](harness-fit-d3-codex-runtime.md)，[D3-2实施方案](harness-fit-d3-codex-plan.md)。官方Linux CLI版本/指纹/参数已验证，目录保护因实际环境限制未就绪；检查、取消、强杀恢复、清理和历史已交付，真实编程及模型调用保持未运行。D3-1已获用户继续授权，D3-2整体未完成；后续先审查沙盒兼容，不擅自放宽安全设置。以下条目保留历史交付说明。
+
+2026-10-30当前交付：[D3-1任务副本与独立测试](harness-fit-d3-workspace.md)，[D3后续顺序](harness-fit-d3-plan.md)。已发布Python任务支持临时函数副本、人工修改/范围校验、独立测试和停止/退出清理；未启动Codex或模型，停在本增量验收。[D3-0执行前检查](harness-fit-d3-preflight.md)和[D2b-1真实对照与人工发布](harness-fit-d2b-validation.md)为已交付依赖。后续开发验证实际调用/加载本地模型前须先弹窗确认。
+
+已验收依赖：[草案准备](harness-fit-d2b-drafts.md)、[D2a只读任务](harness-fit-d2.md)、[D1项目适配](harness-fit-d1.md)及[D0就绪审计](harness-execution-readiness.md)。[D2b-0真实隔离与原Python题独立补验](harness-docker-verification.md)保留10个安全场景及20次独立调用记录：10项可评分并通过、10项输出截断待复核，原历史记录保留。此前[Benchmark完整计划验收](benchmark-acceptance-slice8.md)及[C3–C5项目导入、出题与专属评测](benchmark-phase-c3-c5.md)保留实际证据。正式v0.2.0发布物保持原样。
 
 先读 [贡献与开发](../CONTRIBUTING.md)，再按任务查阅：
 
@@ -32,7 +50,7 @@
 
 ## 设计依据与历史记录
 
-Benchmark Studio支持标准及个性化评测、批量停止/恢复、单题追溯、模型比较、JSON/CSV导出及独立重新评分。Core60仅作Level 1 Smoke，保留v1/v2及历史评分；当前[最后一步](benchmark-acceptance-slice8.md)使用本机实际模型验收，Docker真实隔离执行仍是独立环境门槛。历史文档保留当时实现状态，最新交付见实施计划和里程碑：
+Benchmark Studio支持标准及个性化评测、批量停止/恢复、单题追溯、模型比较、JSON/CSV导出及独立重新评分。Core60仅作Level 1 Smoke，保留v1/v2及历史评分；[本机完整计划验收](benchmark-acceptance-slice8.md)和后续Docker补验分别保留证据。历史文档保留当时实现状态，最新交付见实施计划和里程碑：
 
 | 文档 | 内容 |
 | --- | --- |

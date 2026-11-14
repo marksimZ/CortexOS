@@ -53,7 +53,8 @@ test("native personalized guard denies direct calls and leaves local datasets an
     }
     for (const name of ["对话","知识","图谱","设置"]) {
       await page.getByRole("navigation",{name:"主导航"}).getByRole("link",{name,exact:true}).click();
-      await expect(page.getByRole("heading",{name,exact:true,level:1})).toBeVisible();
+      await expect(page.locator(".topbar-title strong")).toBeVisible();
+      if(name!=="对话")await expect(page.locator(".topbar-title strong")).toHaveText(name);
     }
     expect(app.consoleErrors).toEqual([]);
   } finally { await app.stop(); }

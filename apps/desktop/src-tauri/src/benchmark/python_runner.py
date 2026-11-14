@@ -7,6 +7,7 @@ import contextlib
 import copy
 import io
 import json
+from pathlib import Path, PurePosixPath
 import sys
 
 
@@ -34,6 +35,46 @@ def typed(value):
     return {"type": "unsupported", "python_type": type(value).__name__}
 
 
+def load_project(payload):
+    root = Path('/tmp/project')
+    root.mkdir()
+    compiled = {}
+    for name, source in payload['files'].items():
+        parts = name.split('/')
+        stem, ext = PurePosixPath(name).stem, PurePosixPath(name).suffix
+        if not all(p.isidentifier() and p.isascii() for p in [*parts[:-1], stem]) or ext not in ('.py', '.sql') or parts[-1] != stem + ext:
+            raise ValueError('invalid_project_path')
+        destination = root.joinpath(*parts)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(source, encoding='utf-8', newline='')
+        if ext == '.py':
+            compiled[name] = compile(source, str(destination), 'exec')
+    if payload['entry'] not in compiled:
+        raise ValueError('invalid_project_entry')
+    if payload['build']:
+        tree = ast.parse(payload['files'][payload['entry']])
+        functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == payload['function']]
+        if len(functions) != 1 or len(functions[0].args.posonlyargs + functions[0].args.args) != payload['arity']:
+            raise ValueError('project_entry_signature_changed')
+        if any((functions[0].args.vararg, functions[0].args.kwarg, functions[0].args.kwonlyargs)):
+            raise ValueError('project_entry_signature_changed')
+        return None
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, str(root))
+    sys.path.insert(0, str(root.joinpath(*payload['entry'].split('/')[:-1])))
+    from importlib.util import module_from_spec, spec_from_file_location
+    # Resolve relative imports against the reviewed root and package path.
+    entry = payload['entry']
+    module_name = entry.removesuffix('.py').replace('/', '.')
+    if module_name.endswith('.__init__'):
+        module_name = module_name.removesuffix('.__init__')
+    spec = spec_from_file_location(module_name, root / entry)
+    module = module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return getattr(module, payload['function'])
+
+
 def main():
     payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))
     # Save controller operations before evaluating the submitted function.
@@ -44,6 +85,16 @@ def main():
         return
     captured = Capture()
     try:
+        if 'files' in payload:
+            args = payload.get('args')
+            before = copy.deepcopy(args)
+            with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
+                fn = load_project(payload)
+                result = fn(*args) if not payload['build'] else None
+            observed = {"protocol": 1, "python": list(sys.version_info[:2]), "outcome": "built" if payload['build'] else "returned", "return": typed(result), "arguments": typed(args), "input_unchanged": args == before, "extra_output": bool(captured.getvalue())}
+            output.write(emit(observed, ensure_ascii=True, allow_nan=False))
+            output.flush()
+            return
         tree = ast.parse(payload["code"], filename="submission.py")
         for node in tree.body:
             if not isinstance(node, (ast.FunctionDef, ast.Import, ast.ImportFrom)):

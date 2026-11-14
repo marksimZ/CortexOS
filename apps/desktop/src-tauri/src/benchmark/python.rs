@@ -14,8 +14,18 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::watch;
+pub(crate) mod aider;
+pub(crate) mod claude;
+pub(crate) mod claude_policy;
+pub(crate) mod codex;
+pub(crate) mod codex_policy;
+pub(crate) mod session;
+pub(crate) mod workspace;
 
 const SHIM: &str = include_str!("python_runner.py");
+pub(crate) fn project_runner_hash() -> String {
+    super::dataset::hash(SHIM.as_bytes())
+}
 const LIMIT: usize = 65536;
 pub fn valid_image(image: &str) -> bool {
     image.strip_prefix("sha256:").is_some_and(|s| {
@@ -135,10 +145,23 @@ fn args(values: &[&str]) -> Vec<String> {
     values.iter().map(|s| s.to_string()).collect()
 }
 fn docker_json(reply: Reply) -> Result<Value, String> {
+    if let Some(reason) = reply.termination {
+        return Err(reason);
+    }
     if reply.status != 0 {
         return Err("docker_environment_error".into());
     }
     serde_json::from_slice(&reply.output).map_err(|_| "docker_invalid_response".into())
+}
+fn execution_problem(reason: String) -> (State, String) {
+    (
+        if reason == "cancelled" {
+            State::Cancelled
+        } else {
+            State::ExecutionError
+        },
+        reason,
+    )
 }
 pub fn environment(
     image: Option<&str>,
@@ -308,6 +331,251 @@ pub fn score(
         )
     })
 }
+
+/// Narrow, local-only environment discovery for task validation. Never pulls images.
+pub(crate) fn harness_images() -> Result<Value, String> {
+    let endpoint = docker_json(command(
+        &args(&[
+            "context",
+            "inspect",
+            "--format",
+            "{{json .Endpoints.docker.Host}}",
+        ]),
+        None,
+        Duration::from_secs(5),
+        None,
+    )?)?;
+    let endpoint = endpoint
+        .as_str()
+        .filter(|e| e.starts_with("npipe://") || e.starts_with("unix://"))
+        .ok_or("local_docker_required")?;
+    if docker_json(command(
+        &args(&["--host", endpoint, "info", "--format", "{{json .OSType}}"]),
+        None,
+        Duration::from_secs(5),
+        None,
+    )?)? != "linux"
+    {
+        return Err("linux_docker_required".into());
+    }
+    let listing = command(
+        &args(&[
+            "--host",
+            endpoint,
+            "image",
+            "ls",
+            "python",
+            "--no-trunc",
+            "--format",
+            "{{json .}}",
+        ]),
+        None,
+        Duration::from_secs(5),
+        None,
+    )?;
+    if listing.status != 0 {
+        return Err("docker_unavailable".into());
+    }
+    let mut images = Vec::new();
+    for line in String::from_utf8_lossy(&listing.output).lines().take(32) {
+        let row: Value = serde_json::from_str(line).map_err(|_| "docker_invalid_response")?;
+        let Some(id) = row["ID"].as_str().filter(|id| valid_image(id)) else {
+            continue;
+        };
+        if !row["Tag"].as_str().is_some_and(|tag| {
+            tag == "3.13" || tag.starts_with("3.13-") || tag.starts_with("3.13.")
+        }) || images.iter().any(|v: &Value| v["imageId"] == id)
+        {
+            continue;
+        }
+        let metadata = docker_json(command(
+            &args(&[
+                "--host",
+                endpoint,
+                "image",
+                "inspect",
+                id,
+                "--format",
+                "{{json .}}",
+            ]),
+            None,
+            Duration::from_secs(5),
+            None,
+        )?)?;
+        let version = metadata["Config"]["Env"]
+            .as_array()
+            .and_then(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .find_map(|s| s.strip_prefix("PYTHON_VERSION="))
+            })
+            .unwrap_or("");
+        if metadata["Os"] == "linux" && version.starts_with("3.13.") {
+            images.push(json!({"imageId":id,"tag":row["Tag"],"pythonVersion":version}));
+        }
+        if images.len() == 8 {
+            break;
+        }
+    }
+    Ok(json!({"images":images,"downloads":false}))
+}
+pub(crate) fn harness_environment(
+    image: &str,
+    cancel: Option<&watch::Receiver<bool>>,
+) -> Result<Value, String> {
+    let mut env = environment(Some(image), cancel)?;
+    env["dockerServer"] = docker_json(command(
+        &args(&[
+            "--host",
+            env["endpoint"].as_str().unwrap(),
+            "version",
+            "--format",
+            "{{json .Server}}",
+        ]),
+        None,
+        Duration::from_secs(5),
+        cancel,
+    )?)?;
+    Ok(env)
+}
+/// Records ownership before create. Only this API adds a validation label.
+pub(crate) fn score_owned(
+    case: &Case,
+    code: &str,
+    image: &str,
+    owner: &str,
+    cancel: &watch::Receiver<bool>,
+    record: impl FnMut(&str) -> Result<(), String>,
+) -> Score {
+    score_candidate(case, &json!(code), None, image, owner, cancel, record)
+}
+
+pub(crate) fn score_candidate(
+    case: &Case,
+    content: &Value,
+    entry: Option<&str>,
+    image: &str,
+    owner: &str,
+    cancel: &watch::Receiver<bool>,
+    mut record: impl FnMut(&str) -> Result<(), String>,
+) -> Score {
+    if uuid::Uuid::parse_str(owner).is_err() {
+        return Score::state(State::ScoringError, "invalid_validation_owner");
+    }
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        score_inner(case, content, entry, Some(image), |a, input, timeout| {
+            let mut actual = a.to_vec();
+            if a.iter().any(|s| s == "create") {
+                let name = a
+                    .iter()
+                    .position(|s| s == "--name")
+                    .and_then(|p| a.get(p + 1))
+                    .ok_or("invalid_container_name")?;
+                record(name)?;
+                let position = actual
+                    .iter()
+                    .position(|s| s == image)
+                    .ok_or("invalid_container_image")?;
+                actual.splice(
+                    position..position,
+                    ["--label".into(), format!("com.cortexos.validation={owner}")],
+                );
+            }
+            command(
+                &actual,
+                input,
+                timeout,
+                if a.iter().any(|s| s == "rm") {
+                    None
+                } else {
+                    Some(cancel)
+                },
+            )
+        })
+    }))
+    .unwrap_or_else(|_| Score::state(State::ScoringError, "python_controller_panicked"))
+}
+pub(crate) fn cleanup_validation_container(
+    endpoint: &str,
+    image: &str,
+    owner: &str,
+    name: &str,
+) -> Result<Value, String> {
+    let suffix = name
+        .strip_prefix("cortexos-bench-")
+        .ok_or("invalid_container_name")?;
+    if uuid::Uuid::parse_str(owner).is_err()
+        || uuid::Uuid::parse_str(suffix).is_err()
+        || !valid_image(image)
+        || !(endpoint.starts_with("npipe://") || endpoint.starts_with("unix://"))
+    {
+        return Err("invalid_container_owner".into());
+    }
+    let current = docker_json(command(
+        &args(&[
+            "context",
+            "inspect",
+            "--format",
+            "{{json .Endpoints.docker.Host}}",
+        ]),
+        None,
+        Duration::from_secs(5),
+        None,
+    )?)?;
+    if current != endpoint {
+        return Err("docker_context_changed".into());
+    }
+    let exists = command(
+        &args(&[
+            "--host",
+            endpoint,
+            "container",
+            "ls",
+            "-a",
+            "--filter",
+            &format!("name=^/{name}$"),
+            "--format",
+            "{{.ID}}",
+        ]),
+        None,
+        Duration::from_secs(5),
+        None,
+    )?;
+    if exists.status != 0 {
+        return Err("docker_unavailable".into());
+    }
+    if exists.output.iter().all(u8::is_ascii_whitespace) {
+        return Ok(json!({"name":name,"clean":true,"state":"already_absent"}));
+    }
+    let config = docker_json(command(
+        &args(&[
+            "--host",
+            endpoint,
+            "inspect",
+            name,
+            "--format",
+            "{{json .}}",
+        ]),
+        None,
+        Duration::from_secs(5),
+        None,
+    )?)?;
+    if config["Config"]["Labels"]["com.cortexos.validation"] != owner
+        || config["Config"]["Image"] != image
+    {
+        return Err("container_owner_mismatch".into());
+    }
+    let removed = command(
+        &args(&["--host", endpoint, "rm", "--force", "--volumes", name]),
+        None,
+        Duration::from_secs(5),
+        None,
+    )?;
+    if removed.status != 0 {
+        return Err("container_cleanup_failed".into());
+    }
+    Ok(json!({"name":name,"clean":true,"state":"removed"}))
+}
 /// The test seam supplies controlled CLI replies; it never executes submissions.
 pub(crate) fn score_with(
     case: &Case,
@@ -316,13 +584,14 @@ pub(crate) fn score_with(
     run: impl FnMut(&[String], Option<&[u8]>, Duration) -> Result<Reply, String>,
 ) -> Score {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        score_inner(case, code, image, run)
+        score_inner(case, &json!(code), None, image, run)
     }))
     .unwrap_or_else(|_| Score::state(State::ScoringError, "python_controller_panicked"))
 }
 fn score_inner(
     case: &Case,
-    code: &str,
+    content: &Value,
+    entry: Option<&str>,
     image: Option<&str>,
     run: impl FnMut(&[String], Option<&[u8]>, Duration) -> Result<Reply, String>,
 ) -> Score {
@@ -345,6 +614,11 @@ fn score_inner(
     let started = Instant::now();
     let mut results = Vec::new();
     let mut containers = Vec::new();
+    let mut build = if entry.is_some() {
+        "not_run"
+    } else {
+        "not_applicable"
+    };
     let mut transport = run;
     let mut run = |a: &[String], i: Option<&[u8]>, timeout: Duration| {
         let cleanup = a.iter().any(|s| s == "rm");
@@ -363,13 +637,23 @@ fn score_inner(
         )
     };
     let outcome: Result<(), (State, String)> = (|| {
-        let env = environment_with(image, &mut run).map_err(|e| (State::ExecutionError, e))?;
+        let env = environment_with(image, &mut run).map_err(execution_problem)?;
         let endpoint = env["endpoint"].as_str().unwrap();
         let image = env["imageId"].as_str().unwrap();
-        if code.len() > LIMIT {
+        if content
+            .as_str()
+            .map_or_else(|| content.to_string().len(), str::len)
+            > LIMIT
+        {
             return Err((State::Failed, "submission_output_limit".into()));
         }
-        for (index, test) in tests.iter().enumerate() {
+        let jobs = entry
+            .into_iter()
+            .map(|_| None)
+            .chain(tests.iter().map(Some));
+        for (index, test) in jobs.enumerate() {
+            let build_job = test.is_none();
+            let assertion_index = index + usize::from(entry.is_none());
             if started.elapsed() > Duration::from_secs(60) {
                 return Err((State::ExecutionError, "case_wall_timeout".into()));
             }
@@ -381,9 +665,13 @@ fn score_inner(
                     None,
                     Duration::from_secs(5),
                 )
-                .map_err(|e| (State::ExecutionError, e))?;
+                .map_err(execution_problem)?;
                 if created.status != 0 {
-                    return Err((State::ExecutionError, "container_create_failed".into()));
+                    return Err(execution_problem(
+                        created
+                            .termination
+                            .unwrap_or_else(|| "container_create_failed".into()),
+                    ));
                 }
                 let config = docker_json(
                     run(
@@ -398,18 +686,26 @@ fn score_inner(
                         None,
                         Duration::from_secs(5),
                     )
-                    .map_err(|e| (State::ExecutionError, e))?,
+                    .map_err(execution_problem)?,
                 )
-                .map_err(|e| (State::ExecutionError, e))?;
+                .map_err(execution_problem)?;
                 if !configuration_valid(&config) {
                     return Err((
                         State::ExecutionError,
                         "container_limits_not_confirmed".into(),
                     ));
                 }
-                let payload =
-                    serde_json::to_vec(&json!({"code":code,"function":function,"args":test.args}))
-                        .map_err(|_| (State::ScoringError, "python_payload_encoding".into()))?;
+                let request = match (entry, test) {
+                    (Some(entry), test) => {
+                        json!({"files":content,"entry":entry,"build":build_job,"function":function,"arity":tests[0].args.len(),"args":test.map(|t| &t.args)})
+                    }
+                    (None, Some(test)) => {
+                        json!({"code":content,"function":function,"args":test.args})
+                    }
+                    _ => return Err((State::ScoringError, "python_payload_invalid".into())),
+                };
+                let payload = serde_json::to_vec(&request)
+                    .map_err(|_| (State::ScoringError, "python_payload_encoding".into()))?;
                 run(
                     &args(&[
                         "--host",
@@ -445,12 +741,15 @@ fn score_inner(
             }
             let reply = match observed {
                 Ok(r) => r,
-                Err((State::Failed, reason)) => {
-                    results.push(json!({"index":index+1,"passed":false,"reason":reason}));
+                Err((State::Failed, reason)) if !build_job => {
+                    results.push(json!({"index":assertion_index,"passed":false,"reason":reason}));
                     continue;
                 }
                 Err(e) => return Err(e),
             };
+            if reply.termination.as_deref() == Some("cancelled") {
+                return Err((State::Cancelled, "cancelled".into()));
+            }
             if reply.status == 125 || reply.status == 126 || reply.status == 127 {
                 return Err((State::ExecutionError, "container_start_failed".into()));
             }
@@ -468,7 +767,11 @@ fn score_inner(
                     return Err((State::Cancelled, reason));
                 }
                 if ["wall_timeout", "output_limit"].contains(&reason.as_str()) {
-                    results.push(json!({"index":index+1,"passed":false,"reason":reason}));
+                    if build_job {
+                        build = "failed";
+                        return Err((State::Failed, reason));
+                    }
+                    results.push(json!({"index":assertion_index,"passed":false,"reason":reason}));
                     continue;
                 }
                 return Err((State::ExecutionError, reason));
@@ -476,8 +779,12 @@ fn score_inner(
             let observed = match evaluation_json::decode(body) {
                 Ok(v) => v,
                 Err(_) => {
+                    if build_job {
+                        build = "failed";
+                        return Err((State::Failed, "project_build_protocol_invalid".into()));
+                    }
                     results.push(
-                        json!({"index":index+1,"passed":false,"reason":"program_protocol_invalid"}),
+                        json!({"index":assertion_index,"passed":false,"reason":"program_protocol_invalid"}),
                     );
                     continue;
                 }
@@ -485,6 +792,18 @@ fn score_inner(
             if observed["protocol"] != 1 || observed["python"] != json!([3, 13]) {
                 return Err((State::ExecutionError, "python_runtime_mismatch".into()));
             }
+            let Some(test) = test else {
+                if reply.status == 0
+                    && reply.error.is_empty()
+                    && observed["outcome"] == "built"
+                    && observed["extra_output"] == false
+                {
+                    build = "passed";
+                    continue;
+                }
+                build = "failed";
+                return Err((State::Failed, "project_build_failed".into()));
+            };
             let returned = unpack(&observed["return"]);
             let arguments = unpack(&observed["arguments"]);
             let types = return_type(&observed["return"], &cfg["return_schema"]);
@@ -502,7 +821,7 @@ fn score_inner(
                 && equal
                 && observed["extra_output"] == false;
             let passed = passed && reply.error.is_empty();
-            results.push(json!({"index":index+1,"passed":passed,"typeValid":types,"inputUnchanged":unchanged,"valueCorrect":equal,"observation":observed,"stderrPresent":!reply.error.is_empty()}));
+            results.push(json!({"index":assertion_index,"passed":passed,"typeValid":types,"inputUnchanged":unchanged,"valueCorrect":equal,"observation":observed,"stderrPresent":!reply.error.is_empty()}));
         }
         Ok(())
     })();
@@ -525,9 +844,17 @@ fn score_inner(
     score.details["sandboxPolicy"] = policy();
     score.details["imageId"] = json!(image);
     score.details["ownedContainers"] = json!(containers);
+    if entry.is_some() {
+        score.details["buildStatus"] = json!(build);
+        score.details["projectRunner"] = json!(project_runner_hash());
+    }
     score
 }
 
 #[cfg(test)]
 #[path = "python_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "python_live_tests.rs"]
+mod live_tests;

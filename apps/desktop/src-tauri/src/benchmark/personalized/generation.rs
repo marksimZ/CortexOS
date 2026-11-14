@@ -46,7 +46,7 @@ impl Database {
     }
     pub fn generation_job(&self, workspace: &str, id: &str) -> AppResult<Value> {
         let c = self.connection()?;
-        let mut job=c.query_row("SELECT id,status,plan_json,plan_hash,response_json,usage_json,error,created_at FROM benchmark_generation_jobs WHERE workspace_id=?1 AND id=?2",params![workspace,id],|r|{let parse=|i|->rusqlite::Result<Value>{let raw:Option<String>=r.get(i)?;raw.map(|s|serde_json::from_str(&s).map_err(|_|rusqlite::Error::InvalidQuery)).transpose().map(|v|v.unwrap_or(Value::Null))};Ok(json!({"id":r.get::<_,String>(0)?,"status":r.get::<_,String>(1)?,"plan":parse(2)?,"planHash":r.get::<_,String>(3)?,"response":parse(4)?,"usage":parse(5)?,"error":r.get::<_,Option<String>>(6)?,"createdAt":r.get::<_,String>(7)?}))}).map_err(|_|"生成记录不存在或不属于此工作区。".to_string())?;
+        let mut job=c.query_row("SELECT id,status,plan_json,plan_hash,response_json,usage_json,error,created_at FROM benchmark_generation_jobs WHERE workspace_id=?1 AND id=?2 AND COALESCE(json_extract(plan_json,'$.purpose'),'personalized')='personalized'",params![workspace,id],|r|{let parse=|i|->rusqlite::Result<Value>{let raw:Option<String>=r.get(i)?;raw.map(|s|serde_json::from_str(&s).map_err(|_|rusqlite::Error::InvalidQuery)).transpose().map(|v|v.unwrap_or(Value::Null))};Ok(json!({"id":r.get::<_,String>(0)?,"status":r.get::<_,String>(1)?,"plan":parse(2)?,"planHash":r.get::<_,String>(3)?,"response":parse(4)?,"usage":parse(5)?,"error":r.get::<_,Option<String>>(6)?,"createdAt":r.get::<_,String>(7)?}))}).map_err(|_|"生成记录不存在或不属于此工作区。".to_string())?;
         let mut q=c.prepare("SELECT g.case_id,g.revision,g.candidate_json,g.validation_json FROM benchmark_generated_cases g WHERE g.job_id=?1 AND g.revision=(SELECT MAX(h.revision) FROM benchmark_generated_cases h WHERE h.job_id=g.job_id AND h.case_id=g.case_id) ORDER BY g.case_id").map_err(error)?;
         let items=q.query_map([id],|r|{let a:String=r.get(2)?;let b:String=r.get(3)?;Ok(json!({"id":r.get::<_,String>(0)?,"revision":r.get::<_,u32>(1)?,"candidate":serde_json::from_str::<Value>(&a).map_err(|_|rusqlite::Error::InvalidQuery)?,"validation":serde_json::from_str::<Value>(&b).map_err(|_|rusqlite::Error::InvalidQuery)?}))}).map_err(error)?.collect::<Result<Vec<_>,_>>().map_err(error)?;
         job["candidates"] = json!(items);
@@ -55,7 +55,7 @@ impl Database {
     pub fn generation_history(&self, workspace: &str) -> AppResult<Vec<Value>> {
         let c = self.connection()?;
         dataset::require_workspace(&c, workspace)?;
-        let mut q=c.prepare("SELECT id,status,created_at FROM benchmark_generation_jobs WHERE workspace_id=?1 ORDER BY created_at DESC LIMIT 50").map_err(error)?;
+        let mut q=c.prepare("SELECT id,status,created_at FROM benchmark_generation_jobs WHERE workspace_id=?1 AND COALESCE(json_extract(plan_json,'$.purpose'),'personalized')='personalized' ORDER BY created_at DESC LIMIT 50").map_err(error)?;
         q.query_map([workspace],|r|Ok(json!({"id":r.get::<_,String>(0)?,"status":r.get::<_,String>(1)?,"createdAt":r.get::<_,String>(2)?}))).map_err(error)?.collect::<Result<Vec<_>,_>>().map_err(error)
     }
     pub fn begin_generation(

@@ -1,4 +1,46 @@
 use super::*;
+#[test]
+fn scoring_python_cancellation_is_preserved_before_handshake_in_every_cli_phase() {
+    let image = format!("sha256:{}", "a".repeat(64));
+    for cancel_at in 0..6 {
+        let mut phase = 0;
+        let result = score_with(&case(), "not executed", Some(&image), |a, _, _| {
+            if a.iter().any(|v| v == "rm") {
+                return Ok(reply(json!("removed")));
+            }
+            let current = phase;
+            phase += 1;
+            if current == cancel_at {
+                return Ok(Reply {
+                    status: -1,
+                    output: vec![],
+                    error: vec![],
+                    termination: Some("cancelled".into()),
+                });
+            }
+            if a[0] == "context" {
+                Ok(reply(json!("npipe:////./pipe/docker_engine")))
+            } else if a.iter().any(|v| v == "info") {
+                Ok(reply(json!("linux")))
+            } else if a.iter().any(|v| v == "image") {
+                Ok(reply(
+                    json!({"Id":image,"Os":"linux","Config":{"Volumes":null}}),
+                ))
+            } else if a.iter().any(|v| v == "create") {
+                Ok(reply(json!("created")))
+            } else {
+                Ok(reply(container()))
+            }
+        });
+        assert_eq!(
+            result.state,
+            State::Cancelled,
+            "phase {cancel_at}: {}",
+            result.details
+        );
+        assert_eq!(result.details["reason"], "cancelled");
+    }
+}
 fn case() -> Case {
     super::super::dataset::builtin_version(2)
         .unwrap()

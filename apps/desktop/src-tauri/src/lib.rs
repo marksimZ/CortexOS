@@ -49,6 +49,62 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            benchmark::harness::workspace::get_harness_workspace,
+            benchmark::harness::runtime::get_harness_codex_images,
+            benchmark::harness::runtime::aider::get_harness_aider_images,
+            benchmark::harness::runtime::aider::get_harness_aider_runtime,
+            benchmark::harness::runtime::aider::check_harness_aider_runtime,
+            benchmark::harness::runtime::aider::cleanup_harness_aider_runtime,
+            benchmark::harness::runtime::claude::get_harness_claude_images,
+            benchmark::harness::runtime::claude::get_harness_claude_runtime,
+            benchmark::harness::runtime::claude::check_harness_claude_runtime,
+            benchmark::harness::runtime::claude::cleanup_harness_claude_runtime,
+            benchmark::harness::runtime::get_harness_codex_runtime,
+            benchmark::harness::session::claude::get_harness_claude_session,
+            benchmark::harness::session::aider::get_harness_aider_session,
+            benchmark::harness::session::experiment::list_harness_experiments,
+            benchmark::harness::session::experiment::start_harness_experiment,
+            benchmark::harness::session::experiment::stop_harness_experiment,
+            benchmark::harness::session::experiment::get_harness_experiment,
+            benchmark::harness::session::experiment::get_harness_experiment_trace,
+            benchmark::harness::session::experiment::export_harness_experiment,
+            benchmark::harness::session::claude::start_harness_claude_session,
+            benchmark::harness::session::aider::start_harness_aider_session,
+            benchmark::harness::session::claude::cleanup_harness_claude_session,
+            benchmark::harness::session::aider::cleanup_harness_aider_session,
+            benchmark::harness::session::get_harness_codex_session,
+            benchmark::harness::session::start_harness_codex_session,
+            benchmark::harness::session::cleanup_harness_codex_session,
+            benchmark::harness::runtime::check_harness_codex_runtime,
+            benchmark::harness::runtime::cleanup_harness_codex_runtime,
+            benchmark::harness::workspace::prepare_harness_workspace,
+            benchmark::harness::workspace::submit_harness_workspace,
+            benchmark::harness::workspace::close_harness_workspace,
+            benchmark::harness::preflight::get_harness_execution_preflight,
+            benchmark::harness::preflight::check_harness_execution_preflight,
+            benchmark::harness::programming::validation::get_harness_python_environment,
+            benchmark::harness::programming::validation::get_harness_programming_validation,
+            benchmark::harness::programming::validation::start_harness_programming_validation,
+            benchmark::harness::programming::validation::stop_harness_programming_validation,
+            benchmark::harness::programming::validation::cleanup_harness_programming_validation,
+            benchmark::harness::programming::validation::publish_harness_programming_task,
+            benchmark::harness::programming::validation::get_harness_programming_taskset,
+            benchmark::harness::programming::get_harness_programming_drafts,
+            benchmark::harness::programming::save_harness_programming_draft,
+            benchmark::harness::tasks::get_harness_tasks,
+            benchmark::harness::tasks::scenarios::run_harness_readonly_task,
+            benchmark::harness::tasks::scenarios::get_harness_readonly_runs,
+            benchmark::harness::tasks::create_harness_tasks,
+            benchmark::harness::tasks::revise_harness_task,
+            benchmark::harness::tasks::publish_harness_tasks,
+            benchmark::harness::tasks::get_harness_taskset,
+            benchmark::harness::tasks::get_harness_task_project,
+            benchmark::harness::tasks::import_harness_repository,
+            benchmark::harness::get_harness_fit,
+            benchmark::harness::analyze_harness_fit,
+            benchmark::harness::save_harness_fit,
+            benchmark::harness::get_harness_document,
+            benchmark::harness::import_harness_document,
             benchmark::standard::list_standard_benchmark_cases,
             benchmark::standard::plan_standard_benchmark,
             benchmark::report_read::get_benchmark_overview,
@@ -133,15 +189,21 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let state = window.state::<commands::AppState>().inner().clone();
                 let was_closing = state.closing.swap(true, Ordering::SeqCst);
-                if state.has_active() {
+                let pending_copy = state.database.as_ref().ok().is_some_and(|db| db.pending_workspace_jobs().is_ok_and(|jobs| !jobs.is_empty()) || db.pending_codex_runtime_jobs().is_ok_and(|jobs| !jobs.is_empty()) || db.pending_aider_runtime_jobs().is_ok_and(|jobs| !jobs.is_empty()) || db.pending_claude_runtime_jobs().is_ok_and(|jobs| !jobs.is_empty()) || db.pending_sessions(benchmark::python::session::Kind::Aider).is_ok_and(|jobs| !jobs.is_empty()) || db.pending_sessions(benchmark::python::session::Kind::Claude).is_ok_and(|jobs| !jobs.is_empty()) || db.pending_sessions(benchmark::python::session::Kind::Codex).is_ok_and(|jobs| !jobs.is_empty()));
+                if state.has_active() || state.close_cleanup.load(Ordering::SeqCst) || (!was_closing && pending_copy) {
                     api.prevent_close();
                     if !was_closing {
+                        state.close_cleanup.store(true, Ordering::SeqCst);
                         state.cancel_active();
                         let window = window.clone();
                         tauri::async_runtime::spawn(async move {
                             while state.has_active() {
                                 tokio::time::sleep(std::time::Duration::from_millis(40)).await;
                             }
+                            if let Ok(db) = state.database.clone() {
+                                let _ = tauri::async_runtime::spawn_blocking(move || { let _ = benchmark::harness::workspace::cleanup_on_close(&db); let _ = benchmark::harness::runtime::cleanup_on_close(&db); benchmark::harness::session::cleanup_on_close(&db) }).await;
+                            }
+                            state.close_cleanup.store(false, Ordering::SeqCst);
                             let _ = window.close();
                         });
                     }

@@ -1,0 +1,112 @@
+import { expect,test } from '@playwright/test';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdir,writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { createWorkspace,launchNative,nativeInvoke } from './native';
+import type { Body,Payload } from '../src/benchmark/harness/types';
+import type { PublishedTasks,TaskPayload } from '../src/benchmark/harness/taskTypes';
+
+test('project tasks bind actual sources, preserve revisions and publish isolated immutable versions',async({},info)=>{
+ test.setTimeout(180000);
+ await mkdir(info.outputPath('fixtures'),{recursive:true});
+ const zip=info.outputPath('fixtures/project.zip');
+ await promisify(execFile)('py',['-3','-X','utf8','-c','import sys,zipfile\nwith zipfile.ZipFile(sys.argv[1],"w") as z:\n z.writestr("src/a.py","def add(a, b):\\n    return a + b\\n")\n z.writestr("src/b.py","def add(a, b):\\n    return a + b\\n")\n z.writestr("README.md","Read-only fixture for source location.\\n")',zip],{windowsHide:true});
+ const app=await launchNative(info,{sourcePath:resolve('../../development.md')});
+ try{
+  const {page}=app;page.setDefaultTimeout(15000);
+  await createWorkspace(page,'D2 项目任务验收');
+  const workspaceId=await page.getByLabel('当前工作区',{exact:true}).inputValue();
+  await page.getByRole('navigation',{name:'主导航',exact:true}).getByRole('link',{name:'评测',exact:true}).click();
+  await page.getByRole('link',{name:'项目适配',exact:true}).click();
+  await page.getByRole('button',{name:'导入规范文档',exact:true}).click();
+  await expect(page.locator('.fit-selected-docs')).toContainText('development.md');
+  await page.getByRole('button',{name:'分析所选资料',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'确认项目要求',exact:true})).toBeVisible();
+  const sources=await nativeInvoke<Payload>(page,'get_harness_fit',{workspaceId,version:null});
+  const body=await nativeInvoke<Body>(page,'analyze_harness_fit',{workspaceId,input:{snapshotIds:[sources.snapshots[0].id],requirements:[],weights:{compatibility:3,automation:3,governance:3,context:3},expectedVersion:0,note:''}});
+  const rule=body.requirements.find(r=>r.category==='languages'&&r.evidence)!;
+  const row=page.locator(`[data-requirement-id="${rule.id}"]`);
+  await row.getByRole('combobox').first().selectOption('confirmed');
+  await page.getByRole('button',{name:'保存新版本',exact:true}).click();
+  await expect(page.getByRole('button',{name:'4. 测试任务',exact:true})).toBeEnabled();
+  const alignment=()=>page.evaluate(()=>['.fit-steps','.fit-main','.fit-documents','.fit-analysis-actions'].map(selector=>{const r=document.querySelector(selector)!.getBoundingClientRect();return {left:r.left,width:r.width};}));
+  for(const [width,height] of [[1366,768],[1600,900],[1920,1080]]){
+   await page.setViewportSize({width,height});
+   await page.getByRole('button',{name:'3. 适配结果',exact:true}).click();const before=await alignment();
+   await page.getByRole('button',{name:'4. 测试任务',exact:true}).click();await expect(page.getByRole('heading',{name:'测试任务',exact:true})).toBeVisible();
+   const after=await alignment();
+   after.forEach((r,i)=>{expect(Math.abs(r.left-before[i].left)).toBeLessThan(1);expect(Math.abs(r.width-before[i].width)).toBeLessThan(1);});
+   await expect(page.getByRole('heading',{name:'项目适配',exact:true})).toHaveCount(0);
+   await page.getByRole('button',{name:'2. 需求确认',exact:true}).click();const returned=await alignment();
+   returned.forEach((r,i)=>expect(Math.abs(r.left-before[i].left)).toBeLessThan(1));
+  }
+  await page.setViewportSize({width:1440,height:900});
+  await page.getByRole('button',{name:'4. 测试任务',exact:true}).click();
+  await page.locator('.task-requirement-list input').first().check();
+  await page.getByText('添加代码文件定位任务',{exact:true}).click();
+  await page.getByRole('button',{name:'选择项目ZIP',exact:true}).click();
+  await promisify(execFile)('pwsh.exe',['-NoProfile','-File',resolve('tests/save-report-dialog.ps1'),'-AppProcessId',String(app.processId),'-DialogTitle','选择项目ZIP','-OutputPath',zip],{windowsHide:true,timeout:25000});
+  await expect(page.getByRole('combobox',{name:'任务来源文件',exact:true})).toBeVisible();
+  await page.getByRole('combobox',{name:'任务来源文件',exact:true}).selectOption('src/a.py');
+  await page.getByRole('button',{name:'加入任务来源',exact:true}).click();
+  await page.getByRole('button',{name:'生成 2 项候选任务',exact:true}).click();
+  await expect(page.locator('.task-item')).toHaveCount(2);
+  const initial=await nativeInvoke<TaskPayload>(page,'get_harness_tasks',{workspaceId,jobId:null});const job=initial.selected!;
+  expect(job.candidates[1].task.case.expected.answers).toEqual(['src/a.py','src/b.py']);
+  const first=page.locator('.task-item').first();
+  await first.getByText('答案、来源与评分检查',{exact:true}).click();
+  await first.getByRole('button',{name:/development.md · 行/}).click();
+  await expect(page.getByRole('dialog',{name:/development.md/})).toBeVisible();
+  await expect(page.locator('.fit-source-dialog [data-active=true]')).toContainText(rule.evidence!.excerpt);
+  await page.getByRole('button',{name:'关闭任务原文',exact:true}).click();
+  await first.getByRole('button',{name:'修订题目',exact:true}).click();
+  const prompt=await page.getByRole('textbox',{name:'任务题目表述',exact:true}).inputValue();
+  await page.getByRole('textbox',{name:'任务题目表述',exact:true}).fill(`${prompt}\n请保留原文标点。`);
+  await page.getByRole('button',{name:'保存新修订',exact:true}).click();
+  await expect(first).toContainText('修订 2');
+  await first.getByRole('button',{name:'修订题目',exact:true}).click();
+  await page.getByRole('textbox',{name:'任务出题依据',exact:true}).fill('跨步骤保留的审核草稿');
+  await page.getByRole('button',{name:'3. 适配结果',exact:true}).click();
+  expect(await page.evaluate(()=>{const e=new Event('beforeunload',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented;})).toBe(true);
+  await page.getByRole('button',{name:'4. 测试任务',exact:true}).click();
+  await expect(page.getByRole('textbox',{name:'任务出题依据',exact:true})).toHaveValue('跨步骤保留的审核草稿');
+  await page.getByRole('button',{name:'取消编辑',exact:true}).click();
+  await first.getByRole('checkbox').check();await page.locator('.task-item').nth(1).getByRole('checkbox').check();
+  await page.getByRole('textbox',{name:'任务审核人',exact:true}).fill('验收审核人');
+  await page.getByRole('button',{name:'发布已批准的 2 项',exact:true}).click();
+  await expect.poll(async()=>(await nativeInvoke<TaskPayload>(page,'get_harness_tasks',{workspaceId,jobId:null})).tasksets.length).toBe(1);
+  await expect(page.getByRole('button',{name:'发布已批准的 0 项',exact:true})).toBeDisabled();
+  const datasetId=`harness-${job.id}`;
+  const v1=await nativeInvoke<PublishedTasks>(page,'get_harness_taskset',{workspaceId,datasetId,version:1});
+  expect(v1.tasks.every(t=>t.validation.valid&&t.validation.checks.every(c=>c.passed))).toBe(true);
+  expect(await nativeInvoke(page,'list_benchmark_generations',{workspaceId}).then(()=>false,()=>true)).toBe(true);
+  const again=page.locator('.task-item').first();await again.getByRole('button',{name:'修订题目',exact:true}).click();
+  await page.getByRole('textbox',{name:'任务出题依据',exact:true}).fill('已检查固定原文，保留全部答案和来源。');
+  await page.getByRole('button',{name:'保存新修订',exact:true}).click();await expect(again).toContainText('修订 3');
+  await again.getByRole('checkbox').check();await page.getByRole('button',{name:'发布已批准的 1 项',exact:true}).click();
+  await expect.poll(async()=>(await nativeInvoke<TaskPayload>(page,'get_harness_tasks',{workspaceId,jobId:null})).tasksets.length).toBe(2);
+  expect(await nativeInvoke(page,'get_harness_taskset',{workspaceId,datasetId,version:1})).toEqual(v1);
+  await page.getByRole('combobox',{name:'已发布任务版本',exact:true}).selectOption(`${job.id}:1`);
+  await expect(page.getByLabel('已发布任务内容',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'修订题目',exact:true})).toHaveCount(0);
+  for(const theme of ['light','dark']){
+   await page.getByRole('combobox',{name:'外观',exact:true}).selectOption(theme);
+   for(const [width,height] of [[1366,768],[1600,900],[1920,1080]]){
+    await page.setViewportSize({width,height});await page.locator('.fit-scroll').evaluate(e=>{e.scrollTop=0;});
+    expect(await page.locator('#main-content').evaluate(e=>e.scrollWidth<=e.clientWidth+1)).toBe(true);
+    await page.screenshot({path:info.outputPath(`tasks-${theme}-${width}.png`)});
+   }
+  }
+  const titleTop=await page.locator('.fit-toolbar').evaluate(e=>e.getBoundingClientRect().top);
+  await page.locator('.task-item').last().scrollIntoViewIfNeeded();
+  expect(Math.abs(await page.locator('.fit-toolbar').evaluate(e=>e.getBoundingClientRect().top)-titleTop)).toBeLessThan(1);
+  expect(await page.locator('.task-review-toolbar').evaluate(e=>{const r=e.getBoundingClientRect(),header=document.querySelector('.fit-toolbar')!.getBoundingClientRect();return r.top>=header.bottom-1&&e.contains(document.elementFromPoint(r.left+10,r.top+10));})).toBe(true);
+  const other=await nativeInvoke<{id:string}>(page,'create_workspace',{name:'D2隔离'});
+  expect(await nativeInvoke(page,'get_harness_taskset',{workspaceId:other.id,datasetId,version:1}).then(()=>false,()=>true)).toBe(true);
+  expect(await nativeInvoke(page,'list_conversations',{workspaceId})).toEqual([]);
+  expect(await nativeInvoke(page,'list_standard_benchmarks',{workspaceId})).toEqual([]);
+  await writeFile(info.outputPath('tasks.json'),JSON.stringify({workspaceId,jobId:job.id,datasetId,v1},null,2));
+  expect(app.consoleErrors).toEqual([]);
+ }finally{await app.stop();}
+});

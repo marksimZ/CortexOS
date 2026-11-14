@@ -256,7 +256,7 @@ pub fn validate_report(report: &Value) -> AppResult<()> {
     }
     Ok(())
 }
-fn cell(value: &Value) -> String {
+pub(crate) fn cell(value: &Value) -> String {
     let text = match value {
         Value::Null => String::new(),
         Value::String(s) => s.clone(),

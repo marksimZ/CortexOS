@@ -19,6 +19,7 @@ pub struct AppState {
     pub(crate) provider: AppResult<Ollama>,
     tasks: Arc<crate::tasks::TaskSlot>,
     pub closing: Arc<AtomicBool>,
+    pub(crate) close_cleanup: Arc<AtomicBool>,
     pending_source: Arc<Mutex<Option<crate::sources::PendingSource>>>,
 }
 
@@ -30,6 +31,7 @@ impl AppState {
             provider: Ollama::new(),
             tasks: Arc::new(crate::tasks::TaskSlot::default()),
             closing: Arc::new(AtomicBool::new(false)),
+            close_cleanup: Arc::new(AtomicBool::new(false)),
         }
     }
     pub(crate) fn cancel_personalized_task(&self, workspace: &str, id: &str) -> AppResult<()> {

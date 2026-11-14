@@ -513,18 +513,38 @@ pub async fn import_benchmark_repository(
     kind: String,
 ) -> AppResult<Option<RepositorySnapshot>> {
     cloud.guard()?;
-    if !["folder", "zip"].contains(&kind.as_str()) {
+    let snapshot = pick_repository(app, &kind).await?;
+    let Some(snapshot) = snapshot else {
+        return Ok(None);
+    };
+    cloud.guard()?;
+    blocking(state.database.clone()?, move |db| {
+        db.save_repository_snapshot(&workspace_id, snapshot)
+    })
+    .await
+    .map(Some)
+}
+
+// Both local project tasks and cloud-gated personalization use the same bounded reader.
+pub(crate) async fn pick_repository(
+    app: tauri::AppHandle,
+    kind: &str,
+) -> AppResult<Option<RepositorySnapshot>> {
+    if !["folder", "zip"].contains(&kind) {
         return Err("不支持的项目来源。".into());
     }
+    let kind = kind.to_string();
     let chosen = tauri::async_runtime::spawn_blocking(move || {
         if kind == "folder" {
             app.dialog()
                 .file()
+                .set_title("选择项目文件夹")
                 .blocking_pick_folder()
                 .map(|p| (p, false))
         } else {
             app.dialog()
                 .file()
+                .set_title("选择项目ZIP")
                 .add_filter("ZIP项目", &["zip"])
                 .blocking_pick_file()
                 .map(|p| (p, true))
@@ -536,16 +556,10 @@ pub async fn import_benchmark_repository(
         return Ok(None);
     };
     let path = chosen.into_path().map_err(|_| "只支持本地项目。")?;
-    let db = state.database.clone()?;
     let snapshot = tauri::async_runtime::spawn_blocking(move || scan(&path, is_zip))
         .await
         .map_err(|_| "本地项目分析异常。")??;
-    cloud.guard()?;
-    blocking(db, move |db| {
-        db.save_repository_snapshot(&workspace_id, snapshot)
-    })
-    .await
-    .map(Some)
+    Ok(Some(snapshot))
 }
 #[tauri::command]
 pub fn list_benchmark_repositories(
@@ -554,11 +568,15 @@ pub fn list_benchmark_repositories(
     workspace_id: String,
 ) -> AppResult<Vec<Value>> {
     cloud.with_access(|| {
-        state
+        let snapshots = state
             .database
             .as_ref()
             .map_err(Clone::clone)?
-            .repository_summaries(&workspace_id)
+            .repository_summaries(&workspace_id)?;
+        Ok(snapshots
+            .into_iter()
+            .filter(|s| s["profile"]["kind"] != "harness_document")
+            .collect())
     })
 }
 #[tauri::command]

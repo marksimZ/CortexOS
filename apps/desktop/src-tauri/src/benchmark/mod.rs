@@ -15,5 +15,6 @@ pub(crate) mod telemetry;
 
 pub mod report_read;
 
+pub mod harness;
 pub mod regrade;
 pub mod report_transfer;

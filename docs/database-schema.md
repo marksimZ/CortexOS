@@ -1,5 +1,27 @@
 # 数据模型契约
 
+> 2026-11-03 D3-3b：schema仍11，无迁移。harness_claude_runtime的新计划claude-runtime-check-2绑定claude-program-2、检查源码hash、任务/镜像及独立Claude策略描述；v1按原定义读取。复用原表/事件/恢复，临时策略文件按Codex/Claude作用域和指纹分别清理。11条旧检查/会话及事件逐列相等，新旧6条Claude记录hash均正确、普通数据不变。固定回复的Token/费用不是模型用量或成绩；canRun=false。后续若修改探针实现，新增版本并保留旧定义，不静默重写历史。见[沙盒交付](harness-fit-d3-claude-sandbox.md)。
+
+> 2026-11-02 D3-3a交付：schema仍11，无新迁移。harness_claude_runtime复用generation_jobs/generated_cases，claude-runtime-check-1绑定工作区/分析/已发布函数版本/hash及固定程序/镜像定义；与Codex共用内部流程但按两个固定用途严格读取、写入、恢复和清理。真实完成、取消、强杀恢复/清理三条记录及hash已核验，8条旧Codex检查/会话及事件逐列不变，迁移checksum和普通数据计数保持。CLI观察不写作模型成绩，Claude不借用Codex准入或专用seccomp。见[本轮状态](harness-fit-d3-claude.md)。
+
+> 2026-11-01 D3-2c：schema仍11，无迁移。新增用途harness_codex_session，复用generation_jobs/generated_cases；计划绑定工作区、任务/模型/隔离检查/hash、两个固定镜像、预算及副本，事件追加hash。运行/清理/历史/恢复按用途及工作区限制；running/grading重开只变interrupted，不自动推理。新版附适配器源码hash，旧无描述记录保留；第一批失败与新一批通过分开，不重算旧评分。不写普通聊天、知识、原项目或普通BenchmarkRun。见[受控单题](harness-fit-d3-session.md)。
+
+> 2026-10-31 D3-2b：schema仍11，harness_codex_runtime新计划codex-runtime-check-2绑定固定保护策略ID/hash/来源及codex-sandbox-2；v1按原样读取，不补写或重算。观察追加实际容器保护配置与十项反向探针结果；策略临时文件清理失败保持cleanup_required。没有模型/聊天/知识或普通成绩写入。见[兼容说明](harness-fit-d3-sandbox.md)。
+
+> 2026-10-31 D3-2a：schema仍11。harness_codex_runtime复用generation_jobs/generated_cases；创建前固定检查/任务/镜像/端点及容器归属，探针/错误/清理只追加带hash的观察。状态checking→completed/failed/cancelled；清理失败保留cleanup_required，重开checking→interrupted、不自动执行。所有读写/清理限制用途与工作区，任务读取再核对分析与检查归属。流程完成与沙盒通过分开，modelCalls=0、taskExecution=Not Run，不写聊天/知识/普通成绩。见[Codex环境检查](harness-fit-d3-codex-runtime.md)。
+
+> 2026-10-30 D3-1：schema仍11。harness_workspace用途复用generation_jobs/generated_cases，计划绑定检查/任务/来源/hash、固定镜像及允许包；环境、容器归属、提交、候选、评分和清理只追加。提交内容与ready→grading在同一事务，所有容器清理后才能标终态。一个数据库至多一个未关闭副本；恢复仅将opening/ready/grading标interrupted，不恢复执行。候选按原范围生成完整文件提案，不写原文件/原快照，评分为人工交接，不写普通BenchmarkRun或Model×Harness成绩。见[副本与交接](harness-fit-d3-workspace.md)。
+
+> 2026-10-30 D3-0：schema仍11。执行前检查以purpose=harness_execution_preflight复用benchmark_generation_jobs，仅追加完成的检查计划/hash，不创建BenchmarkRun、模型请求或成绩。绑定工作区/分析版本、已发布任务ID/version/hash、固定项目来源与验证镜像，保存实际CLI/Docker观察和分别列出的阻断项；canRun=false、taskExecution=Not Run。读取同时限制工作区/分析版本/用途，最多最近30次检查、100个任务版本。旧检查保持当时快照，不随环境变化静默重算；独立运行器和任务执行授权尚未建立。见[D3计划](harness-fit-d3-plan.md)。
+
+> 2026-10-30 D2b-1：schema仍11。验证以harness_programming_validation用途复用generation_jobs/cases，计划绑定草案revision/hash、代码hash、Image ID及评分器；环境、容器归属、评分和清理均追加记录。恢复仅将本用途validating标为interrupted，不重跑。人工发布以harness_programming_tasks复用datasets/reviews，单任务多版本、payload hash及审核/验证快照不可变，不写普通benchmark_cases或聊天/知识。见[对照与发布](harness-fit-d2b-validation.md)。
+
+> 2026-10-30 D2b草案准备：schema仍11。复用benchmark_generation_jobs及benchmark_generated_cases，独立用途`harness_programming_drafts`；计划绑定分析版本/hash及项目来源范围，每次保存追加修订和内容hash。原D2a、普通个性化、标准题库及Runner均不读取此用途；没有批准、发布、评分或执行记录写入。安装与Docker验证被用户暂存，运行状态始终Not Run。见[草案交付](harness-fit-d2b-drafts.md)。
+
+> 2026-10-29 D2a：schema仍11，无新迁移。任务计划/修订/审核/发布分别复用benchmark_generation_jobs、benchmark_generated_cases、benchmark_dataset_reviews、benchmark_datasets；JSON purpose=harness_tasks，普通个性化缺省用途兼容旧记录。任务manifest保留完整任务及hash，不加入普通benchmark_cases或Runner。详见[D2a存储与隔离](harness-fit-d2.md)。以下为历史契约。
+
+> 2026-10-29 D1开发基线：0001–0011。0011仅新增harness_fit_assessments追加版本表，正文绑定来源、需求修改、权重、目录快照及Document Fit结果；导入文档复用benchmark_repository_snapshots。历史迁移字节不变，升级前仍备份/事务执行。真实Harness执行表与D2–D5未创建；详见[交付与兼容性](harness-fit-d1.md)。以下保留历史基线。
+
 > 当前开发基线（2026-10-23）：已实现0001–0008迁移，新增Benchmark用途隔离及存储基础，详见[评测数据库](benchmark-database-schema.md)。已发布v0.2.0安装包仍为schema7；本轮没有升级正式用户库或更新安装包。后文保留各阶段历史契约，实际结构以[迁移SQL](../apps/desktop/src-tauri/migrations/)为准。
 
 本文按阶段记录数据库契约，采用 ADR 0002/0003 的语义；后文 0004–0007 记录已实现增量，所有实际结构以迁移 SQL 为准。

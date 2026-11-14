@@ -9,7 +9,7 @@ impl Database {
     pub fn personalized_datasets(&self, workspace: &str) -> AppResult<Vec<DatasetSummary>> {
         let c = self.connection()?;
         dataset::require_workspace(&c, workspace)?;
-        let mut q=c.prepare("SELECT id,version,content_hash,manifest_json FROM benchmark_datasets WHERE json_extract(provenance_json,'$.workspaceId')=?1 ORDER BY created_at DESC LIMIT 100").map_err(error)?;
+        let mut q=c.prepare("SELECT id,version,content_hash,manifest_json FROM benchmark_datasets WHERE json_extract(provenance_json,'$.workspaceId')=?1 AND COALESCE(json_extract(provenance_json,'$.purpose'),'personalized')='personalized' ORDER BY created_at DESC LIMIT 100").map_err(error)?;
         q.query_map([workspace], |r| {
             let raw: String = r.get(3)?;
             Ok(DatasetSummary {
@@ -31,7 +31,7 @@ impl Database {
         version: u32,
     ) -> AppResult<DatasetSummary> {
         let c = self.connection()?;
-        let raw:(String,String)=c.query_row("SELECT content_hash,manifest_json FROM benchmark_datasets WHERE id=?1 AND version=?2 AND json_extract(provenance_json,'$.workspaceId')=?3",params![id,version,workspace],|r|Ok((r.get(0)?,r.get(1)?))).map_err(|_|"测试集不存在或不属于此工作区。".to_string())?;
+        let raw:(String,String)=c.query_row("SELECT content_hash,manifest_json FROM benchmark_datasets WHERE id=?1 AND version=?2 AND json_extract(provenance_json,'$.workspaceId')=?3 AND COALESCE(json_extract(provenance_json,'$.purpose'),'personalized')='personalized'",params![id,version,workspace],|r|Ok((r.get(0)?,r.get(1)?))).map_err(|_|"测试集不存在或不属于此工作区。".to_string())?;
         let manifest: Value = serde_json::from_str(&raw.1).map_err(json_error)?;
         Ok(DatasetSummary {
             id: id.into(),

@@ -1,0 +1,473 @@
+{
+  "version": "harness-catalog-2026-10-29.1",
+  "checkedAt": "2026-10-29",
+  "scope": "Document Fit only; no installation, authentication or runtime validation",
+  "sources": {
+    "codex_exec": {
+      "title": "Codex非交互模式",
+      "url": "https://learn.chatgpt.com/docs/non-interactive-mode",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "codex_win": {
+      "title": "Codex Windows沙盒",
+      "url": "https://learn.chatgpt.com/docs/windows/windows-sandbox",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "codex_agents": {
+      "title": "Codex项目指令约定",
+      "url": "https://developers.openai.com/cookbook/examples/codex/iterating-development-workflows-with-codex",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "claude_cli": {
+      "title": "Claude Code程序化使用",
+      "url": "https://code.claude.com/docs/en/headless",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "claude_os": {
+      "title": "Claude Code运行环境",
+      "url": "https://code.claude.com/docs/en/setup",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "claude_memory": {
+      "title": "Claude Code项目记忆",
+      "url": "https://code.claude.com/docs/en/memory",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "aider_cli": {
+      "title": "Aider脚本模式",
+      "url": "https://aider.chat/docs/scripting.html",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "aider_local": {
+      "title": "Aider与Ollama",
+      "url": "https://aider.chat/docs/llms/ollama.html",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "aider_os": {
+      "title": "Aider安装",
+      "url": "https://aider.chat/docs/install.html",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "aider_rules": {
+      "title": "Aider编码约定",
+      "url": "https://aider.chat/docs/usage/conventions.html",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "oh_cli": {
+      "title": "OpenHands无界面模式",
+      "url": "https://docs.openhands.dev/openhands/usage/cli/headless",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "oh_mcp": {
+      "title": "OpenHands终端模式",
+      "url": "https://docs.openhands.dev/openhands/usage/cli/terminal",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "cursor_cli": {
+      "title": "Cursor无界面CLI",
+      "url": "https://cursor.com/docs/cli/headless",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    },
+    "cursor_json": {
+      "title": "Cursor结构化输出",
+      "url": "https://cursor.com/docs/cli/reference/output-format",
+      "checkedAt": "2026-10-29",
+      "verification": "official_document_read"
+    }
+  },
+  "entries": [
+    {
+      "id": "codex",
+      "name": "OpenAI Codex",
+      "website": "https://developers.openai.com/codex/",
+      "version": null,
+      "channel": "官方文档快照；未绑定安装版本",
+      "checkedAt": "2026-10-29",
+      "runtimeVerified": false,
+      "operatingSystems": "Windows/macOS/Linux；本轮未安装验证",
+      "modelAccess": "CLI认证及模型兼容性按部署核实；未绑定实际模型",
+      "authenticationAndCost": "使用CLI自身认证；CortexOS凭据不可自动复用，费用未测",
+      "contextMechanism": "AGENTS.md项目约定；上下文限制未测",
+      "toolMechanism": "命令、文件变更和MCP事件；本轮不执行",
+      "facts": {
+        "windows_native": {
+          "value": true,
+          "basis": "documented",
+          "note": "有原生Windows沙盒说明",
+          "source": "codex_win"
+        },
+        "cli": {
+          "value": true,
+          "basis": "documented",
+          "note": "提供非交互exec入口",
+          "source": "codex_exec"
+        },
+        "events": {
+          "value": true,
+          "basis": "documented",
+          "note": "提供JSONL执行事件",
+          "source": "codex_exec"
+        },
+        "local_model": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "project_instructions": {
+          "value": true,
+          "basis": "documented",
+          "note": "识别AGENTS.md约定",
+          "source": "codex_agents"
+        },
+        "mcp": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "sandbox": {
+          "value": true,
+          "basis": "documented",
+          "note": "提供Windows隔离机制",
+          "source": "codex_win"
+        },
+        "human_approval": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "repository_editing": {
+          "value": true,
+          "basis": "documented",
+          "note": "事件可包含文件变更",
+          "source": "codex_exec"
+        },
+        "agents_md": {
+          "value": true,
+          "basis": "documented",
+          "note": "文档列有AGENTS.md项目约定",
+          "source": "codex_agents"
+        }
+      }
+    },
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "website": "https://code.claude.com/",
+      "version": null,
+      "channel": "官方文档快照；未绑定安装版本",
+      "checkedAt": "2026-10-29",
+      "runtimeVerified": false,
+      "operatingSystems": "Windows及WSL/macOS/Linux；配置依官方要求核实",
+      "modelAccess": "Anthropic及官方部署入口；任意本地模型未核实",
+      "authenticationAndCost": "需要自身认证或受支持的部署凭据，费用未测",
+      "contextMechanism": "CLAUDE.md及记忆机制；实际项目适配未测",
+      "toolMechanism": "CLI工具权限与Read/Edit/Bash；本轮不执行",
+      "facts": {
+        "windows_native": {
+          "value": true,
+          "basis": "documented",
+          "note": "列有原生Windows安装路径",
+          "source": "claude_os"
+        },
+        "cli": {
+          "value": true,
+          "basis": "documented",
+          "note": "print模式可用于脚本",
+          "source": "claude_cli"
+        },
+        "events": {
+          "value": true,
+          "basis": "documented",
+          "note": "提供结构化输出选项",
+          "source": "claude_cli"
+        },
+        "local_model": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "project_instructions": {
+          "value": true,
+          "basis": "documented",
+          "note": "项目约定使用CLAUDE.md",
+          "source": "claude_memory"
+        },
+        "mcp": {
+          "value": true,
+          "basis": "documented",
+          "note": "非交互模式可加载MCP配置",
+          "source": "claude_cli"
+        },
+        "sandbox": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "human_approval": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "repository_editing": {
+          "value": true,
+          "basis": "documented",
+          "note": "程序化入口包含文件编辑工具",
+          "source": "claude_cli"
+        },
+        "agents_md": {
+          "value": null,
+          "basis": "unknown",
+          "note": "具体版本/配置下是否读取AGENTS.md尚未核实",
+          "source": null
+        }
+      }
+    },
+    {
+      "id": "aider",
+      "name": "Aider",
+      "website": "https://aider.chat/",
+      "version": null,
+      "channel": "官方文档快照；未绑定安装版本",
+      "checkedAt": "2026-10-29",
+      "runtimeVerified": false,
+      "operatingSystems": "官方安装文档含Windows路径；本机未验证",
+      "modelAccess": "文档列有Ollama与多Provider入口；具体模型需单独验证",
+      "authenticationAndCost": "按选定Provider认证；本地服务和云端费用分别核实",
+      "contextMechanism": "可把编码约定文件作为只读上下文",
+      "toolMechanism": "单次消息编辑与Git相关开关；本轮不执行",
+      "facts": {
+        "windows_native": {
+          "value": true,
+          "basis": "documented",
+          "note": "安装文档包含Windows操作",
+          "source": "aider_os"
+        },
+        "cli": {
+          "value": true,
+          "basis": "documented",
+          "note": "message参数支持单次脚本任务",
+          "source": "aider_cli"
+        },
+        "events": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "local_model": {
+          "value": true,
+          "basis": "documented",
+          "note": "文档说明Ollama接入",
+          "source": "aider_local"
+        },
+        "project_instructions": {
+          "value": true,
+          "basis": "documented",
+          "note": "支持提供编码约定文件",
+          "source": "aider_rules"
+        },
+        "mcp": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "sandbox": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "human_approval": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "repository_editing": {
+          "value": true,
+          "basis": "documented",
+          "note": "单次消息可编辑文件后退出",
+          "source": "aider_cli"
+        },
+        "agents_md": {
+          "value": null,
+          "basis": "unknown",
+          "note": "具体版本/配置下是否读取AGENTS.md尚未核实",
+          "source": null
+        }
+      }
+    },
+    {
+      "id": "openhands",
+      "name": "OpenHands",
+      "website": "https://docs.openhands.dev/",
+      "version": null,
+      "channel": "官方文档快照；未绑定安装版本",
+      "checkedAt": "2026-10-29",
+      "runtimeVerified": false,
+      "operatingSystems": "Windows原生能力未核实；本轮未部署",
+      "modelAccess": "可用模型及认证按实际部署核实",
+      "authenticationAndCost": "与部署模型有关，CortexOS密钥不可自动复用",
+      "contextMechanism": "仓库上下文机制与实际限制未核实",
+      "toolMechanism": "无界面模式可产生文件/命令动作；本轮不执行",
+      "facts": {
+        "windows_native": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "cli": {
+          "value": true,
+          "basis": "documented",
+          "note": "提供headless任务入口",
+          "source": "oh_cli"
+        },
+        "events": {
+          "value": true,
+          "basis": "documented",
+          "note": "json模式流式输出事件",
+          "source": "oh_cli"
+        },
+        "local_model": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "project_instructions": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "mcp": {
+          "value": null,
+          "basis": "documented",
+          "note": "终端模式有MCP设置；无界面执行兼容性尚未核实",
+          "source": "oh_mcp"
+        },
+        "sandbox": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "human_approval": {
+          "value": false,
+          "basis": "documented",
+          "note": "该headless模式固定自动批准，不能逐步人工审批",
+          "source": "oh_cli"
+        },
+        "repository_editing": {
+          "value": true,
+          "basis": "documented",
+          "note": "事件示例包含文件写入",
+          "source": "oh_cli"
+        },
+        "agents_md": {
+          "value": null,
+          "basis": "unknown",
+          "note": "具体版本/配置下是否读取AGENTS.md尚未核实",
+          "source": null
+        }
+      }
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "website": "https://cursor.com/",
+      "version": null,
+      "channel": "官方文档快照；未绑定安装版本",
+      "checkedAt": "2026-10-29",
+      "runtimeVerified": false,
+      "operatingSystems": "CLI文档列Windows/macOS/Linux入口；本机未验证",
+      "modelAccess": "账号/CLI模型目录按部署核实；本地模型未核实",
+      "authenticationAndCost": "需要自身账号或CLI凭据，费用未测",
+      "contextMechanism": "项目规则/索引在本目录尚未核实",
+      "toolMechanism": "print默认提出修改，直接应用需额外授权；本轮不执行",
+      "facts": {
+        "windows_native": {
+          "value": true,
+          "basis": "documented",
+          "note": "CLI页面列Windows安装入口",
+          "source": "cursor_cli"
+        },
+        "cli": {
+          "value": true,
+          "basis": "documented",
+          "note": "print模式支持脚本使用",
+          "source": "cursor_cli"
+        },
+        "events": {
+          "value": true,
+          "basis": "documented",
+          "note": "提供JSON及stream-json格式",
+          "source": "cursor_json"
+        },
+        "local_model": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "project_instructions": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "mcp": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "sandbox": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "human_approval": {
+          "value": null,
+          "basis": "unknown",
+          "note": "本目录未核实此能力",
+          "source": null
+        },
+        "repository_editing": {
+          "value": true,
+          "basis": "documented",
+          "note": "CLI有提议和应用文件修改模式",
+          "source": "cursor_cli"
+        },
+        "agents_md": {
+          "value": null,
+          "basis": "unknown",
+          "note": "具体版本/配置下是否读取AGENTS.md尚未核实",
+          "source": null
+        }
+      }
+    }
+  ]
+}

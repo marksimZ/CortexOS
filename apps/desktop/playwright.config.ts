@@ -21,6 +21,31 @@ export default defineConfig({
     timeout: 30_000,
   },
   projects: [
+    ...(process.env.CORTEXOS_HARNESS_EXPERIMENT === "1" ? [{name:"harness-experiment",testMatch:"harness-experiment.spec.ts"}] : []),
+    ...(process.env.CORTEXOS_HARNESS_AIDER_SESSION === "1" ? [{name:"harness-aider-session",testMatch:"harness-aider-session.spec.ts"}] : []),
+    ...(process.env.CORTEXOS_HARNESS_AIDER_RUNTIME === "1" ? [{name:"harness-aider-runtime",testMatch:"harness-aider-runtime.spec.ts"}] : []),
+    ...(process.env.CORTEXOS_HARNESS_CLAUDE_SESSION === "1" ? [{name:"harness-claude-session",testMatch:"harness-claude-session.spec.ts"}] : []),
+    ...(process.env.CORTEXOS_HARNESS_CLAUDE_RUNTIME === "1"
+      ? [{ name: "harness-claude-runtime", testMatch: "harness-claude-runtime.spec.ts" }]
+      : []),
+    ...(process.env.CORTEXOS_HARNESS_SESSION === "1"
+      ? [{ name: "harness-codex-session", testMatch: "harness-codex-session.spec.ts" }]
+      : []),
+    ...(process.env.CORTEXOS_HARNESS_CODEX_RUNTIME_REAL === "1"
+      ? [{ name: "harness-codex-runtime", testMatch: "harness-codex-runtime.spec.ts" }]
+      : []),
+    ...(process.env.CORTEXOS_HARNESS_WORKSPACE_REAL === "1"
+      ? [{ name: "harness-workspace-real", testMatch: "harness-workspace.spec.ts" }]
+      : []),
+    ...(process.env.CORTEXOS_HARNESS_PREFLIGHT === "1"
+      ? [{ name: "harness-preflight", testMatch: "harness-preflight.spec.ts" }]
+      : []),
+    ...(process.env.CORTEXOS_HARNESS_DOCKER_REAL === "1"
+      ? [{ name: "harness-docker-real", testMatch: "harness-programming-validation.spec.ts" }]
+      : []),
+    ...(process.env.CORTEXOS_BENCHMARK_PYTHON_REAL === "1"
+      ? [{ name: "benchmark-python-real", testMatch: "benchmark-python-real.spec.ts" }]
+      : []),
     ...(process.env.CORTEXOS_BENCHMARK_ACCEPTANCE_REAL === "1"
       ? [{ name: "benchmark-acceptance-real", testMatch: "benchmark-acceptance-real.spec.ts" }]
       : []),
@@ -40,6 +65,9 @@ export default defineConfig({
     {
       name: "desktop",
       testMatch: [
+        "harness-fit.spec.ts",
+        "harness-programming.spec.ts",
+        "harness-tasks.spec.ts",
         "window-drag.spec.ts",
         "standard-benchmark.spec.ts",
         "benchmark-report-pages.spec.ts",

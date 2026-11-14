@@ -1,5 +1,13 @@
 # CortexOS contributor instructions
 
+- 每个开发切片完成后，向用户列出当前阶段已完成、剩余步骤和实际阻断项。
+
+## 本地模型操作先弹窗确认
+
+- 开发或验证中，实际发起本地模型推理、向量生成、模型评测，或执行可能加载模型并占用显存的操作前，先用交互提问弹窗告知用户实际模型、用途和调用范围，等待明确确认后执行。
+- “继续开发”不自动授权新的模型调用。一次确认只覆盖弹窗说明的模型与有界批次；改变范围时重新确认。历史安装、下载或运行许可不替代本次调用确认。
+- 只读连接状态、模型列表和元数据查询可直接进行；会触发推理或加载模型的“连接验证”也须先确认。用户已反馈过显存不足导致意外退出，保留此项操作门槛。
+
 Read `development.md`, `docs/development-standards.md` and `docs/implementation-plan.md` before implementing a milestone. Actual completion and commands belong in `docs/milestone-log.md`.
 
 - Deliver the current phase as a working, verified slice. Stop at its documented acceptance gate.

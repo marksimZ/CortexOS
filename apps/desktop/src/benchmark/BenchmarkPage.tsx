@@ -1,3 +1,4 @@
+import { HarnessFitLab } from './harness/HarnessFitLab';
 import { invoke } from "@tauri-apps/api/core";
 import { navigationHash, useNavigation } from "../navigation";
 import { BenchmarkLink } from "./BenchmarkLink";
@@ -12,17 +13,19 @@ import "./benchmark.css";
 export function BenchmarkPage({ studio, personalized }: { studio: Studio; personalized: boolean }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const route=useNavigation(),requestedBatch=reportParams(route.hash).get("batch");
+  const harness=new URLSearchParams(route.hash.split('?')[1]).get('view')==='harness';
   useEffect(()=>{if(!personalized||!requestedBatch)return;let current=true;void invoke<{allowed:boolean}>("personalized_access").then(status=>{if(current&&status.allowed)setProfileOpen(true);}).catch(()=>{});return()=>{current=false;};},[personalized,requestedBatch]);
   if(route.workspace&&route.workspace!==studio.workspaceId)return <div><p role="status">{studio.data&&!studio.data.workspaces.some(w=>w.id===route.workspace)?"链接中的工作区不存在。":"正在切换到链接中的工作区…"}</p><button className="button secondary" onClick={()=>{studio.clearError();window.location.hash=navigationHash("benchmark",{workspace:studio.workspaceId});}}>返回当前工作区</button></div>;
   return <section className="standard-page benchmark-page" aria-labelledby="page-title">
     <h1 id="page-title" className="sr-only">评测</h1>
     <nav className="benchmark-tabs" aria-label="评测类型">
-      <a href={navigationHash("benchmark",{workspace:studio.workspaceId})} aria-current={!personalized ? "page" : undefined}>标准评测</a>
+      <a href={navigationHash("benchmark",{workspace:studio.workspaceId})} aria-current={!personalized&&!harness ? "page" : undefined}>标准评测</a>
       <a href={navigationHash("benchmark",{workspace:studio.workspaceId,view:"personalized"})} aria-current={personalized ? "page" : undefined}>个性化评测</a>
+      <a href={navigationHash("benchmark",{workspace:studio.workspaceId,view:"harness"})} aria-current={harness ? "page" : undefined}>项目适配</a>
     </nav>
-    <BenchmarkLink />
-    <div className="page-content benchmark-content">
-      {personalized ? profileOpen ? <PersonalizedWorkbench workspaceId={studio.workspaceId} onConnection={()=>setProfileOpen(false)} /> : <CloudConnection desktop={studio.desktop} onContinue={()=>setProfileOpen(true)} /> : <StandardBenchmarks desktop={studio.desktop} workspaceId={studio.workspaceId}/>}
+    {!harness&&<BenchmarkLink />}
+    <div className={`page-content benchmark-content${harness?' harness-content':''}`}>
+      {harness?<HarnessFitLab workspaceId={studio.workspaceId} desktop={studio.desktop}/>:personalized ? profileOpen ? <PersonalizedWorkbench workspaceId={studio.workspaceId} onConnection={()=>setProfileOpen(false)} /> : <CloudConnection desktop={studio.desktop} onContinue={()=>setProfileOpen(true)} /> : <StandardBenchmarks desktop={studio.desktop} workspaceId={studio.workspaceId}/>}
     </div>
   </section>;
 }

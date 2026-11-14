@@ -1,5 +1,83 @@
 # 检查与验收
 
+## D3-3b Claude兼容沙盒
+
+先核对官方包/镜像、固定规则hash及独立许可；脚本先准备评审文件，不自动应用。三配置组保留实际CLI/Bash结果，不凭退出0判断通过；固定回复夹具不连接模型。初轮内层CapBnd非零与实际可用权限分开，保留原失败，再补验内层CapEff/Prm/Amb=0、外层能力全0、UID65534、NNP和unshare/clone新建子命名空间拒绝。13项反向保护及严格配置齐备才标sandboxReady；模型canRun仍false。
+
+只跑必要claude_gate_两项和既有codex_policy_is_fixed一项，分别检查伪造/缺失证明、两个公开策略ID互拒及临时文件互不删除，合计3通过，不跑无关全套。类型检查与最终桌面构建通过。
+
+设置CORTEXOS_HARNESS_CLAUDE_RUNTIME=1、CORTEXOS_HARNESS_CLAUDE_PREPARED=1、CORTEXOS_CLAUDE_COMPATIBLE=1，运行原harness-claude-runtime专项：备份D3-3a独立QA库，原生WebView2实际CLI/固定回复，新旧v1/v2、目的/工作区/hash/错误策略拒绝，停止、强杀恢复和手动清理；1通过32.3秒/总34.8秒，三尺寸浅深六图无横向溢出。只读交付审计核对11条旧记录字节、源码/事件hash、schema/迁移、普通数据和自有容器/临时文件。没有真实模型或项目任务；固定回复预算/Token/费用不作模型能力证据。详见[交付](harness-fit-d3-claude-sandbox.md)。
+
+## D3-3a Claude运行前检查
+
+先逻辑审阅固定命令、空环境、镜像标签/指纹、Docker默认策略及两个固定用途的读写/清理/恢复。只跑必要claude_gate_信任边界，不跑无关全套。CORTEXOS_HARNESS_CLAUDE_RUNTIME=1启用原生专项；未设置PREPARED时只验空镜像/禁用、输入/hash/用途/工作区拒绝及旧Codex实跑记录不变，并检三尺寸浅深。工具准备实际完成后再显式设置CORTEXOS_HARNESS_CLAUDE_PREPARED=1，执行实际CLI/参数/环境、取消、强杀恢复、手动清理；不会推理或运行项目代码。不把未准备态或合成分类单项当真实Claude验证。
+
+共用worker/记录发生变化，定向复用harness-codex-runtime的既有无模型Docker专项核对v1/v2、停止和恢复。保留既有Codex专用策略，不将其应用于Claude。工具下载和实际模型操作分别确认。
+
+2026-11-02实际结果：用户批准工具准备后，PREPARED分支1通过（16.2秒/总19.2秒），真实版本/help/环境探针、停止、强杀恢复/手动清理和六张三尺寸浅深截图完成；不是Claude编程或内层沙盒通过。普通帮助未列出`--max-turns`、bwrap/socat缺失、默认用户命名空间拒绝均准确阻断。只读审计schema11/迁移checksum、三条计划/事件hash、8条旧Codex记录/事件不变和相关容器无残留；无模型调用。命令、初次准备错误及修正见里程碑，证据在artifacts/harness-claude-runtime-prepared/。
+
+## D3-2c 受控模型与单题
+
+先审阅用途/归属/任务/模型身份、固定Docker参数、双向IO和预算。只跑必要codex_bridge_信任边界，不跑无关全套。CORTEXOS_HARNESS_SESSION=1启用harness-codex-session原生专项：受控Provider+真实Codex/Docker验证命令修改、逐条断言、四请求预算、错误工具名、取消、强杀恢复/手动清理、旧真实失败不变、三尺寸浅深与无横向溢出。受控回复不算模型能力。
+
+实际推理逐批弹窗确认后才设置CORTEXOS_HARNESS_SESSION_REAL=qwen3:4b-instruct，retries=0。本轮两批分别获确认，各至多一会话/四请求：首批失败保留，修正路径/文本工具范围后新批三请求、独立7/7。CORTEXOS_HARNESS_SESSION_LEGACY=1从首批独立QA库backup核对旧记录，不修改生产库。verify_session_delivery.py只读核对schema/FK/hash/普通数据隔离、归属容器和/api/ps，不追加推理。完整180秒等待、耗尽磁盘、新Windows缩放/读屏和多任务泛化未做，不以短专项代替。
+
+## D3-2b内层沙盒兼容
+
+先核对固定Moby来源/hash及仅追加的允许规则，再取得有界试验确认；namespace_probe只运行受控容器，不改host设置或调用模型。三组策略对照、实际CLI帮助、修正参数及EROFS拒绝语义分别保留证据。候选须取得十项反向保护和UID65534；任何一项缺失不得通过。必要codex_两项边界检查覆盖缺失证据、unknown/unconfined/篡改策略、临时文件创建清理；不跑无关全量单元。
+
+原生专项使用CORTEXOS_HARNESS_CODEX_RUNTIME_REAL=1，增加CORTEXOS_CODEX_COMPATIBLE=1时，从原D3-2a QA库一致性备份，核对v1记录完整不变、新兼容策略的明确确认/真实配置/hash/十项观察、停止/清理、重开和强杀恢复，以及三尺寸浅深截图。模型与编程任务始终Not Run。新策略只进入Codex路径；原Python评分/人工副本保持默认策略，静态审查其create_args调用链。
+
+## D3-2a Codex隔离检查
+
+先审阅固定命令、四个官方文件hash、镜像/权限配置、创建前归属、用途/工作区/任务检查范围及清理终态。仅必要`codex_runtime_checks_reject_missing_boundary_proof_and_namespace_failure`检查缺失/错误写入证明不能通过、命名空间失败准确分类以及模型调用不能混入无模型协议；合成协议不作真实Docker证据。
+
+显式`CORTEXOS_HARNESS_CODEX_RUNTIME_REAL=1`启用`harness-codex-runtime`；备份此前独立D3-0 QA库，在原生WebView2中确认镜像、触发无模型固定探针、检查真实版本/目录保护阻断、错误hash/未确认/用途/工作区/检查归属拒绝、取消、历史不变和重开不重跑。仅暂停本专项创建且有归属的探针容器，强杀自有QA进程，再验证interrupted和UI手动清理。检查三尺寸浅深截图及横向溢出。无用户项目代码、模型、个人认证和普通成绩。实际命令/首次失败及结果见里程碑；内层沙盒不支持不能标为Passed，不调用模型来绕过环境门槛。
+
+## D3-1副本与交接
+
+先逻辑审阅，不跑无关全套单元。必要package专项检查答案字段排除、文件清单/hash/权限及CRLF/中文原范围保护；已有programming_controls专项扩充工作区/用途/状态/hash、提交写入失败的事务回滚、双重提交/未清理终态拒绝及恢复。合成观察不作真实Docker证据。
+
+显式CORTEXOS_HARNESS_WORKSPACE_REAL=1启用harness-workspace-real原生项目，SQLite backup从D3-0实际QA库创建独立副本，复用已有Python镜像。实测允许包/权限/无宿主挂载和Socket、正确/错误人工提交、逐断言、旧版本不变、额外文件拒绝、停止、正常关闭清理和强杀恢复/手动清理；三尺寸浅深主题与修改弹窗固定关闭。仅已提交代码在受限评分容器中执行，文件助手不执行项目代码，宿主不运行仓库脚本，无模型或CLI任务。600秒临时会话只核对配置，未把短测试当完整600秒计时实测。
+
+## D3-0执行前检查
+
+先逻辑审阅固定版本探针、空配置环境、超时/输出上限、文件/来源/hash与用途范围；不跑无关全套单元。必要协议检查preflight_version_protocol_rejects_extra_output_and_relative_search；既有programming_controls专项仅扩充检查快照的工作区/用途/伪造hash/缺失版本/不可变性/历史及保守阻断断言，合成观察不作真实环境证据。
+
+真实原生检查显式CORTEXOS_HARNESS_PREFLIGHT=1开启harness-preflight项目，依赖本机已安装Codex原生程序与Docker，以及D2b-1独立QA中的实际两版任务。使用SQLite backup复制该QA库到新的验收目录，不接触生产库；验证空态、真实CLI版本/Docker读取、两版绑定、选择和历史同步、跨工作区/错误hash拒绝、重新打开不自动检测、三尺寸浅深截图与旧发布版本不变。此流程没有模型请求、容器代码执行或任务成绩；CLI缺失/脚本安装形式等按真实原因保留，不伪造支持。无旧QA证据的机器需先完成对应D2b验收，不把依赖缺失当本测试通过。
+
+## D2b-1编程任务对照与发布
+
+只运行必要的`programming_controls_bind_evidence_reject_stale_approval_and_preserve_versions`信任边界专项；其构造的评分观察明确为合成数据，不代表Docker实测。覆盖工作区/用途、待验证/伪造hash/未批准/过期修订拒绝、三组条件、不可变发布、普通题库拒绝与重开恢复。
+
+修复共享Python握手前取消后运行`scoring_python_`定向控制器专项，显式忽略的真实Docker测试不会自动运行；不跑无关全套单元。真实集成通过`CORTEXOS_HARNESS_DOCKER_REAL=1`显式启用`harness-docker-real`项目，使用独立库、受控ZIP及已有Python镜像：三组真实对照、人工两版发布/旧验证失效/来源/三尺寸浅深截图，以及错误参考、停止、强制杀死自有测试进程、重开与按归属清理。受控Python只在容器内执行；没有模型调用。最终界面更新只复验受影响的正常发布和既有草案/只读任务场景，不无故重复已通过的中断检查。
+
+命令和成功/失败按实际写入milestone-log。原20项模型补验属于D2b-0保留证据，本轮不重新调用或改其评分；系统缩放和读屏未由本轮视口检查代替。
+
+## D2b-0真实Docker隔离与旧Python题补验
+
+仅显式运行忽略的真实集成检查：`CORTEXOS_PYTHON_IMAGE`绑定已下载本地sha256镜像ID，当前检查进程PATH补入实际Docker CLI目录；`cargo test scoring_python_live_docker_limits_and_cleanup --lib --offline -- --ignored --nocapture`复用原控制器与真实命令，检查正确/错误/类型/输入修改、容器内UID/能力/只读root/网络/cgroup限制、输出/内存/单断言超时、取消及实际清理。`scoring_python_live_case_deadline`另检查实际60秒整题上限。受控代码只在无挂载、无网络容器中执行。逐场景JSON、实际inspect及清理状态留在artifacts/harness-docker-live；没有运行无关单元。
+
+安全门槛实证通过后，显式`CORTEXOS_BENCHMARK_PYTHON_REAL=1`启用`benchmark-python-real`项目，仅新建独立库两原身份×10个原Python题计划，复核原case/dataset/model hash及参数，固定镜像ID。保存新旧runId关联，前后校验旧报告SHA256，保留实际Failed/Needs Review/环境错误等状态，不要求模型答对，也不覆盖旧20项。该脚本实际调用已安装本地模型，无云端/密钥/模型下载。真实命令、结果及未完成项见里程碑与环境恢复记录。
+
+## D2b编程任务草案准备
+
+先审阅来源、用途与静态/执行状态边界。仅运行必要的`cargo test harness_programming_drafts_preserve_scope_history_and_execution_gate --lib --offline -- --nocapture`，覆盖工作区隔离、输入/输出类型、重复输入、目标/边界/回归分类、路径范围、过期修订、不可变原记录、独立内容hash、数据库重开及发布拒绝；没有执行代码字符串。编程草案不进入聊天、知识、执行记录或正式题库。
+
+`harness-programming.spec.ts --project=desktop`在独立数据目录中通过真实系统ZIP选择窗口导入受控Python快照，操作表单、类型错误恢复、追加保存、跨步骤草稿/关闭提醒、历史只读与来源定位，并检查三种视口×浅深主题。不修改Windows缩放，不调用模型、Docker或第三方Harness。通过情况、失败及修复据实际命令记入里程碑；容器正反对照、安全限制、旧20题补验保留为未运行。
+
+## Harness Fit Lab D2a
+
+先逻辑检查；必要`cargo test harness_tasks_ --lib --offline -- --nocapture`覆盖用途/工作区隔离、来源/行号/未确认要求、重复任务、合法重复文件路径、逐项评分对照、过期revision/version、发布不可变及重开。另运行已有personalized_publication_revisions_are_immutable_and_reuse_existing_scoring_and_trace单一专项，核对缺省personalized旧记录仍可发布/评分；不跑无关单元套件。
+
+原生harness-tasks.spec.ts使用实际development.md内容（Debug预设路径选择，不冒充人工系统选取），再通过真实系统ZIP选择窗口导入自建受控代码快照；读取/生成/修订/发布均经真实Rust/SQLite。验证原文定位、跨步骤草稿/关闭提醒、历史只读/不变、三尺寸浅深截图、固定栏命中及普通聊天/评测不产生记录。D1原生文件选择与cloud-native准入作为必要回归。任务规则对照不替代模型/Harness执行，不执行导入代码；实际结果见里程碑。
+
+## Harness Fit Lab D0–D1
+
+本轮先逻辑审阅并只读复核Docker/WSL及Phase C证据，不运行第三方CLI或付费请求。必要的 `cargo test harness_ --lib --offline -- --nocapture` 三项覆盖提取候选/否定未来未知/硬过滤/重复计权、来源防篡改/作用域/追加版本/重开，以及schema10→11备份/故意失败回滚/旧聊天保留；不运行无关单元套件。
+
+原生 `harness-fit.spec.ts --project=desktop` 使用真实系统选择窗口取消与选取当前仓库development.md；真实Rust文件读取/SQLite分析、原文行定位、确认/硬要求、权重、两版保存/历史/重载、六张三尺寸浅深截图及固定保存入口。UIA助手只控制指定测试进程、路径限定仓库；不把Debug环境预设文件路径当作本轮真实文件选择检查。D1本地入口无云端凭据可用，另用既有cloud-native专项确认个性化生成等原准入保持。实际结果见里程碑；Docker/WSL安装、真实Harness操作、系统150%/读屏不在本轮通过项中。
+
 ## Benchmark 8 真实本地完整计划
 
 显式设置 `CORTEXOS_BENCHMARK_ACCEPTANCE_REAL=1`，运行 `benchmark-acceptance-real.spec.ts --project=benchmark-acceptance-real`。只选择实际目录中至多两个不同指纹的已安装模型，使用独立SQLite/Profile，先两题两次重复并停止/恢复，再固定Core60 v2全计划。原文、各类状态、分母、资源与配置均保留，不断言模型必须答对。Docker缺失按真实环境阻断；不下载模型、安装Docker或执行宿主代码。

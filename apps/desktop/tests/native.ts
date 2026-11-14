@@ -126,13 +126,18 @@ export async function launchNative(
       development
         ? /^http:\/\/127\.0\.0\.1:1420/
         : /^https?:\/\/tauri\.localhost/,
+      { timeout: 30_000 },
     );
     const consoleErrors: string[] = [];
     page.on("pageerror", (error) => consoleErrors.push(error.message));
     page.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
     });
-    return { page, context, consoleErrors, stop, closeWindow, processId:application.pid };
+    const closeFromUi = async () => {
+      await page.getByRole('button',{name:'关闭窗口',exact:true}).click();
+      await expect.poll(()=>application.exitCode,{timeout:20000}).not.toBeNull();
+    };
+    return { page, context, consoleErrors, stop, closeWindow, closeFromUi, processId:application.pid };
   } catch (error) {
     await stop();
     throw error;

@@ -233,6 +233,9 @@ impl Ollama {
             json!({"model":request.model,"status":"released","requestSent":true,"confirmation":"api_ps"}),
         )
     }
+    pub(crate) fn benchmark_evidence(&self) -> &'static str {
+        if self.endpoint == "http://127.0.0.1:11434" { "local_model" } else { "test_endpoint" }
+    }
     pub fn new() -> AppResult<Self> {
         #[allow(unused_mut)]
         let mut endpoint = "http://127.0.0.1:11434".to_string();
