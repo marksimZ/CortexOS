@@ -342,7 +342,17 @@ pub async fn get_benchmark_overview(
         state.inner().clone(),
         cloud.inner().clone(),
         scope,
-        move |db| db.benchmark_overview(&workspace_id, &batch_id, scope),
+        {
+            let tasks = state.tasks.clone();
+            move |db| {
+                let mut report = db.benchmark_overview(&workspace_id, &batch_id, scope)?;
+                let waiting = tasks.is_waiting(&batch_id, &workspace_id, crate::tasks::TaskKind::Benchmark)?;
+                let starting = !waiting && matches!(report["status"].as_str(), Some("planned" | "cancelled" | "interrupted" | "failed")) && tasks.summary()?.is_some_and(|a| a.id == batch_id && a.workspace_id == workspace_id && a.kind == crate::tasks::TaskKind::Benchmark);
+                report["starting"] = Value::Bool(starting);
+                report["waitingForResources"] = Value::Bool(waiting);
+                Ok(report)
+            }
+        },
     )
     .await
 }

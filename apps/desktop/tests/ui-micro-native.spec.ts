@@ -135,9 +135,9 @@ test("native input cooldown, reading position, split cancellation and file exten
       for (const theme of ["light", "dark"]) {
         await page.getByRole("combobox", { name: "外观", exact: true }).selectOption(theme);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-        const toolbar = await page.getByRole("combobox", { name: "外观", exact: true }).boundingBox();
+        const toolbar = await page.getByRole("group", { name: "窗口操作", exact: true }).boundingBox();
         const evidence = await page.getByRole("complementary", { name: "回答依据", exact: true }).boundingBox();
-        expect(toolbar!.x + toolbar!.width).toBeLessThanOrEqual(evidence!.x);
+        expect(toolbar!.y + toolbar!.height).toBeLessThanOrEqual(evidence!.y);
         await page.screenshot({ path: info.outputPath(`chat-${width}-${theme}.png`) });
       }
     }

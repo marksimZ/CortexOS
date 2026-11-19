@@ -2,13 +2,13 @@ pub(crate) mod aider_channel;
 mod extract;
 mod fit;
 pub mod preflight;
+pub mod programming;
 pub mod runtime;
 pub mod session;
-pub mod workspace;
-pub mod programming;
 pub mod tasks;
 #[cfg(test)]
 mod tests;
+pub mod workspace;
 use crate::{
     benchmark::{
         dataset::{hash, require_workspace},
@@ -25,6 +25,37 @@ use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use tauri::State;
 use tauri_plugin_dialog::DialogExt;
+
+async fn queue_job(
+    state: &AppState,
+    id: &str,
+    workspace: &str,
+    kind: crate::tasks::TaskKind,
+    subject: &str,
+    wait: Option<bool>,
+) -> AppResult<crate::tasks::Lease> {
+    if wait == Some(true) {
+        state
+            .tasks
+            .wait_scoped(id, workspace, kind, subject, &state.closing)
+            .await
+    } else {
+        state.claim_task(id, workspace, kind)
+    }
+}
+
+fn add_job_request(mut result: Value, request: Option<(String, bool)>) -> Value {
+    if let Some((id, waiting)) = request {
+        let recorded = result["history"].as_array().is_some_and(|rows| {
+            rows.iter()
+                .any(|row| row["id"] == id && row["status"] != "ready")
+        });
+        if waiting || !recorded {
+            result["request"] = json!({"id":id,"status":if waiting {"waiting"} else {"starting"}});
+        }
+    }
+    result
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

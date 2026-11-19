@@ -1,6 +1,7 @@
 import {
   Box,
   ChevronDown,
+  Cloud,
   Eye,
   HardDrive,
   Pencil,
@@ -14,7 +15,11 @@ import type { Studio } from "../studio";
 export function ChatComposer({
   studio,
   modelReady,
+  modelName,
+  cloudAnswer,
+  cloudLookup,
   currentRunning,
+  preparing,
   cancelling,
   setCancelling,
   canSend,
@@ -22,7 +27,11 @@ export function ChatComposer({
 }: {
   studio: Studio;
   modelReady: boolean | undefined;
+  modelName: string;
+  cloudAnswer: boolean;
+  cloudLookup: boolean;
   currentRunning: boolean;
+  preparing: boolean;
   cancelling: boolean;
   setCancelling: (value: boolean) => void;
   canSend: boolean;
@@ -98,10 +107,10 @@ export function ChatComposer({
           <a
             className="composer-model"
             href="#/settings"
-            title={modelReady ? "选择或配置本地模型" : "模型尚未就绪，打开设置"}
+            title={modelReady ? "打开模型设置" : "模型尚未就绪，打开设置"}
           >
-            <Box size={17} aria-hidden="true" />
-            <span>{studio.settings.model}</span>
+            {cloudAnswer || cloudLookup ? <Cloud size={17} aria-hidden="true" /> : <Box size={17} aria-hidden="true" />}
+            <span>{(cloudAnswer || cloudLookup) && <><strong>{cloudAnswer ? "云端回答" : "云端查找"}</strong>{" "}</>}{modelName}</span>
             <ChevronDown size={14} aria-hidden="true" />
           </a>
           <div className="composer-actions">
@@ -138,7 +147,7 @@ export function ChatComposer({
                 }}
               >
                 <Square size={13} aria-hidden="true" />
-                {cancelling ? "正在停止…" : "停止生成"}
+                {cancelling ? "正在停止…" : preparing ? "停止查找" : "停止生成"}
               </button>
             ) : (
               <button
@@ -157,7 +166,7 @@ export function ChatComposer({
         </div>
       </div>
       <div className="composer-context">
-        {studio.desktop && studio.workspaceId && (
+        {studio.desktop && studio.workspaceId && !cloudAnswer && (
           <label className="retrieval-switch">
             <input
               type="checkbox"
@@ -176,20 +185,18 @@ export function ChatComposer({
             {studio.savingRetrieval ? "正在保存…" : "自动查找知识"}
           </label>
         )}
-        <span className="local-label">
-          <HardDrive size={15} aria-hidden="true" />
-          本地
-        </span>
+        {!cloudAnswer && <span className="local-label"><HardDrive size={15} aria-hidden="true" />本地</span>}
         <ContextPicker
           key={`${studio.workspaceId}:${studio.conversationId}`}
           studio={studio}
+          cloudAnswer={cloudAnswer}
         />
       </div>
       <details className="composer-help">
         <summary>对话说明与快捷键</summary>
         <p>
-          Enter 发送，Shift+Enter 换行。支持 Markdown
-          标题、列表、代码和表格，点击眼睛图标预览，返回编辑保留原文。系统会在容量允许的范围内选取最近的完整对话，并查找当前工作区已确认的知识；不会直接搜索文件全文。请结合依据判断回答是否可靠。
+          Enter 发送，Shift+Enter 换行。支持 Markdown 标题、列表、代码和表格，点击眼睛图标预览，返回编辑保留原文。
+          {cloudAnswer ? "发送前可确认要传给云端的内容。" : "系统会在容量允许的范围内选取最近的完整对话，并查找当前工作区已确认的知识；不会直接搜索文件全文。请结合依据判断回答是否可靠。"}
         </p>
         {!studio.desktop && <p>浏览器预览不会读取或保存本地数据。</p>}
       </details>

@@ -414,14 +414,30 @@ pub async fn get_harness_codex_session(
     check_id: String,
     job_id: Option<String>,
 ) -> AppResult<Value> {
+    read_command(
+        state,
+        workspace_id,
+        assessment_version,
+        check_id,
+        job_id,
+        Kind::Codex,
+    )
+    .await
+}
+async fn read_command(
+    state: State<'_, AppState>,
+    workspace: String,
+    assessment: u32,
+    check: String,
+    job_id: Option<String>,
+    kind: Kind,
+) -> AppResult<Value> {
+    let tasks = state.tasks.clone();
     blocking(state.database.clone()?, move |db| {
-        db.session_state(
-            Kind::Codex,
-            &workspace_id,
-            assessment_version,
-            &check_id,
-            job_id.as_deref(),
-        )
+        let subject = format!("{}:{assessment}:{check}", kind.purpose());
+        let request = tasks.scoped_request(&workspace, TaskKind::HarnessSession, &subject)?;
+        let result = db.session_state(kind, &workspace, assessment, &check, job_id.as_deref())?;
+        Ok(add_job_request(result, request))
     })
     .await
 }
@@ -430,28 +446,61 @@ pub async fn start_harness_codex_session(
     state: State<'_, AppState>,
     workspace_id: String,
     input: Input,
+    wait_for_resources: Option<bool>,
 ) -> AppResult<Value> {
-    start_command(state, workspace_id, input, Kind::Codex).await
+    start_command(state, workspace_id, input, Kind::Codex, wait_for_resources).await
 }
 async fn start_command(
     state: State<'_, AppState>,
     workspace_id: String,
     input: Input,
     scope: Kind,
+    wait_for_resources: Option<bool>,
 ) -> AppResult<Value> {
     let id = new_id();
-    let lease = state.claim_task(&id, &workspace_id, TaskKind::Benchmark)?;
     input.model.validate()?;
     let db = state.database.clone()?;
+    let input = if wait_for_resources == Some(true) {
+        let workspace = workspace_id.clone();
+        blocking(db.clone(), move |db| {
+            db.session_source(scope, &workspace, &input)?;
+            Ok(input)
+        })
+        .await?
+    } else {
+        input
+    };
+    let subject = format!(
+        "{}:{}:{}",
+        scope.purpose(),
+        input.assessment_version,
+        input.check_id
+    );
+    let lease = queue_job(
+        &state,
+        &id,
+        &workspace_id,
+        TaskKind::HarnessSession,
+        &subject,
+        wait_for_resources,
+    )
+    .await?;
+    let mut cancel = lease.receiver();
     db.session_source(scope, &workspace_id, &input)?;
     let provider = state.provider.clone()?;
-    let inspection = provider.benchmark_inspect(input.model.clone()).await?;
+    let inspection = tokio::select! {
+        _ = cancel.wait_for(|v| *v) => return Err("cancelled".into()),
+        result = provider.benchmark_inspect(input.model.clone()) => result?,
+    };
     if !models::can_probe(&inspection) {
         return Err("所选本地模型、版本或工具能力尚未满足执行条件；没有调用模型。".into());
     }
     let source = db.runtime_record_for(&workspace_id, &input.runtime_id, scope.runtime())?;
     let image = source["plan"]["imageId"].as_str().ok_or("镜像缺失。")?;
     let env = environment(scope, image, &lease.receiver())?;
+    if *cancel.borrow() {
+        return Err("cancelled".into());
+    }
     let plan = db.session_plan(
         scope,
         &workspace_id,
@@ -519,20 +568,36 @@ pub async fn cleanup_harness_codex_session(
     state: State<'_, AppState>,
     workspace_id: String,
     job_id: String,
+    only_waiting: Option<bool>,
 ) -> AppResult<Value> {
-    cleanup_command(state, workspace_id, job_id, Kind::Codex).await
+    cleanup_command(state, workspace_id, job_id, Kind::Codex, only_waiting).await
 }
 async fn cleanup_command(
     state: State<'_, AppState>,
     workspace_id: String,
     job_id: String,
     scope: Kind,
+    only_waiting: Option<bool>,
 ) -> AppResult<Value> {
+    if only_waiting == Some(true) {
+        let prefix = format!("{}:", scope.purpose());
+        state
+            .tasks
+            .cancel_waiting_for(&job_id, &workspace_id, TaskKind::HarnessSession, |subject| {
+                subject.is_some_and(|value| value.starts_with(&prefix))
+            })?;
+        return Ok(json!({"cancelledWait":true}));
+    }
     let db = state.database.clone()?;
     let r = db.session_record(scope, &workspace_id, &job_id)?;
     if r["status"] == "running" || r["status"] == "grading" {
         let owner = r["plan"]["experimentId"].as_str().unwrap_or(&job_id);
-        state.cancel_personalized_task(&workspace_id, owner)?;
+        let kind = if owner == job_id {
+            TaskKind::HarnessSession
+        } else {
+            TaskKind::HarnessExperiment
+        };
+        state.tasks.cancel(owner, &workspace_id, kind)?;
         return Ok(json!({"stopping":true}));
     }
     if r["clean"] == true && r["pendingGraders"].as_array().is_some_and(Vec::is_empty) {

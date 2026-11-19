@@ -1,7 +1,7 @@
 import { BookOpen, Check, Code2, Copy, GitBranch } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { navigate } from "../navigation";
-import type { Message, Studio } from "../studio";
+import type { Message } from "../studio";
 import { AnswerContent } from "./AnswerContent";
 const statusNames: Record<string, string> = {
   streaming: "生成中",
@@ -10,26 +10,26 @@ const statusNames: Record<string, string> = {
   failed: "生成失败",
   interrupted: "生成中断",
 };
-export function ChatMessage({
+export const ChatMessage = memo(function ChatMessage({
   message,
   located,
   copied,
   copy,
   onSaveKnowledge,
   setSelectedRun,
-  modelReady,
-  studio,
-  send,
+  canRetry,
+  reportError,
+  retry,
 }: {
   message: Message;
   located: boolean;
-  copied: string | null;
+  copied: boolean;
   copy: (id: string, text: string) => Promise<void>;
   onSaveKnowledge: (message: Message, excerpt: string) => void;
   setSelectedRun: (id: string | null) => void;
-  modelReady: boolean | undefined;
-  studio: Studio;
-  send: (content?: string) => Promise<void>;
+  canRetry: boolean;
+  reportError: (value: unknown) => void;
+  retry: (runId: string | null) => void;
 }) {
   const [raw, setRaw] = useState(false);
   return (
@@ -75,12 +75,12 @@ export function ChatMessage({
               void copy(message.id, message.content);
             }}
           >
-            {copied === message.id ? (
+            {copied ? (
               <Check size={14} aria-hidden="true" />
             ) : (
               <Copy size={14} aria-hidden="true" />
             )}
-            {copied === message.id ? "已复制" : "复制"}
+            {copied ? "已复制" : "复制"}
           </button>
           <button
             className="button text-button"
@@ -108,7 +108,7 @@ export function ChatMessage({
                   ?.querySelector(".message-content")
                   ?.contains(selection.focusNode);
               if (inside && selected && !message.content.includes(selected)) {
-                studio.reportError(
+                reportError(
                   "所选文字跨越了 Markdown 格式标记。请点击“原文”后重新选择，或取消文字选择以保存整条回答。",
                 );
                 return;
@@ -155,15 +155,8 @@ export function ChatMessage({
             message.finishReason === "length") && (
             <button
               className="button text-button"
-              disabled={!modelReady || !!studio.activeRun || studio.sending}
-              onClick={() => {
-                const question = studio.messages.find(
-                  (item) =>
-                    item.role === "user" &&
-                    item.modelRunId === message.modelRunId,
-                );
-                if (question) void send(question.content);
-              }}
+              disabled={!canRetry}
+              onClick={() => retry(message.modelRunId)}
             >
               重试
             </button>
@@ -172,4 +165,4 @@ export function ChatMessage({
       )}
     </article>
   );
-}
+});

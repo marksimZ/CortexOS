@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { createWorkspace,launchNative,nativeInvoke } from "./native";
 import type { Batch } from "../src/benchmark/personalized";
 
-test("standard batches use no cloud key, serialize model groups, cancel and resume without resending",async({},info)=>{
+for (const queueOnly of [false, true]) test(queueOnly ? "standard batch can cancel resource wait after reopening without sending questions" : "standard batches use no cloud key, serialize model groups, cancel and resume without resending",async({},info)=>{
   test.setTimeout(120_000);
   const questions=JSON.parse(await readFile("src-tauri/datasets/cortex-core-60-v2/cases.json","utf8")) as {case_id:string;input:{prompt:string};expected:{kind:string;answer?:number;answers?:string[]}}[];
   const names=["fixture-alpha","fixture-beta","unrelated-loaded-model"];
@@ -54,6 +54,24 @@ test("standard batches use no cloud key, serialize model groups, cancel and resu
     const batchId=await page.evaluate(()=>new URLSearchParams(location.hash.split("?")[1]).get("batch")!);
     const plan=await nativeInvoke<Batch>(page,"get_standard_benchmark",{workspaceId:workspace,batchId});
     expect(plan.plan.maxRequests).toBe(8);expect(plan.plan.binding).toBeUndefined();expect(plan.plan.profile).toBeNull();expect(plan.plan.input.repetitions).toBe(2);expect(wire).toHaveLength(0);
+    if(queueOnly){
+      const holder=await nativeInvoke<Batch>(page,"plan_standard_benchmark",{workspaceId:workspace,input:{...plan.plan.input,models:[plan.plan.input.models[0]],caseIds:["math-001"],repetitions:1,releaseModels:[]}});
+      slow=true;await nativeInvoke(page,"start_standard_benchmark",{workspaceId:workspace,batchId:holder.id,approvedPlanHash:holder.planHash});
+      await expect.poll(()=>wire.length).toBe(1);
+      await page.getByRole("checkbox",{name:/我已检查题库、模型和发送范围/}).check();
+      await page.getByRole("button",{name:"确认并运行未发送题目",exact:true}).click();
+      const cancel=page.getByRole("button",{name:"取消等待",exact:true});await expect(cancel).toBeVisible();
+      await page.reload();await expect(cancel).toBeVisible();await expect(page.getByRole("status").filter({hasText:"固定题库"})).not.toContainText("待确认");await page.screenshot({path:info.outputPath("waiting.png")});await cancel.click();await expect(cancel).toBeHidden();
+      const untouched=await nativeInvoke<Batch>(page,"get_standard_benchmark",{workspaceId:workspace,batchId});
+      expect(untouched.status).toBe("planned");expect(untouched.items).toEqual(plan.items);expect(wire).toHaveLength(1);
+      expect((await nativeInvoke<Batch>(page,"get_standard_benchmark",{workspaceId:workspace,batchId:holder.id})).status).toBe("running");
+      await page.getByRole("checkbox",{name:/我已检查题库、模型和发送范围/}).check();
+      await page.getByRole("button",{name:"确认并运行未发送题目",exact:true}).click();await expect(cancel).toBeVisible();
+      slow=false;await nativeInvoke(page,"stop_standard_benchmark",{workspaceId:workspace,batchId:holder.id});
+      await expect.poll(async()=>(await nativeInvoke<Batch>(page,"get_standard_benchmark",{workspaceId:workspace,batchId})).status,{timeout:35_000}).toBe("completed");
+      expect(wire).toHaveLength(1+plan.plan.maxRequests);
+      return;
+    }
     const changed=await nativeInvoke(page,"start_standard_benchmark",{workspaceId:workspace,batchId,approvedPlanHash:"tampered"}).then(()=>false,()=>true);expect(changed).toBe(true);expect(wire).toHaveLength(0);
     await expect(page.getByRole("button",{name:"确认并运行未发送题目",exact:true})).toBeDisabled();
     await page.getByRole("checkbox",{name:/我已检查题库、模型和发送范围/}).check();await page.getByRole("button",{name:"确认并运行未发送题目",exact:true}).click();

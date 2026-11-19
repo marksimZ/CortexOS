@@ -442,7 +442,9 @@ pub fn stop_personalized_task(
     state: State<'_, AppState>,
     workspace_id: String,
     task_id: String,
+    only_waiting: Option<bool>,
 ) -> AppResult<()> {
+    if only_waiting == Some(true) { return state.tasks.cancel_waiting(&task_id, &workspace_id, crate::tasks::TaskKind::Benchmark); }
     state.cancel_personalized_task(&workspace_id, &task_id)?;
     state
         .database

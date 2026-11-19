@@ -34,6 +34,7 @@ interface Snapshot {
   content: string;
   contentHash: string;
   createdAt: string;
+  structure?: { parentCount: number; childCount: number; sections: [string, number][] };
 }
 interface Preview {
   ticket: string;
@@ -288,6 +289,23 @@ export function SourceBrowser({
                       </SelectMenu>
                     </label>
                   </header>
+                  {!!selected.structure?.sections.length && (
+                    <details className="field-help">
+                      <summary>章节目录</summary>
+                      <ul>
+                        {selected.structure.sections.slice(0, 60).map(([title, line]) => (
+                          <li key={line}>
+                            <button className="button text-button" type="button" onClick={() => {
+                              setStart(line);
+                              setEnd(line);
+                              setLinePage(Math.floor((line - 1) / 200) * 200);
+                            }}>{title}（第 {line} 行）</button>
+                          </li>
+                        ))}
+                      </ul>
+                      {selected.structure.sections.length > 60 && <p>显示前 60 个章节。</p>}
+                    </details>
+                  )}
                   <div className="source-line-inputs">
                     <label>
                       起始行

@@ -45,6 +45,7 @@ import {
   MAX_GRAPH_NODES,
   type GraphExpansion,
   type GraphCenter,
+  type GraphScopePrefix,
   type HistoryPage,
 } from "./graph-query";
 import { GraphExplorations } from "./GraphExplorations";
@@ -224,6 +225,7 @@ function KnowledgeGraph({
   const pendingFocus = useRef<string | null>(null);
   const readingScope = useRef(false);
   const scopeGeneration = useRef(0);
+  const scopePrefix = useRef<(GraphScopePrefix & { key: string; limit: number }) | null>(null);
   const listToggle = useRef<HTMLButtonElement>(null);
   const restorePendingFocus = useCallback(() => {
     if (!listToggle.current || readingScope.current || !pendingFocus.current)
@@ -276,7 +278,9 @@ function KnowledgeGraph({
     setUnsaved(true);
     setSaved(false);
   }, []);
-  const loadScope = () =>
+  const scopeKey = JSON.stringify([workspace, query, typeFilter, statusFilter, since, revision, refresh]);
+  const flatScope = !demo && expansions === null && !revealed;
+  const loadScope = (prefix?: GraphScopePrefix, signal?: AbortSignal) =>
     readGraphScope({
       workspaceId: workspace ?? "demo",
       query,
@@ -287,17 +291,23 @@ function KnowledgeGraph({
       targetCount: Math.min(revealed ? 9999 : MAX_GRAPH_NODES, nodeLimit),
       extraId: revealed,
       demo,
-    });
+    }, prefix, signal);
   useEffect(() => {
     if (!demo && (!workspace || !studio.desktop)) return;
     scopeGeneration.current++;
     let current = true;
+    const request = new AbortController();
+    const cached = scopePrefix.current;
+    const prefix = flatScope && cached?.key === scopeKey && cached.limit < nodeLimit
+      ? cached : undefined;
+    scopePrefix.current = null;
     readingScope.current = true;
     setLoading(true);
     setError(null);
-    void loadScope()
-      .then(({ graph: data, ...nextCounts }) => {
+    void loadScope(prefix, request.signal)
+      .then(({ graph: data, snapshot, ...nextCounts }) => {
         if (!current) return;
+        if (flatScope) scopePrefix.current = { key: scopeKey, limit: nodeLimit, snapshot, nodes: data.nodes };
         setGraph(data);
         setCounts(nextCounts);
         acceptNodes(data.nodes);
@@ -321,6 +331,7 @@ function KnowledgeGraph({
       });
     return () => {
       current = false;
+      request.abort();
       scopeGeneration.current++;
     };
   }, [
@@ -337,6 +348,8 @@ function KnowledgeGraph({
     nodeLimit,
     revealed,
     acceptNodes,
+    flatScope,
+    scopeKey,
   ]);
   const visible = graph?.nodes ?? [];
   const visibleIds = new Set(visible.map((node) => node.id));
@@ -456,8 +469,9 @@ function KnowledgeGraph({
     const generation = scopeGeneration.current;
     setLoading(true);
     try {
-      const { graph: data, ...nextCounts } = await loadScope();
+      const { graph: data, snapshot, ...nextCounts } = await loadScope();
       if (generation !== scopeGeneration.current) return;
+      scopePrefix.current = flatScope ? { key: scopeKey, limit: nodeLimit, snapshot, nodes: data.nodes } : null;
       setGraph(data);
       setCounts(nextCounts);
       acceptNodes(data.nodes);

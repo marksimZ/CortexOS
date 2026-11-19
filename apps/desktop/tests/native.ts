@@ -82,24 +82,6 @@ export async function launchNative(
       contentType: "text/plain",
     });
   };
-  const closeWindow = async () => {
-    if (development || !application.pid)
-      throw new Error("Window close requires the standalone test process");
-    const close = spawnSync(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        `if (-not (Get-Process -Id ${application.pid}).CloseMainWindow()) { exit 1 }`,
-      ],
-      { windowsHide: true, timeout: 10_000 },
-    );
-    expect(close.status).toBe(0);
-    await expect
-      .poll(() => application.exitCode, { timeout: 15_000 })
-      .not.toBeNull();
-  };
   try {
     await expect
       .poll(
@@ -136,6 +118,11 @@ export async function launchNative(
     const closeFromUi = async () => {
       await page.getByRole('button',{name:'关闭窗口',exact:true}).click();
       await expect.poll(()=>application.exitCode,{timeout:20000}).not.toBeNull();
+    };
+    const closeWindow = async () => {
+      if (development || !application.pid)
+        throw new Error("Window close requires the standalone test process");
+      await closeFromUi();
     };
     return { page, context, consoleErrors, stop, closeWindow, closeFromUi, processId:application.pid };
   } catch (error) {

@@ -34,8 +34,15 @@ if($null -eq $dialog){$names=@($windows | ForEach-Object {$_.Current.Name}) -joi
 if($Cancel){
  $buttons=$dialog.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button))
  $button=$buttons | Where-Object {$_.Current.AutomationId -eq '2' -or $_.Current.Name -match '^(取消|Cancel)'} | Select-Object -First 1
- if($null -eq $button){throw 'Cancel button was not found'}
- $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+ try{
+  if($null -eq $button){throw 'Cancel button was not found'}
+  $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+ }catch{
+  $dialogHandle=[IntPtr]$dialog.Current.NativeWindowHandle
+  $nativeButton=[ReportDialogWindow]::GetDlgItem($dialogHandle,2)
+  if($nativeButton -eq [IntPtr]::Zero){throw}
+  [void][ReportDialogWindow]::SendMessage($dialogHandle,0x111,[IntPtr]2,$nativeButton)
+ }
  Write-Output 'Owned save dialog cancelled'
  exit 0
 }
@@ -63,11 +70,18 @@ elseif($nativeEdit -ne [IntPtr]::Zero){
  if([ReportDialogWindow]::SendMessage($nativeEdit,12,[IntPtr]::Zero,$resolved) -eq [IntPtr]::Zero){throw 'The owned filename control rejected the path'}
 }else{throw 'The owned filename control is unavailable'}
 $buttons=$dialog.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button))
-$button=$buttons | Where-Object {$_.Current.AutomationId -eq '1' -or $_.Current.Name -match '^(保存|Save|打开|Open)'} | Select-Object -First 1
-if($null -ne $button){$button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()}
-else {
- $nativeButton=[ReportDialogWindow]::GetDlgItem([IntPtr]$dialog.Current.NativeWindowHandle,1)
- if($nativeButton -eq [IntPtr]::Zero){throw 'Save button was not found'}
- [void][ReportDialogWindow]::SendMessage($nativeButton,245,[IntPtr]::Zero,[IntPtr]::Zero)
+$button=$buttons | Where-Object {$_.Current.AutomationId -eq '1'} | Select-Object -First 1
+if($null -eq $button){
+ $button=$buttons | Where-Object {$_.Current.Name -match '^(保存(?:\(&S\))?|Save|打开(?:\(&O\))?|Open)$'} | Select-Object -First 1
+}
+try{
+ if($null -eq $button){throw 'The accessible save button is unavailable'}
+ $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+}catch{
+ $dialogHandle=[IntPtr]$dialog.Current.NativeWindowHandle
+ $nativeButton=[ReportDialogWindow]::GetDlgItem($dialogHandle,1)
+ if($nativeButton -eq [IntPtr]::Zero){throw}
+ # Deliver the Save button command to the owned dialog on the current desktop.
+ [void][ReportDialogWindow]::SendMessage($dialogHandle,0x111,[IntPtr]1,$nativeButton)
 }
 Write-Output 'Owned save dialog submitted'

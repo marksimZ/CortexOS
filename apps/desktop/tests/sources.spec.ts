@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mkdir, writeFile, symlink, readFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile, symlink, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -41,7 +41,8 @@ test("authorized snapshots preserve exact evidence and stop future use after rev
   const address = server.address();
   if (!address || typeof address === "string") throw Error("port");
   const endpoint = `http://127.0.0.1:${address.port}`;
-  let app = await launchNative(info, { sourcePath: file, endpoint });
+  const executable = process.env.CORTEXOS_RAG_TEST_EXE;
+  let app = await launchNative(info, { sourcePath: file, endpoint, executable });
   try {
     let page = app.page;
     await createWorkspace(page, "来源验收 A");
@@ -64,6 +65,11 @@ test("authorized snapshots preserve exact evidence and stop future use after rev
     await expect(page.getByRole("region", { name: "文件内容" })).toContainText(
       "发布定于周四。",
     );
+    await page.getByText("章节目录", { exact: true }).click();
+    await page.getByRole("button", { name: "发布计划（第 1 行）" }).click();
+    await expect(page.getByLabel("起始行", { exact: true })).toHaveValue("1");
+    await expect(page.getByLabel("结束行", { exact: true })).toHaveValue("1");
+    await page.screenshot({ path: info.outputPath("source-outline.png") });
     let sources = await nativeInvoke<
       { id: string; latestVersion: number; revision: number }[]
     >(page, "list_sources", { workspaceId });
@@ -104,6 +110,10 @@ test("authorized snapshots preserve exact evidence and stop future use after rev
         contextSelection: [],
       });
     expect((await preview()).knowledgeRefs).toEqual([]);
+    const contextDay = new Date();
+    const day = `${contextDay.getFullYear()}-${String(contextDay.getMonth() + 1).padStart(2, "0")}-${String(contextDay.getDate()).padStart(2, "0")}`;
+    expect(await nativeInvoke(page, "list_context_options", { workspaceId, day, after: null }))
+      .toEqual({ items: [], hasMore: false });
     await page.getByRole("button", { name: "检查并确认" }).click();
     await page.getByRole("button", { name: "确认此版本", exact: true }).click();
     // Reimport creates source v2; the original knowledge still points to source v1.
@@ -141,6 +151,8 @@ test("authorized snapshots preserve exact evidence and stop future use after rev
       nodeId,
       expectedRevision: detail.node.revision,
     });
+    expect(await nativeInvoke(page, "list_context_options", { workspaceId, day, after: null }))
+      .toMatchObject({ items: [{ id: nodeId, effectiveVersion: 2 }], hasMore: false });
     await page
       .getByRole("navigation")
       .getByRole("link", { name: "对话", exact: true })
@@ -236,6 +248,8 @@ test("authorized snapshots preserve exact evidence and stop future use after rev
       "已停用",
     );
     expect((await preview()).knowledgeRefs).toEqual([]);
+    expect(await nativeInvoke(page, "list_context_options", { workspaceId, day, after: null }))
+      .toEqual({ items: [], hasMore: false });
     await expect(
       nativeInvoke(page, "preview_context", {
         workspaceId,
@@ -249,9 +263,9 @@ test("authorized snapshots preserve exact evidence and stop future use after rev
         .snapshot,
     ).toEqual(run.snapshot);
     await page.getByRole("button", { name: "关闭资料文件" }).click();
-    await app.closeWindow();
+    await app.closeFromUi();
     await app.stop();
-    app = await launchNative(info, { sourcePath: file, endpoint });
+    app = await launchNative(info, { sourcePath: file, endpoint, executable });
     page = app.page;
     sources = await nativeInvoke(page, "list_sources", { workspaceId });
     expect(sources[0].latestVersion).toBe(2);
@@ -276,6 +290,34 @@ test("authorized snapshots preserve exact evidence and stop future use after rev
       ticket: restored.ticket,
     });
     expect((await preview()).knowledgeRefs).toHaveLength(1);
+    const allowed = ["# 数据库规程", ...Array.from({ length: 20 }, () => "例行说明".repeat(12)),
+      "SQLite 需要一致性检查点。", "同节上下文", "## 未匹配章节", "其它文字"];
+    await writeFile(file, [...allowed, "从未确认的机密段落"].join("\n"));
+    const next = await nativeInvoke<{ ticket: string }>(page, "choose_source", { workspaceId });
+    await nativeInvoke(page, "commit_source", { workspaceId, ticket: next.ticket });
+    const chunkNode = await nativeInvoke<string>(page, "save_source_knowledge", {
+      input: { workspaceId, title: "数据库规程", kind: "knowledge", content: allowed.join("\n"), changeReason: "切片验收" },
+      source: { sourceId, version: 3, startLine: 1, endLine: allowed.length },
+    });
+    await nativeInvoke(page, "approve_knowledge", { workspaceId, nodeId: chunkNode, expectedRevision: 1 });
+    const chunkPreview = await nativeInvoke<ContextManifest>(page, "preview_context", {
+      workspaceId, conversationId: null, content: "SQLite 检查点", contextSelection: [],
+    });
+    await info.attach("chunk-preview", { body: JSON.stringify(chunkPreview, null, 2), contentType: "application/json" });
+    expect(chunkPreview.retrieval?.sourceChunksUsed).toBe(1);
+    const reference = chunkPreview.knowledgeRefs?.find(item => item.nodeId === chunkNode);
+    expect(reference?.content).toContain("SQLite 需要一致性检查点。");
+    expect(reference?.content).not.toMatch(/从未确认的机密段落|未匹配章节/);
+    expect(reference?.sourceChunk).toMatchObject({ matchEndLine: 23, expanded: false, sourcePath: "project.md" });
+    expect(reference?.sourceEvidence?.[0]).toMatchObject({ version: 3, endLine: 23 });
+    await page.getByRole("link", { name: "对话", exact: true }).click();
+    await page.getByRole("textbox", { name: "你的问题", exact: true }).fill("SQLite 检查点");
+    await page.getByRole("button", { name: "发送消息", exact: true }).click();
+    await expect.poll(() => requests.length).toBe(2);
+    await expect(page.getByText("已完成", { exact: true })).toHaveCount(2);
+    const sent = JSON.stringify(requests[1]);
+    expect(sent).toContain("SQLite 需要一致性检查点。");
+    expect(sent).not.toMatch(/从未确认的机密段落|未匹配章节/);
     expect(app.consoleErrors).toEqual([]);
   } finally {
     await app.stop();
@@ -381,7 +423,7 @@ c=sqlite3.connect(sys.argv[1]);print(json.dumps({'integrity':c.execute('PRAGMA i
     expect(JSON.parse(audit)).toEqual({
       integrity: "ok",
       foreignKeys: [],
-      version: 7,
+      version: (await readdir(resolve("src-tauri/migrations"))).filter(name => /^\d{4}_.+\.sql$/.test(name)).length,
     });
     await info.attach("migration-integrity", {
       body: audit,

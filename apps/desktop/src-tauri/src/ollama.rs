@@ -158,6 +158,13 @@ pub fn validate_endpoint(endpoint: &str) -> AppResult<String> {
     Ok(endpoint.trim_end_matches('/').into())
 }
 
+pub(crate) fn is_local_gguf(inspection: &Value) -> bool {
+    inspection["details"]["format"] == "gguf"
+        && ["remote_host", "remote_model"].iter().all(|key| {
+            inspection[*key].as_str().is_none_or(str::is_empty)
+        })
+}
+
 fn network_error(error: reqwest::Error) -> String {
     if error.is_timeout() {
         "本地模型响应超时，已保留收到的内容。可以缩短问题、换小模型或增加超时后重试。".into()
@@ -189,9 +196,17 @@ impl Ollama {
             .as_deref()
             .ok_or("缺少模型指纹，不释放模型。")?
             .trim_start_matches("sha256:");
+        self.release_model(&request.model, expected).await
+    }
+
+    pub(crate) async fn release_model(&self, name: &str, expected: &str) -> AppResult<Value> {
+        if name.is_empty() || name.len() > 200 || name.chars().any(char::is_control)
+            || expected.len() != 64 || !expected.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            return Err("请先刷新并选择带有版本指纹的已加载模型。".into());
+        }
         let catalog = self.benchmark_models().await?;
         if !catalog.models.iter().any(|m| {
-            m.name == request.model
+            m.name == name
                 && m.digest
                     .as_deref()
                     .is_some_and(|d| d.trim_start_matches("sha256:") == expected)
@@ -199,8 +214,8 @@ impl Ollama {
             return Err("模型身份已经改变，未发送释放请求。".into());
         }
         let loaded = catalog.loaded.ok_or("无法检查已加载模型，不释放。")?;
-        let Some(model) = loaded.iter().find(|m| m.name == request.model) else {
-            return Ok(json!({"model":request.model,"status":"not_loaded","requestSent":false}));
+        let Some(model) = loaded.iter().find(|m| m.name == name) else {
+            return Ok(json!({"model":name,"status":"not_loaded","requestSent":false}));
         };
         if model
             .digest
@@ -212,7 +227,7 @@ impl Ollama {
         let response = self
             .client
             .post(format!("{}/api/generate", self.endpoint))
-            .json(&json!({"model":request.model,"stream":false,"keep_alive":0}))
+            .json(&json!({"model":name,"stream":false,"keep_alive":0}))
             .timeout(Duration::from_secs(15))
             .send()
             .await
@@ -226,11 +241,11 @@ impl Ollama {
             .await?
             .loaded
             .ok_or("释放请求已发送，无法确认模型状态。")?;
-        if after.iter().any(|m| m.name == request.model) {
+        if after.iter().any(|m| m.name == name) {
             return Err("释放请求已发送，但模型仍显示已加载。".into());
         }
         Ok(
-            json!({"model":request.model,"status":"released","requestSent":true,"confirmation":"api_ps"}),
+            json!({"model":name,"status":"released","requestSent":true,"confirmation":"api_ps"}),
         )
     }
     pub(crate) fn benchmark_evidence(&self) -> &'static str {
@@ -243,11 +258,13 @@ impl Ollama {
         if let Ok(value) = std::env::var("CORTEXOS_TEST_OLLAMA_URL") {
             endpoint = value;
         }
-        let endpoint = validate_endpoint(&endpoint)?;
-        let client = Client::builder()
+        Self::with_endpoint(&endpoint)
+    }
+
+    pub(crate) fn with_endpoint(endpoint: &str) -> AppResult<Self> {
+        let endpoint = validate_endpoint(endpoint)?;
+        let client = crate::http_transport::model_client(Duration::from_secs(3))
             .no_proxy()
-            .redirect(reqwest::redirect::Policy::none())
-            .connect_timeout(Duration::from_secs(3))
             .build()
             .map_err(|_| "无法初始化本地模型连接。".to_string())?;
         Ok(Self { client, endpoint })
@@ -301,20 +318,20 @@ impl Ollama {
 
     pub async fn inspect(&self, settings: &ModelSettings) -> AppResult<Value> {
         let inspection = self.show(&settings.model).await?;
-        if inspection["remote_host"]
-            .as_str()
-            .is_some_and(|value| !value.is_empty())
-            || inspection["remote_model"]
-                .as_str()
-                .is_some_and(|value| !value.is_empty())
-            || inspection["details"]["format"].as_str() != Some("gguf")
-        {
+        if !is_local_gguf(&inspection) {
             return Err(
                 "请使用安装在本机的 GGUF 格式模型；云端模型和无法确认来源的模型暂不支持。".into(),
             );
         }
+        if crate::local_runtime::capability(&inspection, "completion") == Some(false) {
+            return Err("该模型不支持生成回答。请在设置中更换对话模型。".into());
+        }
+        let maximum = crate::local_runtime::context_capacity(&inspection);
+        if let Some(maximum) = maximum && u64::from(settings.num_ctx) > maximum {
+            return Err(format!("所选模型标明最多支持 {maximum} Token，请将输入与回答总容量调低后重试。"));
+        }
         Ok(
-            json!({"format":"gguf","model":settings.model,"digest":inspection.get("digest"),"identityNote":"digest unknown when provider omits it"}),
+            json!({"format":"gguf","model":settings.model,"digest":inspection.get("digest"),"contextCapacity":maximum,"identityNote":"digest unknown when provider omits it"}),
         )
     }
 
@@ -348,6 +365,17 @@ impl Ollama {
             return Err("本地模型未能开始生成，请检查模型是否可用或尝试较小模型。".into());
         }
         Ok(response)
+    }
+
+    pub(crate) async fn embeddings(&self, model: &str, input: &[String]) -> AppResult<Value> {
+        let response = self.client.post(format!("{}/api/embed", self.endpoint))
+            .timeout(Duration::from_secs(60))
+            .json(&json!({"model":model,"input":input,"truncate":false,"keep_alive":0,"options":{"num_gpu":0}}))
+            .send().await.map_err(network_error)?;
+        if !response.status().is_success() {
+            return Err("本地服务未能生成向量，请检查该模型和文本长度。".into());
+        }
+        small_json(response).await
     }
 }
 

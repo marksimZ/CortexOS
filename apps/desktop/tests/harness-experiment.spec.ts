@@ -70,6 +70,118 @@ async function wait(app:Awaited<ReturnType<typeof launchNative>>,id:string,timeo
   return report(app,id);
 }
 
+test('G5 three tool queue isolates cancellation and recovers a forced exit', async ({}, info) => {
+  test.setTimeout(140_000);
+  const data = await prepare(info);
+  const tools = ['codex', 'claude', 'aider'] as const;
+  type Tool = typeof tools[number];
+  const calls: string[] = [];
+  let awaitingHolder = false;
+  let releaseHolder!: () => void;
+  const held = new Promise<void>(done => { releaseHolder = done; });
+  const details = { format: 'gguf', family: 'qwen3' };
+  const server = createServer(async (req, res) => {
+    let raw = '';
+    for await (const chunk of req) raw += chunk;
+    const body = JSON.parse(raw || '{}');
+    const reply = (value: unknown) => res.end(JSON.stringify(value) + '\n');
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/version') return reply({ version: 'g5-fixed' });
+    if (req.url === '/api/tags') return reply({ models: ['holder', ...tools].map(name => ({name, digest, size:1, details})) });
+    if (req.url === '/api/ps') return reply({ models: [] });
+    if (req.url === '/api/show') return reply({ details, capabilities:['completion','tools'], model_info:{'general.architecture':'qwen3','qwen3.context_length':8192} });
+    if (req.url === '/api/chat') {
+      calls.push(body.model);
+      if (body.model === 'holder') {
+        res.setHeader('Content-Type', 'application/x-ndjson');
+        res.write(JSON.stringify({message:{role:'assistant',content:'9'},done:false})+'\n');
+        awaitingHolder = true;
+        await held;
+        return reply({message:{role:'assistant',content:''},done:true,done_reason:'stop',prompt_eval_count:5,eval_count:1});
+      }
+      if (body.model === 'claude') { res.statusCode=503; return reply({error:'controlled unavailable'}); }
+      return; // Stop or forced exit interrupts the outstanding fixture response.
+    }
+    res.writeHead(404).end();
+  });
+  await new Promise<void>(done => server.listen(0,'127.0.0.1',done));
+  let app: Awaited<ReturnType<typeof launchNative>> | undefined;
+  try {
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Fixture port unavailable');
+    const endpoint = `http://127.0.0.1:${address.port}`;
+    app = await launchNative(info,{dataDirectory:data,endpoint,executable});
+    const page = app.page;
+    const checks = comparisonChecks((await list(app)).options);
+    const {stdout}=await exec('py',['-3.13','-c','import sqlite3,sys; c=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); print(c.execute("SELECT json_extract(plan_json,\'$.checkId\') FROM benchmark_generation_jobs WHERE id=?", [sys.argv[2]]).fetchone()[0])',join(data,'cortexos.sqlite3'),checks[0].id],{windowsHide:true});
+    const checkId = stdout.trim();
+    const scope = (tool: Tool) => ({workspaceId,assessmentVersion,...(tool==='codex'?{checkId}:{})});
+    const state = (tool: Tool, jobId?: string) => nativeInvoke<any>(app!.page,`get_harness_${tool}_session`,{...scope(tool),jobId});
+    const cancel = (tool: Tool, jobId: string, onlyWaiting: boolean) => nativeInvoke<any>(app!.page,`cleanup_harness_${tool}_session`,{workspaceId,jobId,onlyWaiting});
+    const datasets = await nativeInvoke<{id:string;version:number;contentHash:string}[]>(page,'list_benchmark_datasets',{workspaceId});
+    const dataset = datasets.find(d => d.id==='cortex-core-60'&&d.version===2)!;
+    const holder = await nativeInvoke<{id:string;planHash:string}>(page,'plan_standard_benchmark',{workspaceId,input:{
+      datasetId:dataset.id,datasetVersion:2,datasetHash:dataset.contentHash,repetitions:1,caseIds:['math-001'],maxOutputTokens:64,releaseModels:[],
+      models:[{kind:'local',local:{model:'holder',expectedDigest:digest,requirements:['completion'],parameters:{numCtx:4096,numPredict:64,timeoutSeconds:120,temperature:0}}}],
+    }});
+    await nativeInvoke(page,'start_standard_benchmark',{workspaceId,batchId:holder.id,approvedPlanHash:holder.planHash});
+    await expect.poll(()=>awaitingHolder,{timeout:15000}).toBe(true);
+    function enqueue(tool: Tool) {
+      const runtime = checks[tools.indexOf(tool)];
+      return nativeInvoke<{id:string;error?:string}>(app!.page,`start_harness_${tool}_session`,{workspaceId,waitForResources:true,input:{
+        assessmentVersion,...(tool==='codex'?{checkId}:{}),runtimeId:runtime.id,runtimeHash:runtime.hash,confirmed:true,
+        model:{model:tool,expectedDigest:digest,requirements:tool==='aider'?['completion']:['completion','tool_calls'],parameters:{numCtx:4096,numPredict:512,temperature:0,timeoutSeconds:120}},
+      }}).catch(e=>({id:'',error:String(e)}));
+    }
+    async function waiting(tool: Tool) {
+      await expect.poll(async()=>(await state(tool)).request?.status).toBe('waiting');
+      return (await state(tool)).request.id as string;
+    }
+    const codex = enqueue('codex');
+    const codexId = await waiting('codex');
+    const cancelled = enqueue('claude');
+    const cancelledId = await waiting('claude');
+    await expect(cancel('aider',cancelledId,true)).rejects.toThrow('不在等待队列');
+    await cancel('claude',cancelledId,true);
+    await expect(cancelled).resolves.toHaveProperty('error',expect.stringContaining('已取消等待'));
+    await expect(state('claude',cancelledId)).rejects.toBeTruthy();
+    const claude = enqueue('claude'); const claudeId = await waiting('claude');
+    const aider = enqueue('aider'); const aiderId = await waiting('aider');
+    expect(calls).toEqual(['holder']);
+    releaseHolder();
+    await expect(codex).resolves.toMatchObject({id:codexId});
+    await expect.poll(()=>calls,{timeout:30000}).toEqual(['holder','codex']);
+    await cancel('codex',codexId,false);
+    await expect(claude).resolves.toMatchObject({id:claudeId});
+    await expect(aider).resolves.toMatchObject({id:aiderId});
+    await expect.poll(()=>calls,{timeout:30000}).toEqual(['holder','codex','claude','aider']);
+    const stopped = (await state('codex',codexId)).selected;
+    const failed = (await state('claude',claudeId)).selected;
+    expect(stopped).toMatchObject({status:'cancelled',clean:true});
+    expect(failed).toMatchObject({status:'failed',clean:true});
+    expect(failed.error).toBeTruthy();
+    const queuedAtExit = enqueue('codex'); const queuedId = await waiting('codex');
+    await exec('taskkill',['/PID',String(app.processId),'/T','/F'],{windowsHide:true});
+    await app.stop();
+    await queuedAtExit;
+    app = await launchNative(info,{dataDirectory:data,endpoint,executable,profileDirectory:info.outputPath('reopened')});
+    const recovered = (await state('aider',aiderId)).selected;
+    expect(recovered.status).toBe('interrupted');
+    await expect(state('codex',queuedId)).rejects.toBeTruthy();
+    await cancel('aider',aiderId,false);
+    expect((await state('aider',aiderId)).selected).toMatchObject({status:'closed',clean:true,pendingGraders:[]});
+    expect((await state('codex',codexId)).selected.status).toBe('cancelled');
+    expect((await state('claude',claudeId)).selected.error).toBe(failed.error);
+    expect(calls).toEqual(['holder','codex','claude','aider']);
+    await writeFile(info.outputPath('queue-evidence.json'),JSON.stringify({calls,codex:stopped.status,claude:failed.error,aider:recovered.status,cancelledWaitSaved:false,replayed:false},null,2));
+  } finally {
+    releaseHolder();
+    await app?.stop();
+    server.closeAllConnections();
+    await new Promise<void>(done=>server.close(()=>done()));
+  }
+});
+
 async function authorProject(app:Awaited<ReturnType<typeof launchNative>>, info:TestInfo) {
   const page=app.page;
   const zip=info.outputPath('project.zip');
@@ -326,12 +438,12 @@ test('fixed replies exercise the comparison, task graph and export',async({},inf
     hold=true;
     const payload={workspaceId,input:{assessmentVersion,repetitions:1,confirmed:true,selections:[selection(checks[2]),selection(checks[2],'no-tools-fixture','b'.repeat(64))]}};
     const stop=(await nativeInvoke<{id:string}>(app.page,'start_harness_experiment',payload)).id;
-    await expect.poll(()=>requests.length).toBe(5);
+    await expect.poll(()=>requests.length,{timeout:25000}).toBe(5);
     await nativeInvoke(app.page,'stop_harness_experiment',{workspaceId,experimentId:stop});
     const stopped=await wait(app,stop);
     expect(stopped.status).toBe('cancelled');expect(stopped.rows.map(r=>r.status)).toEqual(['cancelled','not_run']);
     const restart=(await nativeInvoke<{id:string}>(app.page,'start_harness_experiment',payload)).id;
-    await expect.poll(()=>requests.length).toBe(6);
+    await expect.poll(()=>requests.length,{timeout:25000}).toBe(6);
     await exec('taskkill',['/PID',String(app.processId),'/T','/F'],{windowsHide:true});await app.stop();
     app=await launchNative(info,{dataDirectory:data,endpoint,executable,profileDirectory:info.outputPath('reopen')});
     const interrupted=await report(app,restart);

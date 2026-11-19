@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, BookOpen, Network, PanelRightClose } from "lucide-react";
 import { errorText, type RunDetail, type Studio } from "../studio";
 import { navigate } from "../navigation";
+import { RetrievalInspection } from "./RetrievalInspection";
 
 export function ChatEvidence({ studio, overlay, runId, onInspect, onClose }: {
   studio: Studio; overlay: boolean; runId: string | null; onInspect: () => void; onClose: () => void;
@@ -51,6 +52,10 @@ export function ChatEvidence({ studio, overlay, runId, onInspect, onClose }: {
       </svg> : <div className="evidence-empty"><Network size={30} strokeWidth={1.2}/><span>{!runId ? "开始对话，查看回答依据" : !detail ? "正在读取…" : "本次没有选用知识"}</span></div>}
     </div>
     {error && <div className="form-error" role="alert">{error}<button className="button text-button" onClick={() => setRetry(n=>n+1)}>重新读取</button></div>}
+    {detail && <details className="knowledge-disclosure" key={detail.run.id}>
+      <summary>查找过程</summary>
+      <RetrievalInspection detail={detail} beforeLocate={overlay ? onClose : undefined} />
+    </details>}
     {manifest && <section className="evidence-budget"><div><h3>上下文估算</h3><span className="numeric">{manifest.estimatedUnits.toLocaleString()} / {manifest.budgetUnits.toLocaleString()}</span></div><progress aria-label="上下文估算用量" title={manifest.estimateNote} value={manifest.estimatedUnits} max={Math.max(1, manifest.budgetUnits)}/><details><summary>估算说明</summary><p>{manifest.estimateNote}</p></details></section>}
     <div className="evidence-references">{refs.map(ref => <button key={ref.nodeId} className={`evidence-reference ${selected === ref.nodeId ? "selected" : ""}`} onClick={() => setSelected(ref.nodeId)}><span className="reference-dot"/><span><strong>{ref.title}</strong><span>v{ref.version}</span></span><ArrowUpRight size={14}/></button>)}</div>
     {item && <section className="evidence-selection"><h3>{item.title}</h3><p>{item.content}</p><button className="button secondary" onClick={() => navigate("knowledge", {workspace:studio.workspaceId,node:item.nodeId,version:item.version})}><BookOpen size={14}/>查看此知识版本</button></section>}

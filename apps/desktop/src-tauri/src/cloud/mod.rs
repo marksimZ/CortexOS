@@ -2,6 +2,10 @@ pub mod completion;
 #[cfg(test)]
 mod completion_tests;
 mod provider;
+pub(crate) mod privacy;
+pub(crate) mod runtime_connections;
+mod runtime_protocol;
+mod transport;
 #[cfg(test)]
 mod tests;
 mod vault;
@@ -176,6 +180,18 @@ impl CloudState {
         expected: &Connection,
         input: &completion::CompletionInput,
     ) -> Result<completion::CompletionOutput, ConnectionState> {
+        use crate::model_runtime::{CloudGeneration, Generated, GenerationProvider};
+        match self.generate(CloudGeneration { connection: expected, request: input }).await? {
+            Generated::Complete(output) => Ok(output),
+            Generated::Streaming(_) => Err(ConnectionState::ServiceError),
+        }
+    }
+
+    pub(crate) async fn complete_approved(
+        &self,
+        expected: &Connection,
+        input: &completion::CompletionInput,
+    ) -> Result<completion::CompletionOutput, ConnectionState> {
         let record = {
             let _lock = self
                 .operation
@@ -258,7 +274,10 @@ impl CloudState {
             result = tokio::time::timeout(Duration::from_secs(30), self.adapter.catalog(record.provider, &record.key)) => result.unwrap_or(Err(ConnectionState::NetworkUnavailable)),
         };
         let models = match result {
-            Ok(models) => {
+            Ok(mut models) => {
+                if record.provider == Provider::Gemini {
+                    models.retain(|m| m.generation == "listed");
+                }
                 let selected = input.model.take().or_else(|| record.model.clone());
                 record.state = match selected.as_ref() {
                     Some(id) if models.iter().any(|m| &m.id == id) => ConnectionState::Verified,

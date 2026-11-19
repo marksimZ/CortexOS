@@ -13,6 +13,64 @@ const bundle = resolve("src-tauri/target/debug/bundle/nsis");
 const dbScript = resolve("tests/delivery-db.py");
 const artifacts = resolve("../../artifacts");
 
+test("G5 isolated fresh install, old application upgrade and default uninstall", async ({}, info) => {
+  test.setTimeout(110_000);
+  const candidate = process.env.CORTEXOS_G5_ISOLATED_INSTALLER;
+  test.skip(!candidate, "Requires the current isolated-identity installer");
+  const previous = join(bundle, "CortexOS Delivery Check_0.1.0_x64-setup.exe");
+  const data = info.outputPath("data");
+  const installed = info.outputPath("g5-installed");
+  const executable = join(installed, "cortexos-desktop.exe");
+  const db = (directory: string, operation = "snapshot") =>
+    run("py", ["-3", "-X", "utf8", dbScript, operation, join(directory, "cortexos.sqlite3")], {windowsHide:true})
+      .then(result => JSON.parse(result.stdout));
+  const install = async (file: string) => {
+    await run(file, ["/S", "/NS", `/D=${installed}`], {windowsHide:true,timeout:30_000});
+    await access(executable);
+  };
+  const uninstall = async () => {
+    await run(join(installed, "uninstall.exe"), ["/S", `_?=${installed}`], {windowsHide:true,timeout:30_000});
+    await expect(access(executable)).rejects.toThrow();
+  };
+  const endpoint = "http://127.0.0.1:1";
+  let app: Awaited<ReturnType<typeof launchNative>> | undefined;
+  try {
+    await install(candidate!);
+    app = await launchNative(info,{executable,dataDirectory:info.outputPath("fresh-data"),endpoint});
+    await expect(app.page.getByRole("button",{name:"新建工作区",exact:true})).toBeVisible();
+    await app.closeFromUi(); await app.stop(); app=undefined;
+    await uninstall();
+    await install(previous);
+    await mkdir(data,{recursive:true});
+    const seeded = await db(data,"seed-v6");
+    app = await launchNative(info,{executable,dataDirectory:data,endpoint,profileDirectory:info.outputPath("old-profile")});
+    await expect(app.page.getByLabel("当前工作区")).toContainText("升级前的工作区");
+    await app.closeFromUi(); await app.stop(); app=undefined;
+    const old = await db(data);
+    await install(candidate!);
+    app = await launchNative(info,{executable,dataDirectory:data,endpoint,profileDirectory:info.outputPath("upgraded-profile")});
+    const graph=await nativeInvoke<GraphData>(app.page,"load_knowledge_graph",{workspaceId:"delivery-v6"});
+    expect(graph.nodes[0].title).toBe("升级前的知识");
+    await app.closeFromUi(); await app.stop(); app=undefined;
+    const migrated=await db(data);
+    const currentSchema=(await readdir(resolve("src-tauri/migrations"))).filter(n=>/^\d{4}_.+\.sql$/.test(n)).length;
+    expect(old.schemaVersion).toBeLessThan(currentSchema);
+    expect(migrated.schemaVersion).toBe(currentSchema);
+    expect(migrated.integrity).toBe("ok");
+    expect(migrated.foreignKeys).toBe("ok");
+    for(const table of ["workspaces","knowledge_nodes","knowledge_versions"]){
+      expect(migrated.tables[table]).toEqual(seeded.tables[table]);
+    }
+    const backups=(await readdir(data)).filter(n=>n.endsWith(".sqlite3")&&n.startsWith("before-migration-"));
+    expect(backups.some(n=>n.startsWith(`before-migration-${old.schemaVersion+1}-`))).toBe(true);
+    await uninstall();
+    expect(await db(data)).toEqual(migrated);
+    await writeFile(info.outputPath("g5-install-evidence.json"),JSON.stringify({freshStart:true,oldSchema:old.schemaVersion,currentSchema,backups,uninstallRetainsFixture:true},null,2));
+  } finally {
+    await app?.stop();
+  }
+});
+
 test("isolated NSIS upgrade preserves saved data and migrates a v6 fixture", async ({}, info) => {
   test.setTimeout(240000);
   const installDirectory = info.outputPath("installed");

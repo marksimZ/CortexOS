@@ -42,6 +42,7 @@ export interface GraphCenter extends GraphExpansion {
 }
 export interface GraphScope {
   graph: GraphData;
+  snapshot: string;
   totalNodes: number;
   matchingNodes: number;
   rangeNodes: number;
@@ -49,7 +50,7 @@ export interface GraphScope {
   origins: Record<string, string[]>;
 }
 
-export async function readGraphScope(input: {
+type GraphScopeInput = {
   workspaceId: string;
   query: string;
   kind: string;
@@ -59,8 +60,27 @@ export async function readGraphScope(input: {
   targetCount: number;
   extraId: string | null;
   demo: boolean;
-}): Promise<GraphScope> {
-  // ponytail: re-read bounded prefixes; add a page cache only if repeated reads become a measured bottleneck.
+};
+export type GraphScopePrefix = { snapshot: string; nodes: GraphNode[] };
+
+export async function readGraphScope(
+  input: GraphScopeInput,
+  prefix?: GraphScopePrefix,
+  signal?: AbortSignal,
+): Promise<GraphScope> {
+  try {
+    return await queryGraphScope(input, prefix, signal);
+  } catch (error) {
+    if (!prefix || !String(error).includes("图谱已更新")) throw error;
+    return queryGraphScope(input, undefined, signal);
+  }
+}
+
+async function queryGraphScope(
+  input: GraphScopeInput,
+  prefix?: GraphScopePrefix,
+  signal?: AbortSignal,
+): Promise<GraphScope> {
   const sources = input.expansions ?? [
     { root: null, limit: input.targetCount },
   ];
@@ -79,6 +99,7 @@ export async function readGraphScope(input: {
     limit: number,
     roots?: string[],
   ): Promise<GraphNodePage> => {
+    signal?.throwIfAborted();
     if (!input.demo)
       return invoke("query_graph_nodes", {
         input: {
@@ -93,7 +114,7 @@ export async function readGraphScope(input: {
           rootNodeIds: roots,
           offset,
           limit,
-          expectedSnapshot: first?.snapshot ?? null,
+          expectedSnapshot: first?.snapshot ?? prefix?.snapshot ?? null,
         },
       });
     const centerIds = roots ?? (root ? [root] : null);
@@ -144,7 +165,7 @@ export async function readGraphScope(input: {
       input.expansions.map((s) => s.root),
     );
   for (const source of sources) {
-    const rows: GraphNode[] = [];
+    const rows = prefix ? [...prefix.nodes] : [];
     let summary: GraphNodePage | undefined;
     do {
       const page = await readPage(
@@ -170,6 +191,7 @@ export async function readGraphScope(input: {
         rangeNodes: summary!.rangeNodes,
       });
   }
+  signal?.throwIfAborted();
   if (input.extraId && !nodes.has(input.extraId)) {
     const node = input.demo
       ? demoGraph.nodes.find((n) => n.id === input.extraId)
@@ -182,6 +204,7 @@ export async function readGraphScope(input: {
   if (nodes.size > MAX_GRAPH_NODES)
     throw Error("当前显示节点过多，请先收起一些展开再显示这个节点。");
   const list = [...nodes.values()];
+  signal?.throwIfAborted();
   const edges = input.demo
     ? demoGraph.edges.filter(
         (e) =>
@@ -205,6 +228,7 @@ export async function readGraphScope(input: {
         ),
       },
     },
+    snapshot: first!.snapshot,
     totalNodes: first!.totalNodes,
     matchingNodes: first!.matchingNodes,
     rangeNodes: first!.rangeNodes,

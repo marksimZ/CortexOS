@@ -11,6 +11,52 @@ fn request() -> CompletionInput {
         tools: vec![],
     }
 }
+
+#[tokio::test]
+async fn sequential_cloud_posts_reuse_a_connection_with_request_scoped_auth() {
+    use std::{io::{BufRead, BufReader, Read, Write}, net::TcpListener, thread, time::Duration};
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/", listener.local_addr().unwrap());
+    let server = thread::spawn(move || {
+        let mut keys = Vec::new();
+        let mut connections = 0;
+        while keys.len() < 3 {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+            connections += 1;
+            let mut reader = BufReader::new(&mut socket);
+            while keys.len() < 3 {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap() == 0 { break; }
+                let mut length = 0;
+                let mut key = String::new();
+                loop {
+                    line.clear();
+                    assert_ne!(reader.read_line(&mut line).unwrap(), 0);
+                    if line == "\r\n" { break; }
+                    if let Some((field, value)) = line.split_once(':') {
+                        if field.eq_ignore_ascii_case("content-length") { length = value.trim().parse().unwrap(); }
+                        if field.eq_ignore_ascii_case("authorization") { key = value.trim().to_owned(); }
+                    }
+                }
+                reader.read_exact(&mut vec![0; length]).unwrap();
+                keys.push(key);
+                let status = if keys.len() == 3 { "302 Found\r\nLocation: /never-follow" } else { "200 OK" };
+                write!(reader.get_mut(), "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{{}}").unwrap();
+            }
+        }
+        (connections, keys)
+    });
+    for key in ["test-key-a", "test-key-b"] {
+        assert_eq!(post_json(Provider::Openai, key, &url, &json!({}), Duration::from_secs(3), 1024).await, Ok(json!({})));
+    }
+    assert_eq!(post_json(Provider::Openai, "test-key-a", &url, &json!({}), Duration::from_secs(3), 1024).await, Err(ConnectionState::ServiceError));
+    let (connections, keys) = server.join().unwrap();
+    println!("three sequential requests used {connections} TCP connection(s)");
+    assert_eq!(keys, ["Bearer test-key-a", "Bearer test-key-b", "Bearer test-key-a"]);
+    assert_eq!(connections, 1);
+}
 #[test]
 fn personalized_cloud_wire_and_native_object_parsers_cover_three_official_protocols() {
     let mut input = request();

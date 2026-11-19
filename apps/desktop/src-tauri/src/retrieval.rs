@@ -1,9 +1,180 @@
 use crate::{db::Database, models::*};
 use rusqlite::{Connection, OptionalExtension, params};
+use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
-pub const ALGORITHM: &str = "fts5-cjk-bigram-latin-bm25-v1";
+pub const ALGORITHM: &str = "fts5-cjk-bigram-latin-bm25-v2";
+
+#[derive(Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum SearchMethod {
+    None,
+    Fts5,
+    Fts5Rerank,
+    Hybrid,
+    HybridRerank,
+    VersionAware,
+}
+
+impl SearchMethod {
+    fn for_profile(profile: &crate::rag::Profile) -> Self {
+        if profile.rerank {
+            Self::HybridRerank
+        } else {
+            Self::Hybrid
+        }
+    }
+}
+
+pub(crate) struct Route {
+    method: SearchMethod,
+    reason: &'static str,
+    pub profile: Option<crate::rag::Profile>,
+    pub graph_reason: Option<&'static str>,
+    runtime_profile: bool,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum GraphMode {
+    Auto,
+    Always,
+    Disabled,
+}
+
+impl From<bool> for GraphMode {
+    fn from(force: bool) -> Self {
+        if force { Self::Always } else { Self::Auto }
+    }
+}
+
+impl Route {
+    pub fn with_runtime(mut self, c: &Connection, workspace: &str, profile: Option<&crate::runtime_profiles::Profile>) -> AppResult<Self> {
+        use crate::runtime_profiles::Target;
+        let Some(profile) = profile else { return Ok(self) };
+        self.runtime_profile = true;
+        let reranks = !matches!(profile.input.reranking, Target::Off);
+        if matches!(self.reason, "embedding_index" | "no_embedding_index") {
+            let remote = match &profile.input.embedding {
+                Target::Cloud { connection_id, model } => Some(crate::rag::cloud::usable(c,workspace,connection_id,model)?),
+                _ => None,
+            };
+            self.profile = match remote { Some(index) => index, None => profile.select_local_embedding(self.profile.take()) };
+            self.method = match (self.profile.is_some(),reranks) {
+                (true, true) => SearchMethod::HybridRerank,
+                (true, false) => SearchMethod::Hybrid,
+                (false, true) => SearchMethod::Fts5Rerank,
+                (false, false) => SearchMethod::Fts5,
+            };
+            self.reason = if self.profile.is_some() { "embedding_index" } else { "runtime_no_matching_index" };
+        } else if self.method == SearchMethod::Fts5 && reranks {
+            self.method = SearchMethod::Fts5Rerank;
+        }
+        Ok(self)
+    }
+
+    pub fn searches(&self) -> bool {
+        self.method != SearchMethod::None
+    }
+
+    pub fn semantic<'a>(&self, query: Option<&'a crate::rag::Query>) -> Option<&'a crate::rag::Query> {
+        match self.reason {
+            "embedding_index" | "no_embedding_index" => query,
+            _ => None,
+        }
+    }
+
+    pub fn audit(&self, report: &Value, query: Option<&crate::rag::Query>, preview: bool) -> Value {
+        let planned = if self.runtime_profile { self.method } else { query.map_or(self.method, |q| SearchMethod::for_profile(&q.profile)) };
+        let used = match self.method {
+            SearchMethod::None | SearchMethod::VersionAware => self.method,
+            _ if report["reranker"].is_string() && report["semanticStatus"] == "completed" => SearchMethod::HybridRerank,
+            _ if report["semanticStatus"] == "completed" => SearchMethod::Hybrid,
+            _ if report["reranker"].is_string() => SearchMethod::Fts5Rerank,
+            _ => SearchMethod::Fts5,
+        };
+        let fallback = (planned != used).then(|| {
+            report["semanticStatus"].as_str().unwrap_or(if preview {
+                "preview"
+            } else {
+                "no_query_vector"
+            })
+        });
+        json!({"policyVersion":1,"plannedMethod":planned,"usedMethod":used,
+            "reason":if query.is_some() { "embedding_index" } else { self.reason },
+            "graphReason":self.graph_reason,"fallbackReason":fallback})
+    }
+}
+
+pub(crate) fn route(
+    c: &Connection,
+    workspace: &str,
+    text: &str,
+    enabled: bool,
+    scoped: bool,
+    graph_mode: impl Into<GraphMode>,
+    has_manual_selection: bool,
+) -> AppResult<Route> {
+    let mut plan = Route {
+        method: SearchMethod::None,
+        reason: "conversation_disabled",
+        profile: None,
+        graph_reason: None,
+        runtime_profile: false,
+    };
+    if !enabled {
+        return Ok(plan);
+    }
+    let text = text.trim().to_ascii_lowercase();
+    // ponytail: expand the phrase list only against fixed evaluation cases.
+    plan.graph_reason = match graph_mode.into() {
+        GraphMode::Always => Some("user_enabled"),
+        GraphMode::Auto if [
+        "依赖链", "依赖路径", "关系路径", "关联路径", "冲突来源", "证据冲突",
+        "dependency chain", "relationship path", "conflicting evidence",
+    ]
+        .into_iter()
+        .any(|phrase| text.contains(phrase))
+        => Some("relationship_question"),
+        GraphMode::Auto | GraphMode::Disabled => None,
+    };
+    if scoped {
+        plan.method = SearchMethod::VersionAware;
+        plan.reason = "version_scope";
+        return Ok(plan);
+    }
+    let standalone = text.trim_end_matches(['.', '!', '?', '。', '！', '？']).trim_end();
+    if !has_manual_selection && plan.graph_reason.is_none() {
+        if !text.chars().any(char::is_alphanumeric) {
+            plan.reason = "no_searchable_text";
+            return Ok(plan);
+        }
+        if matches!(
+            standalone,
+            "你好" | "您好" | "早上好" | "晚上好" | "谢谢" | "谢谢你" | "hi" | "hello" | "thanks" | "thank you"
+        ) {
+            plan.reason = "standalone_greeting";
+            return Ok(plan);
+        }
+    }
+    plan.method = SearchMethod::Fts5;
+    let identifier = standalone.trim_matches(['`', '"', '\'']);
+    let separators = b"-_/\\.:";
+    if identifier.bytes().any(|b| b.is_ascii_alphabetic())
+        && identifier.bytes().all(|b| b.is_ascii_alphanumeric() || separators.contains(&b))
+        && identifier.bytes().any(|b| b.is_ascii_digit() || separators.contains(&b))
+    {
+        plan.reason = "identifier";
+    } else if let Some(profile) = crate::rag::usable_profile(c, workspace)? {
+        plan.method = SearchMethod::for_profile(&profile);
+        plan.reason = "embedding_index";
+        plan.profile = Some(profile);
+    } else {
+        plan.reason = "no_embedding_index";
+    }
+    Ok(plan)
+}
+
 fn error(_: rusqlite::Error) -> String {
     "知识检索不可用，问题已保留。请重试；也可关闭本会话自动检索。".into()
 }
@@ -39,19 +210,64 @@ pub fn index_node(connection: &Connection, id: &str) -> AppResult<()> {
     connection
         .execute("DELETE FROM knowledge_fts WHERE node_id=?1", params![id])
         .map_err(error)?;
+    let chunk_schema = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='rag_chunks')",
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .map_err(error)?;
+    if chunk_schema {
+        connection.execute(
+            "DELETE FROM rag_chunks WHERE workspace_id=(SELECT workspace_id FROM knowledge_nodes WHERE id=?1) AND node_id=?1",
+            [id]
+        ).map_err(error)?;
+    }
     let row: Option<(String,i64,String,String)>=connection.query_row("SELECT n.workspace_id,v.version,v.title,v.content FROM knowledge_nodes n JOIN knowledge_versions v ON v.node_id=n.id AND v.version=n.effective_version WHERE n.id=?1 AND v.kind IN ('knowledge','context','decision')",params![id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional().map_err(error)?;
     if let Some((workspace, version, title, body)) = row {
         if !crate::sources::available(connection, id, version)? {
             return Ok(());
         }
+        let title_terms = terms(&title).join(" ");
+        if chunk_schema
+            && let Some(source) = crate::sources::evidence(connection, id, version)?.first()
+        {
+            let segments = crate::source_chunks::segments(&workspace, &body, source);
+            if !segments.is_empty() {
+                for segment in segments {
+                    let location = serde_json::to_string(&segment.location)
+                        .map_err(|_| "无法记录原文片段坐标。")?;
+                    connection
+                        .execute(
+                            "INSERT INTO rag_chunks VALUES(?1,?2,?3,?4,?5,?6)",
+                            params![workspace, id, version, segment.id, segment.body, location],
+                        )
+                        .map_err(error)?;
+                    connection
+                        .execute(
+                            "INSERT INTO knowledge_fts VALUES(?1,?2,?3,?4,?5,?6)",
+                            params![
+                                id,
+                                workspace,
+                                version,
+                                title_terms,
+                                terms(segment.body).join(" "),
+                                segment.id
+                            ],
+                        )
+                        .map_err(error)?;
+                }
+                return Ok(());
+            }
+        }
         connection
             .execute(
-                "INSERT INTO knowledge_fts VALUES(?1,?2,?3,?4,?5)",
+                "INSERT INTO knowledge_fts(node_id,workspace_id,version,title_terms,body_terms) VALUES(?1,?2,?3,?4,?5)",
                 params![
                     id,
                     workspace,
                     version,
-                    terms(&title).join(" "),
+                    title_terms,
                     terms(&body).join(" ")
                 ],
             )
@@ -100,9 +316,7 @@ impl Database {
         Ok(())
     }
 }
-pub fn search(connection: &Connection, workspace: &str, query: &str) -> AppResult<Value> {
-    let started = now();
-    let clock = std::time::Instant::now();
+pub(crate) fn query_terms(query: &str) -> (Vec<String>, bool) {
     let mut seen = BTreeSet::new();
     let tokens: Vec<_> = terms(query)
         .into_iter()
@@ -116,7 +330,43 @@ pub fn search(connection: &Connection, workspace: &str, query: &str) -> AppResul
         .filter(|x| seen.insert(x.clone()))
         .collect();
     let truncated = tokens.len() > 64;
-    let tokens: Vec<_> = tokens.into_iter().take(64).collect();
+    (tokens.into_iter().take(64).collect(), truncated)
+}
+
+pub(crate) fn report(
+    algorithm: &str,
+    tokens: Vec<String>,
+    truncated: bool,
+    mut candidates: Vec<Value>,
+    started: String,
+    clock: std::time::Instant,
+) -> Value {
+    let capped = candidates.len() > 20;
+    candidates.truncate(20);
+    for (index, item) in candidates.iter_mut().enumerate() {
+        item["lexicalRank"] = json!(index + 1);
+    }
+    let elapsed = clock.elapsed().as_micros() as u64;
+    let mut report = json!({"enabled":true,"algorithm":algorithm,"terms":tokens,"queryTruncated":truncated,
+        "candidateLimit":20,"candidatesTruncated":capped,"autoLimit":5,"startedAt":started,
+        "finishedAt":now(),"elapsedMicros":elapsed,"stages":[],
+        "status":if tokens.is_empty(){"no_search_terms"}else if candidates.is_empty(){"no_match"}else{"matched"},
+        "candidates":candidates});
+    let step = if tokens.is_empty() { "prepare_terms" }
+        else if algorithm == ALGORITHM { "lexical_lookup" }
+        else { "version_lookup" };
+    stage(&mut report, step, elapsed);
+    report
+}
+
+pub(crate) fn stage(report: &mut Value, kind: &str, elapsed_micros: u64) {
+    report["stages"].as_array_mut().unwrap().push(json!({"kind":kind,"elapsedMicros":elapsed_micros}));
+}
+
+pub fn search(connection: &Connection, workspace: &str, query: &str) -> AppResult<Value> {
+    let started = now();
+    let clock = std::time::Instant::now();
+    let (tokens, truncated) = query_terms(query);
     let expression = tokens
         .iter()
         .map(|t| format!("\"{t}\""))
@@ -124,14 +374,39 @@ pub fn search(connection: &Connection, workspace: &str, query: &str) -> AppResul
         .join(" OR ");
     let mut candidates = Vec::new();
     if !expression.is_empty() {
-        let mut statement=connection.prepare("SELECT n.id,v.version,v.title,v.kind,v.content,bm25(knowledge_fts,0,0,0,5,1) FROM knowledge_fts JOIN knowledge_nodes n ON n.id=knowledge_fts.node_id AND n.workspace_id=knowledge_fts.workspace_id JOIN knowledge_versions v ON v.node_id=n.id AND v.version=n.effective_version AND v.version=knowledge_fts.version WHERE knowledge_fts MATCH ?1 AND n.workspace_id=?2 AND v.kind IN ('knowledge','context','decision') AND NOT EXISTS(SELECT 1 FROM knowledge_source_links l JOIN source_documents s ON s.id=l.source_id WHERE l.node_id=n.id AND l.knowledge_version=v.version AND s.enabled=0) ORDER BY bm25(knowledge_fts,0,0,0,5,1),n.id LIMIT 21").map_err(error)?;
-        candidates=statement.query_map(params![expression,workspace],|r|Ok(json!({"nodeId":r.get::<_,String>(0)?,"version":r.get::<_,i64>(1)?,"title":r.get::<_,String>(2)?,"kind":r.get::<_,String>(3)?,"content":r.get::<_,String>(4)?,"score":r.get::<_,f64>(5)?,"included":false,"reason":"pending_budget","costUnits":0}))).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
+        let mut statement = connection.prepare(
+            "WITH hits AS MATERIALIZED (
+                SELECT f.rowid AS hit_id, n.id AS node_id, v.version, f.chunk_id,
+                       bm25(knowledge_fts,0,0,0,5,1,0) AS score
+                FROM knowledge_fts f
+                JOIN knowledge_nodes n ON n.id=f.node_id AND n.workspace_id=f.workspace_id
+                JOIN rag_current_knowledge v ON v.workspace_id=n.workspace_id AND v.node_id=n.id AND v.version=f.version
+                WHERE knowledge_fts MATCH ?1 AND n.workspace_id=?2
+                  AND NOT EXISTS(SELECT 1 FROM knowledge_source_links l JOIN source_documents s ON s.id=l.source_id
+                                 WHERE l.node_id=n.id AND l.knowledge_version=v.version AND s.enabled=0)
+             ), ranked AS (
+                SELECT *, ROW_NUMBER() OVER(PARTITION BY node_id ORDER BY score,hit_id) AS rank
+                FROM hits
+             )
+             SELECT h.node_id,v.version,v.title,v.kind,v.content,h.score,h.chunk_id,ch.body
+             FROM ranked h
+             JOIN knowledge_versions v ON v.node_id=h.node_id AND v.version=h.version
+             LEFT JOIN rag_chunks ch ON ch.workspace_id=?2 AND ch.node_id=h.node_id AND ch.version=h.version AND ch.id=h.chunk_id
+             WHERE h.rank=1 AND (h.chunk_id IS NULL OR ch.id IS NOT NULL)
+             ORDER BY h.score,h.node_id LIMIT 21"
+        ).map_err(error)?;
+        candidates = statement.query_map(params![expression,workspace], |row| {
+            let mut item = json!({"nodeId":row.get::<_,String>(0)?,"version":row.get::<_,i64>(1)?,"title":row.get::<_,String>(2)?,"kind":row.get::<_,String>(3)?,"content":row.get::<_,String>(4)?,"score":row.get::<_,f64>(5)?,"included":false,"reason":"pending_budget","costUnits":0});
+            if let Some(chunk_id) = row.get::<_, Option<String>>(6)? {
+                item["chunkId"] = json!(chunk_id);
+                item["chunkText"] = json!(row.get::<_, String>(7)?);
+            }
+            Ok(item)
+        }).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
     }
-    let capped = candidates.len() > 20;
-    candidates.truncate(20);
-    Ok(
-        json!({"enabled":true,"algorithm":ALGORITHM,"terms":tokens,"queryTruncated":truncated,"candidateLimit":20,"candidatesTruncated":capped,"autoLimit":5,"startedAt":started,"finishedAt":now(),"elapsedMicros":clock.elapsed().as_micros() as u64,"status":if expression.is_empty(){"no_search_terms"}else if candidates.is_empty(){"no_match"}else{"matched"},"candidates":candidates}),
-    )
+    Ok(report(
+        ALGORITHM, tokens, truncated, candidates, started, clock,
+    ))
 }
 
 #[cfg(test)]
@@ -371,7 +646,7 @@ mod tests {
             db.knowledge_detail(&w, &id).unwrap().node.effective_version,
             Some(2)
         );
-        db.connection().unwrap().execute_batch("CREATE VIRTUAL TABLE knowledge_fts USING fts5(node_id UNINDEXED,workspace_id UNINDEXED,version UNINDEXED,title_terms,body_terms,tokenize='unicode61');").unwrap();
+        db.connection().unwrap().execute_batch("CREATE VIRTUAL TABLE knowledge_fts USING fts5(node_id UNINDEXED,workspace_id UNINDEXED,version UNINDEXED,title_terms,body_terms,chunk_id UNINDEXED,tokenize='unicode61');").unwrap();
         rebuild(&db.connection().unwrap()).unwrap();
         db.set_conversation_retrieval(&w, &c, false).unwrap();
         drop(db);
@@ -435,10 +710,29 @@ mod tests {
                 .unwrap(),
             0
         );
-        // Restore the exact pre-v6 table set while retaining approved knowledge fixtures.
-        db.connection().unwrap().execute_batch("DROP TABLE knowledge_fts; DROP TABLE retrieval_results; DROP TABLE conversation_retrieval_settings; DELETE FROM schema_migrations WHERE version=6;").unwrap();
         drop(db);
-        let migrated = Database::open(&path).unwrap();
+        let legacy = path.join("legacy-v5");
+        std::fs::create_dir_all(&legacy).unwrap();
+        let mut connection = Connection::open(legacy.join("cortexos.sqlite3")).unwrap();
+        crate::db::initialize_fixture_schema(&mut connection, &legacy, 5).unwrap();
+        connection
+            .execute("INSERT INTO workspaces VALUES(?1,'旧工作区','t','t')", [&w])
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO conversations VALUES(?1,?2,'旧会话','t','t')",
+                params![c, w],
+            )
+            .unwrap();
+        let transaction = connection.transaction().unwrap();
+        for i in 0..26 {
+            let node = new_id();
+            transaction.execute("INSERT INTO knowledge_nodes(id,workspace_id,latest_version,effective_version,revision,created_at,updated_at) VALUES(?1,?2,1,1,2,'t','t')",params![node,w]).unwrap();
+            transaction.execute("INSERT INTO knowledge_versions VALUES(?1,1,?2,'knowledge','发布。','user','fixture','t')",params![node,format!("发布资料{i}")]).unwrap();
+        }
+        transaction.commit().unwrap();
+        drop(connection);
+        let migrated = Database::open(&legacy).unwrap();
         assert!(migrated.conversations(&w).unwrap()[0].auto_retrieval);
         assert_eq!(
             search(&migrated.connection().unwrap(), &w, "发布").unwrap()["candidates"]
@@ -447,7 +741,7 @@ mod tests {
                 .len(),
             20
         );
-        assert!(std::fs::read_dir(&path).unwrap().any(|f| {
+        assert!(std::fs::read_dir(&legacy).unwrap().any(|f| {
             f.unwrap()
                 .file_name()
                 .to_string_lossy()

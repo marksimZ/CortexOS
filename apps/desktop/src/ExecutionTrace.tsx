@@ -1,6 +1,6 @@
 import { benchmarkReturn } from "./benchmark/reportNavigation";
 import { SelectMenu } from "./components/SelectMenu";
-import { RetrievalSummary } from "./components/RetrievalSummary";
+import { RetrievalInspection } from "./components/RetrievalInspection";
 import { GraphMotionControl } from "./GraphMotionControl";
 import { X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -206,6 +206,11 @@ function TraceCanvas({ studio, runId }: { studio: GraphStudio; runId: string }) 
     setReady(false);
   }, []);
   const selected = graph?.nodes.find((node) => node.id === route.event);
+  const selectedEvent = data?.detail.events.find(event => event.seq === selected?.seq)?.kind;
+  const retrieval = data?.detail.contextManifest.retrieval;
+  const showRetrieval = data?.detail.contextManifest.purpose !== "benchmark" && (
+    selectedEvent === "retrieval_completed" || (selectedEvent === "context_prepared" && !retrieval?.enabled)
+  );
   const related =
     graph?.edges.filter(
       (edge) =>
@@ -385,14 +390,8 @@ function TraceCanvas({ studio, runId }: { studio: GraphStudio; runId: string }) 
                   )}
                   {selected.seq !== undefined ? (
                     <>
-                      <p>{selected.summary}</p>
-                      {data.detail.events.find(
-                        (event) => event.seq === selected.seq,
-                      )?.kind === "retrieval_completed" && (
-                        <RetrievalSummary
-                          report={data.detail.contextManifest.retrieval}
-                        />
-                      )}
+                      {!(showRetrieval && selectedEvent === "retrieval_completed" && retrieval) && <p>{selected.summary}</p>}
+                      {showRetrieval && <RetrievalInspection detail={data.detail} />}
                       <details>
                         <summary>详细记录（原始数据）</summary>
                         <pre>{selected.content}</pre>

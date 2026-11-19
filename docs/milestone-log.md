@@ -1,5 +1,284 @@
 # 里程碑记录
 
+## 2026-11-19 Phase G5 发布候选版验收
+
+复跑三工具共享队列，修复工具间错误取消。业务代码只变更 `tasks.rs` 和 `benchmark/harness/session.rs` 的等待取消归属。新增原生三工具与隔离安装场景，复跑标准评测、过期草案、凭据、网络与迁移定向检查。实际执行 `cargo build --manifest-path src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`、`npm.cmd run tauri -- build --bundles nsis`、三个定向 `cargo test --offline --locked --lib <name>` 和六组非活动桌面专项。队列结果未发现测试标签残留容器。
+
+经授权向真实本地模型转发两次 GPU 对话。标准评测既有五分钟保留参数触发批准范围守门，0 次推理转发。固定回环性能、真实 GPU 数据、阻断及安装手验步骤见 [Phase G5 验收报告](optimization/phase-g5-release-validation.md)。本地候选包 SHA-256 为 `C8494E4CE5148D62E5D3A8FE2451CB181EF82DE8EF1070D684527A4B1E3FBB08`，Authenticode 未签名，未对外发布。
+
+## 2026-11-19 Phase G 项目资源队列、架构收敛与回归
+
+项目副本的准备和提交、Codex / Claude Code / Aider 单题以及组合实验接入共享等待。旧 IPC 调用保留即时申请。取消等待匹配工作区、用途和请求编号，取得任务槽后继续走原有确认与检查。任务记录按原有流程写入。队列登记和信号量注册使用同一顺序，更新或过期的副本无法提交。
+
+`npm.cmd run build`、`cargo check --manifest-path src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop` 与同配置的 `cargo build` 已执行并通过。非活动桌面以 `--project=harness-docker-real --project=desktop --grep "project validation wait survives reload|cancel resource wait"` 用固定回环联测，2 条通过，32.6 秒。真实 Docker 未启动，项目验证在已知缺失环境下走原有失败路径。
+
+G3 共用本地和云端的禁止重定向与连接超时策略，保留本地独立的代理限制。三条隔离检查恢复语句合为一条并保留用途及错误诊断。G4 中实际运行了聊天、知识、图谱、RAG、评测、项目审核、Windows 测试凭据与缓存恢复。旧库第 6 版原生迁移通过，Rust 第 7 版升级、迁移失败回滚、工作区隔离与部分输出恢复、固定云端个性化流程、固定云端索引与重排的定向测试均通过。验收边界链接见 [Phase G 验收记录](optimization/phase-g-acceptance.md)。
+
+后台启动 Docker 后读取 Linux Engine 29.9.2 和已有 Python 镜像。选择既有原生集成测试逐条执行：`harness-programming-validation.spec.ts` 的三组验证和审核发布、停止与强制退出恢复各 1 条通过。`harness-workspace.spec.ts` 的人工副本与独立评分、`harness-experiment.spec.ts` 的固定回复组合实验、三种工具的固定回复单题各 1 条通过。未发起实际本地或云端模型调用。
+
+最终 `npm.cmd run tauri -- build --bundles nsis` 通过，Release 构建报告 8 分 34 秒。验收包和签名、哈希检查结果在 `artifacts/phase-g2/delivery`。窗口标题栏与弹窗操作通过，三尺寸输入和分屏回归通过。物理拖动的自动化因非活动桌面无法读取鼠标位置而未完成。
+
+## 2026-11-19 G2.4 项目编程验证排队
+
+「项目适配 → 测试任务 → 编程任务草案」的容器验证在确认后复用共享串行队列。每份草案只能提交一个排队或启动请求。重开页面从调度器读取状态，按工作区和请求编号取消。应用重启清空未执行的等待请求，需重新确认。获得资源后再次核对草案来源、修订和镜像标识，写入记录时原子校验最新修订。实际容器环境仍由原验证流程核对。既有执行中断记录、部分结果和容器归属清理入口继续可用。
+
+后端修改 `src-tauri/src/tasks.rs`、`benchmark/harness/programming/validation.rs` 和两处复用取消的评测入口。前端修改 `src/benchmark/harness/{ProgrammingValidation.tsx,programmingTypes.ts}`、`src/studio.ts`。验证场景在 `tests/harness-programming-validation.spec.ts`。
+
+在 `apps/desktop` 运行 `npm.cmd run build` 和 `cargo build --manifest-path src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`，类型检查、前端构建及桌面调试构建通过。按本轮范围使用原生集成验证，未运行单元测试。
+
+在非活动桌面以临时工作区和固定回环响应运行 `playwright test --project=harness-docker-real --project=desktop --grep "project validation wait survives reload|cancel resource wait" harness-programming-validation.spec.ts standard-benchmark.spec.ts --workers=1`。首次项目验证因回环模型缺少预检元数据未进入占用阶段，补全后联合回归 2 条通过（29.2 秒）。标准评测占用时，项目验证刷新后可取消。重复入队和跨工作区取消均被拒绝。取消和过期草案请求留下的验证记录均为 0。最新修订获得资源后进入原环境检查，因无可用环境而记录失败，未生成容器归属。标准评测取消与再运行通过。日志为 `artifacts/phase-g2/harness-validation-queue-final.log`。
+
+截图复核后，等待和启动状态改用中性色。重新构建后用 `--grep "project validation wait survives reload"` 复验，1 条通过（14.3 秒），确认状态为中性色、取消按钮在视口内。截图在 `artifacts/phase-g2/harness-validation-queue-ui`，日志在同名 `.log`。
+
+只读查询发现 Docker Linux 引擎管道未启动。实际容器运行、执行中取消和应用中断后的容器清理本轮未测。真实模型调用及 CPU、RAM、VRAM 对照留给联合验证。现有项目副本、工具单题及组合实验的等待接入仍排在后续。
+
+## 2026-11-19 G2.4 第二项：标准与个性化评测等待资源
+
+报告页确认后的批次复用索引的串行队列；旧 IPC 客户端不传状态通道时仍即时申请。入队前核对工作区、题库类型、计划哈希和批次状态。个性化评测排队前检查云端访问，取得资源后重新读取连接并按原有规则核对绑定、计划和可恢复题目。等待只存于内存，进程重启后需要重新确认。取消等待复用现有停止命令的 `onlyWaiting` 参数；队列已交给执行器时，该操作不能停止实际运行。未修改迁移、历史结果、模型服务或桌面权限。
+
+主要文件：`src-tauri/src/tasks.rs`、`commands.rs`、`benchmark/{standard,report_read}.rs`、`benchmark/personalized/{batch,generation}.rs`；前端 `src/benchmark/{PersonalizedReport.tsx,useBatchOverview.ts,personalized.ts}`；验证 `tests/standard-benchmark.spec.ts`（路径均相对 `apps/desktop`）。
+
+实际命令：`npm.cmd --prefix apps/desktop run build`（含类型检查）；`cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`；同一 manifest 下分别运行 `cargo test --offline --locked --lib scheduler_tests`、`cargo test --offline --locked --lib personalized_batch_restart_only_allows_explicit_resume_of_unsent_items`，两项各 1 条通过。
+
+非活动桌面 WebView2 使用隔离库和回环服务：`playwright test --project=desktop --grep "cancel resource wait|native personalized guard" standard-benchmark.spec.ts cloud-native.spec.ts --workers=1`。首次权限检查通过，但排队取消按钮未生效；改用现有受控停止接口后 2 条通过（26.1 秒）。同一个标准批次刷新后可取消，计划状态、逐题记录不变；取消前后占用方仍在运行，等待者新增请求 0 次。再次确认后等待占用方释放，完成 8 次固定回复请求。个性化验证覆盖未授权访问与恢复规则；没有运行真实云端或本地模型，没有测量显存、吞吐提升或完整业务回归。
+
+截图复核发现排队时仍显示数据库的“待确认”，现由等待状态取代。最终桌面构建后用 `--grep "cancel resource wait"` 重跑，1 条通过（20.3 秒）；日志 `artifacts/phase-g2/batch-queue-ui.log`，原生截图在同名目录。
+
+剩余：项目适配长任务的停止、排队与恢复；跨资源冲突和使用量验证；随后 G3、G4。
+
+## G2.4 第一项：索引等待与取消
+
+本机与云端索引设置页在确认后提交带工作区和任务编号的请求。任务槽通过单许可的 FIFO 信号量协调占用，通过原请求的通道通知等待或开始。排队状态随进程结束释放。聊天、评测及项目任务继续使用即时申请接口；云端索引获得任务槽后仍须通过连接互斥、授权及预算检查。
+
+修改集中在 `tasks.rs`、`commands.rs`、本机和云端 RAG 构建入口、两处索引设置组件及 `rag-native.spec.ts`。在桌面目录执行 `npm.cmd run build`、`cargo test --manifest-path src-tauri/Cargo.toml --offline --locked --lib scheduler_tests` 和 `cargo build --manifest-path src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`，最终均通过。专项验证三个等待者按序获得许可、中间一项取消、跨工作区取消被拒绝，以及新任务无法插队。
+
+非活动桌面的 `playwright test --project=desktop --grep "workspace hybrid" rag-native.spec.ts` 通过，耗时 10.7 秒。固定回环服务占用任务槽时，第二个工作区能看见等待原因，取消后的向量请求为 0；再次提交后正常完成。日志与截图位于 `artifacts/phase-g2/index-queue.log` 和同名目录。没有实测真实模型、云端费用或显存。G2.4 余下工作为评测与项目任务的等待及恢复语义、跨资源冲突和资源指标验收，再进入 G3、G4。
+
+## 2026-11-18 G2.3 缓存确认与恢复
+
+- `storage.rs` 将这次预览与实际界面位置、进程和目录身份绑定。`storage/recovery.rs` 写入预约及结果记录，并在 Windows 上复核、同盘移动、恢复和失败回退。`lib.rs` 在数据库单实例锁取得后、创建主界面前处理预约。`commands.rs` 及主窗口命令清单接入现有任务槽。数据库无需迁移。
+- `StorageInventory.tsx` 增加选项确认、撤销及缓存操作记录。支持一次预约一项，启动时最多等上次已核对的 WebView2 进程 10 秒。新缓存会另存后再恢复旧缓存。保留同盘备份时记为释放 0 字节。本轮使用隔离缓存，没有处理正式缓存或调用模型。
+- `npm.cmd run build` 与 `cargo build --offline --locked --features tauri/custom-protocol --bin cortexos-desktop` 通过。`cargo test --offline --locked --lib storage::` 最终 2 条通过，覆盖预览、真实共享占用导致的回退、两处中断后的恢复和重复启动。默认工具沙箱拒绝访问测试所需的 Windows 目录句柄，最终专项在获准的隔离环境运行。未执行全量单元测试。
+- 在非活动桌面用 `artifacts/rag-e6-qa/alternate-desktop.py` 执行 `playwright test --project=desktop --global-timeout 110000 storage-native.spec.ts storage-recovery-native.spec.ts --output ../../artifacts/phase-g2/recovery-acceptance`。最终 2 条通过，总 17.1 秒。原生检查覆盖确认前不执行、撤销、非法缓存编号、重复预约、重启移入备份、保留新缓存并恢复旧缓存。样本旧缓存的逻辑大小前后均为 1570 字节。两个原生截图和结果 JSON 位于输出目录，运行日志为 `artifacts/phase-g2/recovery-acceptance.log`。
+- 首轮原生验证修正了弹窗取消焦点、测试定位，以及窗口关闭后 WebView2 进程可能尚未退出的问题。正式安装环境、跨盘移动和永久删除备份未做实机验证。跨盘和永久删除不在本次操作范围。G2 当前仅剩 G2.4 任务资源协调，之后为 G3 架构收敛与 G4 完整回归。
+
+## 2026-11-18 G2.2 回收预览
+
+- 「设置 → 本地数据 → 预览可回收内容」读取缓存大小、管理方、位置、核对结果以及拟用备份磁盘余量。预览复用现有读取编号、停止操作和 SQLite 引用统计。Rust 从实际运行的 WebView2 查询其数据目录，匹配默认位置后才检查三个固定缓存子目录。其他界面数据、索引、备份、原始资料和历史证据保留。Windows 的两个接口依赖原本已在锁文件内，本轮将其声明为直接依赖。
+- `npm.cmd run build` 通过，含 TypeScript 检查。初次 `cargo check --offline` 发现当前 Tauri 需要通过 `get_webview_window` 获取主界面，已修正。最终 `cargo build --offline --locked --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol --bin cortexos-desktop` 通过。Vite 仍有图谱动态块超过 500 kB 的既有提示。
+- `cargo test --offline --locked --lib storage_reclaim_candidates_fail_closed_and_leave_files_intact` 专项 1 条通过。用隔离文件验证 5 字节候选、空目录、目录名被普通文件占用、自定义位置、备份路径冲突、取消及源文件不变。整套单元测试按本轮范围未运行。浏览器固定 IPC 回归 `node artifacts/phase-g2/storage-cancel.cjs` 通过，核对主动读取、按编号取消和保留旧报告。
+- 用 `artifacts/rag-e6-qa/alternate-desktop.py` 在非活动桌面执行 `playwright test --project=desktop --global-timeout 50000 storage-native.spec.ts --output ../../artifacts/phase-g2/reclaim-preview-final`。首轮定位器误用了精确行文本，修正后复跑通过。最终 1 条通过，总 9.4 秒。隔离配置中 3 类缓存均标为位置未核实，显示 12 个受保护组、1 条知识快照版本引用及备份磁盘可用空间 586751565824 字节。运行前后核对主库、WAL、升级备份和源文件内容相同，备份目录仍不存在。1366×768 浅色、1600×900 浅色、1920×1080 深色截图均已查看。原生日志 `artifacts/phase-g2/reclaim-preview-final.log`，截图及原始 JSON 位于同名目录。
+- 未在正式安装的数据目录扫描缓存，原生端到端覆盖隔离自定义位置保护，默认目录扫描规则由专项文件测试覆盖。本轮只有预览，未实际腾出空间或调用模型。G2.3 确认与恢复、G2.4 任务资源协调待实施。实际回收需针对具体预览另行确认。
+
+## 2026-11-18 G2.1 只读存储清单
+
+- 在「设置 → 本地数据」增加按需读取。`StorageInventory.tsx` 展示实际文件大小、读取时间、管理方、引用、保护原因及部分读取状态。`storage.rs` 按应用数据位置读取文件元数据，通过独立只读 SQLite 事务统计关联。两个 IPC 只接收读取编号，复用独立任务槽取消，不占用现有模型和评测槽。数据库、原始文件和历史记录保持原有存储行为。
+- `npm.cmd run build` 通过，包含 TypeScript 检查。初次 `cargo check --offline --locked` 发现 SQLite 计数要先按 i64 读取，已改为校验后转换。`cargo build --offline --locked --features tauri/custom-protocol --bin cortexos-desktop` 通过，长路径样式调整后再次构建通过。没有新增依赖或迁移。
+- `node artifacts/phase-g2/storage-cancel.cjs` 通过。生产前端在 headless Edge 用固定 IPC 检查进入设置时不读、停止仅绑定本次编号以及保留上次清单。
+- 非活动桌面运行 `playwright test --project=desktop --global-timeout 50000 storage-native.spec.ts`。首轮修正测试文件必须在隔离目录内的既有约束，首次长路径断言修正为定位已展开的详情。最终 1 条通过，总 8.4 秒，原生核对字节、分配量、实际知识引用、目录联接跳过、未知 SQLite 文件排除、长路径不挤断字段名，以及主库/WAL/备份/源文件在读取前后内容相同。三尺寸截图与 `inventory.json` 位于 `artifacts/phase-g2/storage-native-layout`，已实际查看浅色和深色。
+- 最终隔离样本已测 1000952 字节，其中主库 4096、WAL 959992、SHM 32768、升级备份 4096。知识到资料版本引用与知识快照版本引用各 1 条。隔离 WebView2 使用自定义数据目录，按合同显示未测量。真实 Ollama、Docker 与外部文件未扫描，未执行回收或运行真实模型。
+- G2.1 验收完成。剩余 G2.2 回收预览、G2.3 确认与恢复、G2.4 任务资源协调。当前无 G2.1 阻断。G2.3 的实际回收需在生成具体预览清单后另行确认。
+
+## 2026-11-18 Phase G1.9 Windows 构建与阶段收尾
+
+- Windows 桌面入口直接链接 `cortexos_desktop_lib` 的 Rust 库。`Cargo.toml` 将本项目库产物由 `staticlib`、`cdylib`、`rlib` 改为 `rlib`。保留原 Release 代码生成参数、功能和锁文件。
+- 在同一隔离目标目录 `artifacts/phase-g1/build-compare` 使用 `measure-build.ps1 -Release` 两次运行 `cargo build --offline --locked --features tauri/custom-protocol --bin cortexos-desktop --release`，以 Cargo 编译清单逐项计量应用产物。逻辑字节 365842818→143603833，减少 222238985 字节。桌面 EXE 前后均为 20661248 字节。两次总耗时 706.51 秒和 471.73 秒，依赖缓存状态不同，只作为实测记录。旧产物仍保留，磁盘未执行回收。
+- `npm.cmd run tauri -- bundle --bundles nsis --features tauri/custom-protocol --no-sign --no-binary-patching --ci` 退出 0，生成内部 NSIS 包 6197153 字节，SHA-256 `558210963a8cd654899476822b75da36d0df1a2329ef980464d4a547124c8c8d`。本次验证 Windows 构建和制包，未实测安装升级。`build-before.json`、`build-after.json`、`windows-delivery.json` 位于本轮审计目录。Release 保留三条原有 `unused_mut` 提示。
+- G1.8 累积版通过 `playwright test --project=desktop --grep 'workspace hybrid|model combination runs|native Markdown' rag-native.spec.ts markdown-camera.spec.ts`，3 条通过，28.9 秒。聊天重启专项独立运行 `playwright test --project=desktop --global-timeout 45000 chat.spec.ts`，1 条通过，41.7 秒，覆盖生成、停止、失败和重启。都使用非活动桌面、固定回环回复和隔离数据，保留实际运行日志。
+- G1 九项均已有前后对照与对应自检。实时本地模型、远端云模型、正式安装和完整跨领域回归保留给相应阶段。G2 存储与资源生命周期、G3 架构收敛、G4 完整回归待后续实施。
+
+## 2026-11-18 Phase G1.4–G1.8 轮询、长会话、索引和读取
+
+- **G1.4 轮询。** 聊天轮询改查独立的工作区和用途约束状态。通道负责当前会话流式更新，读盘负责恢复和最终状态。详情和模型组合对照改为前一次响应结束后再安排下一次，终态停止。`npm.cmd run build`、`cargo build --offline --locked --features tauri/custom-protocol --bin cortexos-desktop` 通过。`CORTEX_G1_PROBE=polling` 的固定响应探针记录聊天共 3 次轻量状态读取、完成后 0 次，详情两次请求且峰值并发为 1。原来打开详情会每秒读取完整记录，直到关闭。原生固定回环的模型组合对照通过，日志 `g1-4-native.log`。
+- **G1.5 长会话。** 拆除消息卡对整个工作台状态的依赖。用稳定消息引用与操作回调避免输入框变化使已加载消息重新渲染。现有消息 DOM 全数保留，引用定位和选择文本仍使用 DOM。`CORTEX_G1_PROBE=chat-render-before/chat-render-after` 分别采 5 轮 1000 消息会话、每轮 12 次按键。Chrome DevTools 记录脚本时间 P50/P95 146.44/177.28→14.06/18.42ms，含输入自动化的墙钟时间 344.87/376.97→191.09/203.80ms。此处统计实际浏览器任务，未推断 React 提交次数。`markdown-camera.spec.ts` 的 Markdown、选取原文及引用检查原生通过，构建通过。
+- **G1.6 本机索引增量构建。** 在当前工作区、同模型及指纹、同索引格式下按内容哈希复用合法向量。缺失内容按批生成，事务内复核当前资料。索引写入仅新增、更新或清除当前索引中的派生行。云端接口没有不可变模型指纹，本轮先保持其原构建约定。原生固定回环实测无变化 1→0 次向量请求，新增资料仅发送新文本，来源停用后复用其余向量。旧指纹、错误响应与替换索引仍受原验证。
+- 用非活动桌面运行 `playwright test --project=desktop --grep 'effective knowledge|authorized snapshots|workspace hybrid' context.spec.ts sources.spec.ts rag-native.spec.ts`，3 条通过，总 18.6 秒。复验覆盖 G1.1 两版本快照、资料停用及重启，G1.6 无变化重建、单条变化、工作区隔离、不同指纹、维度回退及重建。测试改用既有 UI 关闭辅助，补上已有的 `local_model_usage` 事件并把依据选择器限定在详情抽屉。先前合并启动器因聊天长用例超时，未将该批当作通过。保留 `g1-6-targeted.log` 与失败日志。
+- **G1.7 云端传输。** 目录查询和 JSON 提交分别使用长驻连接池，保留各自 8/10 秒连接超时及每请求超时。凭据仍逐请求绑定，重定向继续禁止。`cargo test --offline --locked --lib sequential_cloud_posts_reuse_a_connection -- --nocapture` 用相同 HTTP/1.1 回环输入采改前、改后 TCP 连接 3→1。改前目标断言按预期失败，改后通过。三个凭据头及重定向拒绝均核对，实际外网延迟和费用未调用。
+- **G1.8 向量读取。** `cargo test --offline --locked --lib rag_semantic_scan_measures_large_workspace_with_fixed_vectors -- --nocapture` 改前和改后各通过一次，均包含 1 次预热和 10 次采样。隔离 SQLite 含 1000 节点、2000 片段及 1536 维固定向量。直接访问 SQLite 借用的向量，只为选定的前 20 条片段加载完整正文。查询 P50/P95 170.91/178.37→148.31/156.75ms，短请求竞争等待 170.93/178.39→148.35/156.85ms。维持相似度公式、哈希过滤、片段去重与排序，核对前 20 条精确 ID、片段、正文和损坏向量排除。调试测量不外推到 Release。沿用单连接，未增加索引或迁移。
+- 原生和浏览器均使用合成资料、固定回环或固定向量。本轮未触发真实模型调用。G1.9 构建产物对照继续进行。
+
+## 2026-11-18 Phase G1.1–G1.3 请求与首屏优化
+
+- **G1.1 资料选择器。** 展开时读取已生效、日期有效且来源可用的知识摘要，每页最多 100 条。维持原手动选择版本和发送时复核。`npm.cmd run build` 和原生 `cargo build --offline --locked --features tauri/custom-protocol --bin cortexos-desktop` 通过。首轮 Rust 检查修正 SQLite LIMIT 类型，首轮原生检查补齐主窗口只读 IPC 权限。
+- `CORTEX_G1_PROBE=context` 执行 `node artifacts/phase-g1/frontend_probe.cjs`，与 G0 的 1000 条合成资料场景相比，折叠读取从 1 次列表加 1000 次详情降为 0 次。展开 1 次返回 100 条，再用 1 次读到 200 条，选中第二页后关闭再展开仍保留选择。单次首屏展开约 43.55ms。记录为 `artifacts/phase-g1/g1-1-context.json`，并检查 1600×900 截图。
+- 在非活动桌面通过 Playwright 指定 `context.spec.ts sources.spec.ts --grep 'effective knowledge|authorized snapshots'`。通过新增的有效版本、日期、跨工作区、未确认知识及停用来源断言，已核对第一条消息的实际固定回环请求快照；两条整用例最终未通过。`context.spec.ts` 的预期事件缺少 Phase F 增加的 `local_model_usage`，`sources.spec.ts` 在停用与历史快照断言之后等待测试窗口关闭超时。日志 `g1-1-native-verified.log` 保留实际失败位置。
+- **G1.2 图谱分页。** 同范围、同快照已有节点作为前缀，新增页照常校验快照。快照过期时从第一页重读，切换范围时停止旧请求链。`node artifacts/phase-g1/frontend_probe.cjs` 的 1000 节点 / 5000 关系合成场景重复 5 次，节点分页 15→5 次，关系 5→5 次。加载 P50/P95 609.69/631.80→618.11/651.55ms，包含原固定等待，合成场景未观察到时延下降。旧快照另验 `[200,旧]→[0,无]→[200,新]`，空闲 500ms 新增绘制仍为 0。原始数据 `frontend-graph.json`。
+- 前端构建及原生构建通过。非活动桌面运行 `playwright test --project=desktop graph-query.spec.ts graph-neighborhood.spec.ts`，2 条通过，总计 19.4 秒，覆盖筛选、邻域、跨工作区、快照失效、历史、编辑与保存布局。日志 `g1-2-native.log`。
+- **G1.3 路由分块。** 主框架和聊天直接渲染，知识、图谱、设置、评测及评测子页首次进入时加载。编辑器按需加载，保留主框架状态与路由参数。`npm.cmd run build` 通过，主入口 899978→493567 字节。计算首屏所有实际请求的 JS（含共享预加载）为 899978→519154 字节，下降 42.3%。与 G0 的 899089 字节相比下降 42.3%。图谱大块仍按需加载。
+- `CORTEX_G1_PROBE=routes` 执行生产包浏览器检查，复核首屏没有后台页面块，首次打开知识/标准评测约 337/335ms（各 1 次，含自动化等待），首次设置块故障后可重试，返回聊天草稿保留。`frontend-routes.json` 保存资源名与字节。Edge `app.spec.ts benchmark-result-drawer.spec.ts knowledge-scope.spec.ts` 的 13 条断言流程均记录通过。原生图谱测试对应分块前 G1.2，G1.3 的原生复核随后随累积构建执行。
+
+## 2026-11-18 Phase G0 全项目审计
+
+- 用户限定本轮只做 G0。读取 development.md、开发规范、现行实施计划及实际工作区；HEAD 为 8e82c42，已有 E/F 业务增量保留。新增 docs/optimization 下五份中文报告，记录架构、磁盘、性能、依赖及 G1–G4 路线；没有改业务代码、依赖、迁移或清理缓存。
+- 使用 Python 3.13 审计辅助脚本 storage_probe.py、storage_detail.py、database_probe.py，输出在 artifacts/phase-g0-2026-11-18。首轮项目 52068461892 字节；细分 target 36592838606、artifacts 15245951646、node_modules 331409790 字节。已区分扫描时间、逻辑/物理口径、正式数据、开发产物和外部模型/Docker；Local profile 有 9 个读取错误，保留下界。
+- SQLite 使用 mode=ro、query_only，只读 schema、计数、索引与暖查询，未执行迁移、ANALYZE、VACUUM、checkpoint 或重建。正式库 schema 7，2 个知识节点；最新验收副本 schema 26。dbstat 不可用，逐对象物理页占用未测量。
+- native_baseline.cjs 复用已有 cortexos-phase-ef-final.exe，通过 artifacts/rag-e6-qa/alternate-desktop.py 在非活动 Windows 桌面执行，未切换或弹出到用户桌面。9 次启动含 1 次预热，新 profile 3 次 P50/P95 为 722.42/1130.76ms，复用 profile 5 次为 707.66/724.36ms。30 次预览 IPC 为 6.90/8.10ms；固定向量/回答回环结果单独标注。
+- 用户弹窗批准的 CPU 批次设置 CORTEXOS_G0_CPU_BATCH=approved-10，仅实际执行 6 次聊天和 2 轮双组固定题对照，共 10 次 qwen3:4b-instruct 请求。指纹 0edcdef34593…，2048 上下文、最多 64 输出 Token、60 秒超时、温度 0、CPU、结束释放，不自动重试。6 次聊天和 4 题均 completed，聊天 P50/P95 为 3741.33/6541.46ms，单题对照为 9322/9471ms；批后 /api/ps 为空。没有继续调用，未下载模型或调用云端。
+- resource_probe.py 每约 500ms 采进程/系统资源、每约 1 秒采整卡显存。原生空闲进程树 RSS P50/P95 为 438652928/439480320 字节。模型独立 runner 未完整采到，CPU/RAM 不作伪推断；系统 CPU、系统可用内存和全设备显存与应用进程树分开报告。
+- node artifacts/phase-g0-2026-11-18/frontend_probe.cjs 使用已有 dist、headless Edge、固定 IPC、1600×900。修正首次辅助脚本的长会话选择器和计时后，以 frontend-verified.json 为准。100/500/1000 节点各 5 次，1000 节点/5000 关系加载 P50/P95 为 609.69/631.80ms（含脚本稳定等待）；均 4 次绘制调用、空闲 500ms 新增绘制为 0。1000 消息实际 16787 个 DOM；折叠资料选择器仍触发 1000 次详情读取，图谱逐步加载触发 15 次节点分页。
+- 执行 npm.cmd ls 读取依赖树；最终在 apps/desktop 复核 npm.cmd ls three @react-three/drei --all --json，退出 0。apps/desktop/src-tauri 中 cargo metadata --offline --no-deps --format-version 1 与 cargo tree --offline --duplicates 均退出 0，输出保存 verified 文件。确认已有 Release LTO 等配置，以及 stats-gl 下第二个 Three.js 版本；未执行安装或去重。
+- 执行 py -3.13 artifacts/phase-g0-2026-11-18/summarize.py、dependency_probe.py 汇总原始数据；frontend_resource_summary.py 从已有采样汇总浏览器进程树，未运行新的模型任务。正式与隔离库的事件/WAL 读数分别保存。Docker 只读查询显示 Client 存在、Server 为 null，system df 无引擎响应，不启动引擎；镜像/容器/构建缓存明细及实际 Harness 性能未测量。
+- 本轮未跑单元套件、类型检查或重新构建：没有业务实现改动。py -3.13 artifacts/phase-g0-2026-11-18/audit_manifest.py 已核对五份报告相对链接及批次数/终态一致性，并为 282 个源文件/配置/数据集文件、程序、dist 和原始观测保存 SHA-256。git diff --check -- docs/milestone-log.md 通过，仅既有 CRLF 提示。初次 frontend.json、受限账户元数据失败和无效 rg 路径不当作通过。真实 Embedding、真实云端、系统冷启动、最新 Release 和完整模型进程归属仍列未测项。
+- G0 已完成，G1–G4 尚未实施。推荐验收后从 G1.1 资料选择器按需读取开始，随后图谱分页、路由分块和终态轮询；每切片分别报告前后数据、功能兼容、剩余与阻断。当前暂停等待 G0 验收。
+
+## 2026-11-17 F7 真实 Ollama 对照与评分复验
+
+- 按用户当批授权先通过 `/api/tags` 和 `/api/ps` 核对 qwen3:4b-instruct 指纹与空加载状态。在 `apps/desktop/src-tauri` 设置本批专用环境变量并运行 `cargo test --offline --lib f7_authorized_local_smoke -- --ignored --nocapture --test-threads=1`。1 项通过，32.12 秒。两次模型请求各自完成，完全使用隔离库和 CPU，未执行自动重跑。批后 `/api/ps` 显示无已加载模型。
+- 词语查找命中 v2 并答出 90 天，未查找侧给出无本题依据的通用说明。端到端分别 10.549 秒和 21.138 秒，模型报告输入／输出 402／14 和 73／182 Token。原始报告使用 v1，漏判正确答案的等价表述。保留原始 JSON 和日志，原始报告 SHA-256 为 `55926774eadc4314e0cfe439800aabc66b594f5e845a2ec51f8b7bc34c4a61b6`。
+- 新的评分版本支持日志保留的明确等价词组，核对引用所在语句、实际版本和原文行范围。首次扩充测试发现引用位于反驳语句中间时仍可错误获分，已按整条语句复核。最终 `cargo test --offline --lib rag_runtime -- --nocapture` 5 项通过。普通 `--lib rag_evaluation` 6 项通过，另 2 项显式留给各自的专项命令。
+- 运行 `cargo test --offline --lib f7_offline_rescore -- --ignored --nocapture`，1 项通过。独立导出用 v2 复算原报告，词语查找的答案和引用召回率均为 1，关闭查找均为 0，模型调用为零。实际数据、独立复算和后续边界见 [Phase F 报告](phase-f-delivery.md)。
+- `npm --prefix apps/desktop run build` 通过，保留 Vite 大包体提示。在 `apps/desktop/src-tauri` 执行 `cargo rustc --offline --features tauri/custom-protocol --bin cortexos-desktop -- --emit=link=<最终独立程序绝对路径>`，生成 `artifacts/cortexos-phase-ef-final.exe`。用非活动桌面启动器执行 `playwright test --project=desktop rag-native.spec.ts --output ../../artifacts/phase-ef-final-native`，2 项通过，总计 18.5 秒。最终原生检查使用固定回环回复，覆盖保存 v2 报告、原生导出、混合检索及向量异常回退。开发与验证结束，进入用户验收。
+
+## 2026-11-17 F7 原生导出检查
+
+- 扩展 `rag-native.spec.ts`，通过「导出完整报告」打开 Windows 保存窗口，并以原生保存对话框测试辅助脚本自动写入隔离产物目录。首次运行的 UI Automation 按钮 Invoke 失败，辅助脚本改为优先识别确定的保存按钮，必要时向本次测试的窗口提交原生命令。
+- 在 `apps/desktop` 使用非活动桌面启动器执行 `node node_modules/@playwright/test/cli.js test --project=desktop rag-native.spec.ts --grep 'model combination' --output ../../artifacts/phase-f7-native-export-final`，1 项通过，总计 9.6 秒。实际 JSON 文件与已保存报告逐字段一致。核对题库、两组策略、请求指纹、执行事件及用量，且跨工作区导出被拒绝。验证用固定回环回复，无 Ollama 推理或外部计费。
+
+## 2026-11-17 Phase E／F 原生复验
+
+- 使用 Windows 登录权限，在非活动桌面执行回环测试。受限账户的 CDP 超时已绕开。原生调试已连通，首轮定位到测试通过 IPC 创建工作区时前端没有刷新。改为使用应用的创建工作区入口。
+- F7 在 WebView2 通过计划确认、两个固定回复、查询历史、跨工作区拒绝及 3D 节点详情。用 Python SQLite 对专用隔离库执行只读完整性检查，结果为 `ok`、零项外键问题，普通聊天、执行记录和云端请求均为零。截图及日志保存在 `artifacts/phase-f7-native-final` 和 `artifacts/phase-f7-native-final.log`。
+- 去除 F7 执行图详情中的重复检索结果。执行 `npm --prefix apps/desktop run build` 及原生独立构建，输出 `artifacts/cortexos-phase-ef-acceptance.exe`。无头 Edge 检索评测 2 项通过，产物在 `artifacts/phase-ef-browser-final`。
+- 在 `apps/desktop` 使用 `alternate-desktop.py` 执行 `node node_modules/@playwright/test/cli.js test --project=desktop rag-native.spec.ts --output ../../artifacts/phase-ef-native-verified`，2 项通过，总计 10.1 秒。原生混合查找专项核对关键词重排、来源摘录、原文与回答定位、3D 轨迹、维度错误回退和索引替换。修正旧测试中已变化的重排文案和将整段摘录称为片段命中的断言。复核 1366×768 深色证据页和 F7 原生报告。真实模型调用仍待当批授权。
+
+## 2026-11-17 F7 模型组合对照
+
+- 在「评测 → 检索评测 → 模型组合对照」冻结内置题库、事实版本、查找策略、现有运行方案、模型指纹、本机设备设置和费用上限。用户确认后用隔离库执行两组，支持停止、查看历史和 JSON 导出。迁移 26 保留已完成的单题和用量，重启将进行中的实验标作中断。
+- 回答要点与引用分别评分，支持核对实际发出的资料、版本和行范围。单题可打开现有 3D 执行画布。云端环节复用发送权限与预算，只使用合成题目和资料。
+- 在 `apps/desktop/src-tauri` 运行 `cargo test --offline --lib rag_runtime -- --nocapture`，5 项通过，覆盖真实回环请求、固定答复与引用、两个方案共用预算、旧版本资料、向量至重排至生成及迁移 26 的失败回滚和恢复。费用仅为固定费率的回环结果。
+- 在 `apps/desktop` 运行 `npx --no-install playwright test --project=edge rag-evaluation.spec.ts runtime-cloud.spec.ts runtime-profiles.spec.ts local-runtime.spec.ts knowledge-scope.spec.ts --output ../../artifacts/phase-ef-browser`，7 项通过。在最后界面调整后运行 `npx --no-install playwright test --project=edge rag-evaluation.spec.ts --output ../../artifacts/phase-f7-final-browser`，2 项通过。界面测试使用固定 IPC 响应，检查 1366×768、1600×900 和 1920×1080。
+- `npm --prefix apps/desktop run build` 和 `cargo rustc --offline --features tauri/custom-protocol --bin cortexos-desktop -- --emit=link=<独立程序绝对路径>` 通过。Vite 仍报告已有的大包体提示。独立原生程序位于 `artifacts/cortexos-phase-ef.exe`。
+- `cargo test --offline --lib rag_evaluation -- --nocapture` 6 项通过、1 项因真实模型授权单独保留。非活动桌面运行 `playwright test --project=desktop rag-native.spec.ts --grep 'model combination'` 使用固定回环，CDP 30 秒超时，尚未进入界面断言。日志 `artifacts/phase-f7-native.log` 可用于复核。只读 Ollama 列表显示两个本机模型，当前无模型加载。
+- F0–F7 实现与自动化检查已交付。原生 WebView2 和真实模型完成情况见 [Phase F 报告](phase-f-delivery.md)。
+
+## 2026-11-17 F6 资源与用量
+
+- 设置新增「资源与用量」，按工作区与最近 24 小时或 7 天汇总提供方、模型和能力。显示真实请求与完成次数、输入输出 Token、向量数量、平均及总用时、检索均时、费用估算、预留额和未知费用。预算按单次任务和 24 小时显示。
+- 迁移 25 记录本地向量请求和服务返回的用量。本机生成耗时与 CPU 区间平均值随实际调用记录。设备读数复用本机状态采样，明确为系统和整张显卡的读数。NVIDIA 驱动工具缺少读数时显示未知。
+- 实际运行 `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib runtime_usage_report`，1 项通过，核对云端及本地用量、失败与预留额、工作区隔离。`--lib model_runtime_local_capabilities` 和 `--lib chat_fallback` 各 1 项通过。Rust 检查和前端构建通过。
+- 在 `apps/desktop` 运行 `npx --no-install playwright test --project=edge runtime-cloud.spec.ts runtime-profiles.spec.ts --output ../../artifacts/phase-f6-resources`，3 项通过，包含工作区切换、费用未知和无 GPU 驱动读数。设备读数界面用固定响应验证，未进行真实模型调用或 WebView2 复核。
+- F6 已交付，剩余 F7 对照、评分、报告导出及整体验收。
+
+## 2026-11-17 F4 任务路由与 F5 隐私检查
+
+- 迁移 23 保存工作区按普通问答、知识问答设置的首选与费用对照方案。较低费用模式比较同一请求容量下已登记费率的估算结果。费用缺失保留未知。自动切换只使用配置的本机备用回答模型，在已有回答内容或用户取消时保留当前结果。主请求快照保持不可变，备用请求另存快照。
+- 迁移 24 增加工作区邮箱和连续 11 位大陆手机号过滤。云端发送及重试前复核有效版本、来源状态和目标连接对应的授权。参考资料在提示中明确作为待分析的数据，聊天执行路径只生成文字。记录发送类型、连接、提供方和模型，凭据留在 Windows 凭据管理器。
+- `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib chat_router` 1 项通过。备用模型专项初次发现主快照不可修改，改为独立保存备用快照后，`--lib chat_fallback` 1 项通过。固定回环模拟主服务 503，验证实际使用本机备用、两份快照及执行事件。`--lib cloud_privacy` 2 项通过，覆盖发送前拦截、工作区隔离和授权撤销后的限流重试终止。云端回答、预算及向量重排各回归 1 项通过，Rust 检查及前端构建通过。
+- 在 `apps/desktop` 运行 `npx --no-install playwright test --project=edge runtime-profiles.spec.ts runtime-cloud.spec.ts --output ../../artifacts/phase-f4-f5-routing-privacy`，2 项通过。截图覆盖路由、隐私、索引确认和范围确认界面。真实模型及原生 WebView2 尚待复核。剩余 F6 和 F7。
+
+## 2026-11-17 F4 云端请求限制与取消
+
+- 迁移 22 保存工作区费用上限和每次云端尝试的用量。设置可指定单次任务、最近 24 小时、每连接每分钟请求数和限流重试次数。请求发出前原子预留估算费用，明确限流才按配置重试。失败、取消和中断保留预留额与结果不明的状态。
+- 费用限制覆盖统一运行的云端回答、索引、问题向量、重排和能力验证。费率来自手工登记，实际用量来自服务响应。价格未知时按未知显示。开启预算后依照已知费用估算和未结算预留额判断是否继续。执行记录关联发出请求的用量条目。
+- 对话进入查询和重排时即可停止，取消后保留输入草稿。仍可取消生成和索引构建。
+- 实际运行 `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib metered_cloud`，1 项通过，固定回环分别响应 429 和成功，另外检查未定价、单次任务、滚动预算、限流和中断保留。 `--lib cloud_rag_index_and_rerank`、`--lib runtime_profiles_cloud_chat` 各 1 项通过。Rust 检查、前端构建和差异检查通过。
+- 在 `apps/desktop` 运行 `npx --no-install playwright test --project=edge runtime-profiles.spec.ts runtime-cloud.spec.ts --output ../../artifacts/phase-f4-runtime-limits`，2 项通过。验证费用输入换算、准备时停止、草稿保留及索引确认，并查看费用限制和索引确认截图。无真实模型调用，原生 WebView2 尚待复核。
+- F4 剩余按任务选择方案、成本与质量偏好和可审计的备用模型路由。之后继续 F5–F7。
+
+## 2026-11-17 F3 云端向量与重排
+
+- 迁移 21 增加按工作区、连接和模型区分的云端索引。构建前确认选定的授权知识版本，分批检查并发送标题与正文片段。构建完成后以原子事务替换相应模型的索引。云端查询只发送本次问题，向量比较在本机进行。撤回授权、关闭来源或失效版本立即退出云端语义检索。
+- 运行方案已接入三环节的本地和云端选择。混合或云端方案发送前逐项展示模型和数据范围。云端重排只重排用户本次确认范围内的已授权候选，保留其余候选的本地位置。实际请求、部分结果、不可用及保留本地排序的原因在执行详情中可见。
+- 实际运行 `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib cloud_rag_index_and_rerank`，1 项通过。验证回环收到的索引文本、问题向量、重排候选、返回维度与用量，以及跨工作区拒绝和撤销后过滤。`--lib runtime_profiles` 2 项通过，`--lib query_route_retains_private` 1 项通过。
+- 在 `apps/desktop` 运行 `npx --no-install playwright test --project=edge runtime-profiles.spec.ts runtime-cloud.spec.ts --output ../../artifacts/phase-f3-cloud-rag`，2 项通过。验证设置中的云端索引确认、取消、成功状态和对话授权。Rust 检查和前端构建通过。记录无头 Edge 截图，真实服务与原生 WebView2 待复核。
+- F0–F3 已接通，剩余 F4–F7。下一片为模型路由与容错。
+
+## 2026-11-17 F3 工作区方案与回答
+
+- 迁移 19 后可从设置保存、切换和删除工作区运行方案。启用方案后，实际对话使用选定的回答模型，向量索引按本机模型匹配，词语重排可独立启用。本地默认设置继续照常工作。
+- 云端回答逐次确认。迁移 20 保存每个云端连接获准处理的知识版本；发送时再次核对工作区、连接、版本生效状态、文件停用状态和当次选中的授权版本。确认界面可另行发送手选知识。历史对话留在本机。云端请求保存实际请求体与发送范围、收到响应和真实用量。密钥不进入请求快照。基本敏感内容检查识别常见令牌和私钥。
+- 实际运行 `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib runtime_profiles`，2 项通过。固定回复的回环 HTTP 检查核对实际请求与快照一致、作用域拒绝、手选资料、确认为本次发送的授权资料及响应持久化。`--lib cloud_privacy_filters`、`--lib query_route_retains_private` 各 1 项通过，`cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml` 和 `npm --prefix apps/desktop run build` 通过。
+- 在 `apps/desktop` 运行 `npx --no-install playwright test --project=edge runtime-profiles.spec.ts runtime-cloud.spec.ts local-runtime.spec.ts --output ../../artifacts/phase-f3-model-profiles`，3 项通过。浏览器以固定 IPC 响应验收方案切换、取消保留草稿、授权默认关闭及确认发送，并保存 1366×768 方案与 1920×1080 深色确认截图。原生 WebView2 和真实模型需单独实测。
+- F3 剩余云端向量建索引、语义查询和重排执行。当前开发可继续，之后进入 F4–F7。
+
+## 2026-11-17 F2 云端模型能力
+
+- 新增设置中的「云端模型」。支持在每个工作区保存多个 OpenAI、Anthropic、Gemini 和 OpenAI 兼容连接，读取目录、独立验证指定模型的能力、登记 Token 上限和费率。能力验证仅发送固定测试文本，兼容服务须明确提供 `/rerank` 才显示重排验证。
+- 迁移 18 在 SQLite 保存公开连接配置和检查结果。Windows 凭据按数据库、工作区和连接派生存储位置，并校验服务商和地址绑定。移除连接时删除密钥。保留 C1 个性化评测的凭据和验证行为。
+- 实际运行 `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib runtime_cloud`，3 项通过。核对协议解析与向量顺序、固定样本的 Windows 凭据读写及跨工作区和篡改地址拒绝、迁移 18 失败回滚和备份。受限会话首次无法写入系统凭据，使用 Windows 登录会话重跑通过，随机凭据已清理。`--lib personalized_cloud_wire` 单项通过。 `cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml`、`npm --prefix apps/desktop run build`、`git -c core.safecrlf=false diff --check` 通过，Vite 保留既有包体提示。
+- 在 `apps/desktop` 运行 `npx --no-install playwright test --project=edge runtime-cloud.spec.ts --output ../../artifacts/phase-f2-cloud-runtime`，1 项通过。模拟 IPC 验证保存、目录刷新、验证确认与取消、登记费率、工作区切换和移除。记录浅色、深色在 1366×768 和 1920×1080 下的截图。本轮未进行真实模型调用或原生 WebView2 界面复核。
+- F0–F2 已交付，剩余 F3–F7。F3 接入工作区运行方案，实际模型调用验收待明确授权，当前开发可继续。
+
+## 2026-11-17 F1 本机模型运行与资源
+
+- 新增 `local_runtime.rs`、`LocalRuntimeSettings.tsx`。设置页可读生成、向量及容量声明和 Ollama 已加载模型的显存数据。可选仅用 CPU 和 0–300 秒保留时间，默认 0 秒。普通对话的实际快照使用这些设置，已冻结的评测配置沿用原预算。卸载取得任务锁，验证安装及加载指纹，并复查是否已释放。
+- `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib` 分别筛选 `local_runtime_preferences`、`model_runtime_local_capabilities`、`query_route_retains_private`、`rag_evaluation_runs_real`、`standard_batch_freezes`，共 5 项通过。固定 HTTP 响应验证只有已加载模型发送释放请求，复查通过。`cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml`、`npm --prefix apps/desktop run build` 与 `git diff --check` 通过，Vite 的包体提示保留。
+- 在 `apps/desktop` 使用本地 Vite 并运行 `node node_modules/@playwright/test/cli.js test --project=edge local-runtime.spec.ts --workers=1 --retries=0 --output=../../artifacts/phase-f1-local-runtime`，1 项通过。模拟 IPC 确认设置保存、状态显示、卸载取消与二次确认。检查 1366×768 和 1920×1080 的浅深截图。未启动可见窗口，真实 Ollama 与 WebView2 待验收。
+- 下一片 F2 云端模型能力，其后 F3–F7，目前无开发阻断。
+
+## 2026-11-17 F0 模型能力接口
+
+- `model_runtime.rs` 提供独立的向量、重排和生成合同。RAG 查询和构建走 Ollama 向量适配器，已有词语覆盖重排走同一重排接口。对话和本地评测使用归一后的分块结果，现有云端评测经凭据守卫使用完整结果。保存的请求与旧用量字段沿用现有格式。
+- `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib` 分别筛选 `model_runtime_local_capabilities`、`personalized_cloud_wire`、`personalized_mock_generation_publication`、`personalized_removing_connection`、`rag_evaluation_runs_real`、`parser_handles_split_utf8`，共 6 项通过。`cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml` 通过。HTTP 走隔离回环固定响应，未调用真实模型。
+- 下一片 F1 本机目录与资源管理，F2–F7 待实施。当前无开发阻断。
+
+## 2026-11-17 E7 固定检索评测
+
+- 评测新增「检索评测」入口。`datasets/cortex-rag-v1/suite.json` 固定 11 份文件、知识与来源版本、基准日、图谱关系、9 道题及回复。`benchmark/rag_evaluation/` 在内存数据库调用现有检索和资料装配流程，支持关闭查找、FTS5、固定向量混合、混合重排、关系和按日期六项策略。两侧采用 8192 上下文设置，报告保留题库、固定知识和评分版本、候选、最终资料、关系及实际算法。固定回复回放的原文支持口径与真实生成判分独立列示。
+- `0017_rag_evaluations.sql` 增加受工作区约束的不可变报告。每轮完整计算后单次写入，旧报告可独立读取并校验内容指纹。测试包含失败迁移回滚、可读备份、旧工作区保留以及阶段 E3–E6 路径。
+- 首轮图谱候选受共同容量拦截，将两侧统一固定为 8192 后复验。实际跨文件题的资料召回为词语策略 1/3、关系策略 3/3，含一条两跳路径。指定旧日期命中 v1，当前版本引用回放因版本不符得 0。重跑除真实耗时外逐题相同。新增的无依据回复验证拒答、引用和原文支持规则能判失败。
+- `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib` 分别筛选 `rag_evaluation`、`knowledge_scope_v15_and_v16`、`query_route_retains_private_lookup`、`knowledge_graph_retrieval`、`rag_chunks_recall`，共 6 项通过。`cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml`、`npm --prefix apps/desktop run build`、`git diff --check` 通过，保留 Vite 包体提示。
+- 在 `apps/desktop` 使用本地 Vite 并运行 `node node_modules/@playwright/test/cli.js test --project=edge rag-evaluation.spec.ts --workers=1 --retries=0 --output=../../artifacts/rag-e7-final`。模拟 IPC 验证策略互斥、运行、历史回读、证据与评分展开，检查三种尺寸浅深主题。首次定位断言同时匹配隐藏及可见条目，收窄范围并复验。截图使用界面测试数据。
+- 本轮无真实模型调用和可见桌面窗口。真实生成对照及模型判分尚未接入，原生 WebView2 仍待验证。下一切片为 F0 统一模型能力接口，当前没有 F0 开发阻断。
+
+## 2026-11-16 E6 查找过程检查
+
+- `retrieval.rs`、`rag.rs`、`db.rs` 将真实查找步骤和分段用时写入既有记录。候选保留排名、重排得分、来源文件版本和行号，包括被预算淘汰的候选。匹配片段显示实际命中行，整条知识来源标为摘录范围。旧记录按原字段显示。数据库迁移号为 16。
+- 新增 `RetrievalInspection.tsx`，供回答依据、处理记录和执行图共用。可以打开指定版本原文并通过有效引用定位对应回答。界面区分已准备资料与模型服务收到请求的情况。每条资料显示实际文字字节数，整次输入与输出 Token 使用模型服务回报。
+- `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib` 使用 `rag_chunks_recall`、`query_route_retains_private_lookup`、`knowledge_graph_retrieval`、`effective_context_snapshot_scope` 各筛选 1 项，4 项通过。覆盖预算排除仍保留原文行、混合查询、关系路径与旧快照。`cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml`、`npm --prefix apps/desktop run build` 和 `git diff --check` 通过。Vite 保留包体提示。
+- 在 `apps/desktop` 用后台 Vite `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 1420 --strictPort` 启动。`node ../../artifacts/rag-e6-qa/browser-review.cjs` 无头专项通过，模拟 IPC 核对预算排除、打开旧文件版本、实际用量的显示、执行图与引用定位、未发送请求。检查 1366×768、1600×900、1920×1080 浅深两套并保存截图，复核浅色证据页和深色执行图。`node node_modules/@playwright/test/cli.js test --project=edge knowledge-scope.spec.ts --workers=1 --retries=0 --output=../../artifacts/rag-e6-browser` 1 项通过。
+- 用 `cargo rustc --offline --features tauri/custom-protocol --manifest-path apps/desktop/src-tauri/Cargo.toml --bin cortexos-desktop -- --emit=link=<隔离程序绝对路径>` 生成原生验证程序。在 `apps/desktop` 用 `alternate-desktop.py` 启动 `rag-native.spec.ts`，确认程序窗口在非活动桌面，CDP 连接超时。使用 `TAURI_CONFIG` 隐藏、不抢焦点、不入任务栏的独立程序再次运行 `node node_modules/@playwright/test/cli.js test --project=desktop rag-native.spec.ts --workers=1 --retries=0 --output=../../artifacts/rag-e6-native-hidden`。CDP 已连通，未能取得 WebView2 页面。两次原生检查均未完成界面验收，保留错误记录。
+- 本轮验证使用固定响应与示例数据。原生 WebView2 与真实模型联验待办。下一步是 E7 固定知识快照和评测对照，目前无 E7 开发阻断。
+
+## 2026-11-16 E5 查询路由
+
+- `retrieval.rs` 统一选择跳过、FTS5、混合、混合后重排和指定版本范围，并按明确的关系短语或用户设置叠加图谱查找。`commands.rs` 在生成向量前读取路由，`db.rs` 在使用资料时复核设置并保存计划、实际使用的方式和回退原因。纯问候及无可查文字跳过自动查找；含工作区问题的问候继续查找。关闭自动查找后手动资料仍可选用。数据库迁移号为 16。
+- `RetrievalSummary.tsx` 显示跳过原因、语义查找预览和回退说明。图谱选项注明每次沿关系查找。首轮截图发现切换知识范围后旧分支提示仍在，已在范围变化时清除并复验。
+- `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib` 分别筛选 `query_route_retains_private_lookup`、`knowledge_graph_retrieval`、`rag_chunks_recall`、`retrieval::tests::`，依次通过 1、1、1、4 项，去重共 6 项。使用临时数据库和固定向量验证私有资料、空输入、禁用与手动选择、版本范围、索引变化、向量失败、重排和图谱路径。`cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml`、`npm --prefix apps/desktop run build` 和 `git diff --check` 通过，Vite 保留包体提示。
+- 在 `apps/desktop` 后台启动 `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 1420 --strictPort`，执行 `node node_modules/@playwright/test/cli.js test --project=edge knowledge-scope.spec.ts --workers=1 --retries=0 --output=../../artifacts/rag-e5-reviewed`，1 项通过，总计 4.6 秒。模拟 IPC 验证知识范围、图谱选项、预览策略和跳过说明，复核 `route-preview-1366.png`、`route-skipped-1366.png`，按会话结束临时服务。
+- 本轮后台完成，原生 WebView2 和真实向量、生成联验待办。下一步是 E6 查找过程检查，其后是 E7 固定评测。
+
+## 2026-11-16 E4 图谱检索与知识簇
+
+- 新增 `knowledge_graph_retrieval.rs` 和 `KnowledgeGraphOptions.tsx`。对话资料区可开启一至两跳的关系查找。预览、回答依据和执行记录显示实际关系方向、修订、文件版本、行号和入选状态。反驳关系可补充对方资料，并在查找路径中作为终点。知识簇概览列出相连知识组的关系计数和代表原文，超过上限时提示。按事实日期查找时筛选对应知识版本，路径标注关系来自当前图谱。
+- 新增 `0016_knowledge_snapshot_graph.sql`，事务内扩展快照关系，保留已冻结的反驳记录。旧快照按保存时间回填关系，实验分支继承基准关系。停用的文件在未来查找中排除，历史执行仍显示当时的路径。
+- `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib` 分别筛选 `knowledge_graph_retrieval`、`knowledge_scope`、`rag_`、`retrieval::tests`，依次通过 1、3、6、4 项，去重共 13 项。覆盖反向和跨文件路径、两跳上限、跨区排除、快照与历史执行、停用来源、旧库回填及失败回滚。`cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml`、`npm --prefix apps/desktop run build` 与 `git diff --check` 通过。Vite 保留包体提示。
+- 在 `apps/desktop` 用 `node node_modules/@playwright/test/cli.js test --project=edge knowledge-scope.spec.ts --workers=1 --retries=0 --output=../../artifacts/rag-e4-reviewed` 运行无头浏览器专项，1 项通过，总计 4.2 秒。通过模拟 IPC 验证开关传递、实验分支、知识簇概览和跨文件路径。查看 `clusters-1366.png` 与 `graph-path-1366.png`。
+- 本轮在后台验证，未启动可见窗口或调用模型。原生 WebView2 与真实模型联验待办。下一步进入 E5 查询路由，之后是 E6 查找过程检查和 E7 固定评测。
+
+## 2026-11-15 E3 第二片实验分支、反驳关系与替代版本
+
+- 新增 `0015_knowledge_experiments.sql`、`knowledge_conflicts.rs` 和 `KnowledgeBranchForm.tsx`。在对话的知识范围内从快照创建分支，替换基准内的指定版本并记录原版本及保存时的审批状态。草稿只在被选择的分支中进入上下文。
+- 保存快照时固定反驳关系修订，实验沿用基准关系。迁移按早于快照保存时间的最后一次关系修订回填旧快照。自动查找可补入预算内的反驳资料，保留两方实际入选状态，执行记录注明当前图谱或固定快照。替代版本按同节点审批顺序确定。新版失效后按日查找不会重新启用已接替的旧版。当前范围的后续请求排除曾用到过期、被接替或已停用知识的历史轮次。
+- `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib` 分别筛选 `knowledge_scope`、`rag_` 与 `retrieval::tests`，3、6、3 项通过。覆盖跨区拒绝、草稿隔离、冻结边版本、预算不足、来源停用、旧库回填、模拟迁移失败回滚与可继续迁移。Rust `cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml`、`npm --prefix apps/desktop run build`、`git diff --check` 通过。前端仍有 Vite 包体提示。
+- 在 `apps/desktop` 用 `node node_modules/@playwright/test/cli.js test --project=edge knowledge-scope.spec.ts --workers=1 --retries=0 --output=../../artifacts/rag-e3-branches-reviewed` 执行无头浏览器专项，1 项通过，3.5 秒。模拟 IPC 验证选择基准、保存并使用草稿分支与浏览反驳记录。查看 1366×768 截图，修复了“回到最新内容”遮挡表单的问题并复验。
+- 本轮未启动可见窗口或调用模型。E3 功能开发完成，原生 WebView2 和真实模型仍待验证。下一步为 E4 图谱检索。
+
+## 2026-11-15 E3 第一片固定知识快照和事实日期
+
+- 新增 `0014_knowledge_scope.sql`、`knowledge_scope.rs`、`KnowledgeScopePicker.tsx`。资料选择区可保存和选择固定快照，也可按事实日期查找。知识编辑器将日期与草稿版本一起保存，审批后参照日期用于当前与按日查找。日期是本地日历日，结束当天已失效。指定日期排除日期未记录的版本，并保留跳过计数。新增两个精确的命令用于列出及保存当前工作区的快照。
+- 预览与实际准备共用范围解析和来源停用检查。上下文快照记录范围、版本及过滤信息。当前查找沿用混合索引，指定日期和快照使用本地词项匹配。显式范围的历史只复用相同版本集合下的完整对话。快照成员版本在保存后固定，来源停用后从后续请求排除，旧请求可读。
+- `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib knowledge_scope` 1 项通过。同一问题分别得到东楼与西楼的资料，验证日期边界、未知日期、仅改日期、跨区拒绝、来源停用、不同范围历史隔离和已保存请求不变。相同命令筛选 `rag_` 与 `retrieval::tests`，分别 6 项与 3 项通过，含 v14 注入失败、备份可读及旧向量兼容。
+- `npm --prefix apps/desktop run build` 通过，保留 Vite 包体提示。首次无头浏览器截图发现切到快照后仍显示当前手动列表的空态，已修复，并让保存快照后的表单自动折叠。最终在 `apps/desktop` 执行 `node node_modules/@playwright/test/cli.js test --project=edge knowledge-scope.spec.ts --workers=1 --retries=0 --output=../../artifacts/rag-e3-headless-final`，1 项通过，约 5.9 秒。使用模拟 IPC 验证选快照、改日期和预览请求，保存三种窗口尺寸的实际浏览器截图。
+- `cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml` 与 `git diff --check` 通过。本轮无可见窗口或模型调用。原生 WebView2、真实模型、实验分支、显式冲突和替代关系仍待后续。
+
+## 2026-11-15 E2 文件片段直接检索
+
+- 新增 `0013_rag_source_chunks.sql`。迁移在事务内重建 FTS5、保留已有向量和快照。修改 `retrieval.rs`、`source_chunks.rs`、`rag.rs` 和 `db.rs`，让两路召回使用同一片段 ID。命中经融合进入预算，引用保留来源版本和行列。更新 `RagIndexSettings.tsx` 的重建范围说明及相关测试。
+- `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib rag_` 最终 6 项通过。包括模拟向量的纯语义命中、词法与语义命中同一片段、父片展开、跨区隔离、有效版本切换、停用以及迁移 12 和 13 回滚。初次集成断言列出的原文行号没计入测试文本中的额外换行，已改从原文计算并验证父片展开。
+- 同一 Rust 命令分别用 `source_chunk_` 和 `retrieval::tests` 筛选，各 3 项通过。旧 v5 测试最初删掉当前库中的一条迁移记录，库版本不连续。改为建立真正的 v5 夹具，并在事务内插入相互引用的知识版本后通过。Rust `cargo check --offline --manifest-path apps/desktop/src-tauri/Cargo.toml`、`npm --prefix apps/desktop run build` 和 `git diff --check` 通过。Vite 保留包体提示。
+- 本轮使用无界面验证。完整版 E2 的 WebView2 流程与真机向量质量、资源用量待复核。验证没有启动验收窗口或调用模型。E3 已明确快照与生效日期的实施顺序，尚未接入代码。
+
+## 2026-11-14 Phase E 现状审计、混合查找与文件片段
+
+Phase D 已推送到 `origin/codex/release-0.2.0`，以远端查询核对提交 `8e82c42f616ae41b4a9ff46fdc2ef21c8a733bcd`。本地 Phase E 增量包括 [现状审计](rag-runtime-audit.md) 和 [统一实施计划](rag-runtime-plan.md)。
+
+- E1 新增 `0012_rag_vector_index.sql`、`rag.rs`、`RagIndexSettings.tsx` 和 `rag-native.spec.ts`。工作区通过本地 Ollama 构建隔离向量索引，与既有 BM25 结果融合。生成入口保存实际排序、入选状态和降级原因。新增一个应用任务类别和五条精确的桌面命令。
+- E2 新增 `source_chunks.rs`，接入来源目录、已批准知识的发送内容与回答依据。先在批准范围内匹配小片段，有余量再扩大到同节范围。原文位置和匹配信息留在本地快照，缩小模型请求。片段直接参与索引及独立代码文件导入仍待后续。
+- `npm --prefix apps/desktop run build` 通过，保留 Vite 包体提示。使用 `cargo test --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib` 分别筛选 `rag_migration_preserves_v11_and_rolls_back` 和 `source_chunk_`，1 项迁移回滚和 3 项切片通过。迁移失败时可读取旧聊天和预升级备份，修复后 schema 为 12。切片测试初轮暴露样本的超长行跨越父片边界，分别验证长行坐标和同节父片后通过。
+- 通过 `cargo rustc --offline --features tauri/custom-protocol --manifest-path apps/desktop/src-tauri/Cargo.toml --bin cortexos-desktop -- --emit=link=D:/vibecoding/CortexOS/artifacts/cortexos-rag-e2.exe` 构建隔离原生程序。原生首轮沙箱内的 CDP 超时，允许 WebView2 独立运行后进入测试。E1 修正异步开关回跳与选项对齐。E2 初轮发现在默认预算内，文件原文和审计元数据会重复占用输入，改为模型只收到编号、标题和选定片段，快照保留完整原文坐标。最后从 `apps/desktop` 执行 `npx playwright test --project=desktop rag-native.spec.ts sources.spec.ts --grep 'workspace hybrid retrieval|authorized snapshots' --workers=1 --retries=0 --output=../../artifacts/rag-e2-delivery`，2 项通过，用时 14.3 秒。覆盖维度失配、版本切换、仅语义命中、章节定位、停用与历史快照、有限预算回落到子片、实际请求排除未批准文字。
+- 对 Phase D 测试库及 E2 两个隔离测试库用 Python SQLite 只读运行 `quick_check` 和 `foreign_key_check`，均为 `ok`、0 项外键错误。真实服务 `127.0.0.1:11434` 的只读目录查询连接失败，本机模型缓存只看到两个 Qwen 对话标签。没有真实向量生成、本地推理或云调用，未跑全量测试。
+
 ## 2026-11-14 Phase D 剩余功能与实际补验
 
 新增 `benchmark/harness/programming/project.rs`、`tasks/scenarios.rs` 和前端 `ReadonlyRuns.tsx`，复用原审核、任务库、Docker、CLI 调度和图谱。修改编程草案、实际验证、固定文件副本、Codex/Claude/Aider 会话、运行报告与 Windows 专项。两条精确 Tauri 命令只运行和读取已发布的项目只读题。schema 仍为 11。范围、限制和逐项证据见 [Phase D 补齐交付](harness-fit-phase-d-completion.md)。

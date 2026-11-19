@@ -73,6 +73,19 @@ test("effective knowledge reaches the exact saved model request and survives res
         changeReason: "修订",
       },
     });
+    for (const { title, kind, validity, approve } of [
+      { title: "尚未生效", kind: "knowledge", validity: { validFrom: "2099-01-01", validTo: null }, approve: true },
+      { title: "已经失效", kind: "knowledge", validity: { validFrom: null, validTo: "2026-11-18" }, approve: true },
+      { title: "未确认", kind: "knowledge", validity: null, approve: false },
+      { title: "待验证假设", kind: "hypothesis", validity: null, approve: true },
+    ]) {
+      const id = await nativeInvoke<string>(page, "save_knowledge", { input: { ...input, title, kind }, validity });
+      if (approve) await nativeInvoke(page, "approve_knowledge", { workspaceId, nodeId: id, expectedRevision: 1 });
+    }
+    expect(await nativeInvoke(page, "list_context_options", { workspaceId, day: "2026-11-18", after: null }))
+      .toMatchObject({ items: [{ id: nodeId, title: "发布日", latestVersion: 2, effectiveVersion: 1 }], hasMore: false });
+    expect(await nativeInvoke(page, "list_context_options", { workspaceId: "another-workspace", day: "2026-11-18", after: null }))
+      .toEqual({ items: [], hasMore: false });
     await page.getByText("手动选择：0 项知识", { exact: true }).click();
     await page.getByRole("button", { name: "刷新知识列表" }).click();
     await page.getByRole("checkbox", { name: /发布日/ }).check();
@@ -113,6 +126,7 @@ test("effective knowledge reaches the exact saved model request and survives res
       "model_inspection_completed",
       "model_request_started",
       "model_response_received",
+      "local_model_usage",
       "citations_checked",
       "response_completed",
     ]);
@@ -156,10 +170,9 @@ test("effective knowledge reaches the exact saved model request and survives res
       .getByRole("button", { name: "执行过程", exact: true })
       .last()
       .click();
-    await expect(
-      page.getByText("发布日，本次使用 v2", { exact: true }),
-    ).toBeVisible();
-    await page.getByText("发给模型的完整内容", { exact: true }).click();
+    const inspector = page.getByRole("dialog", { name: "本次回答的处理记录" });
+    await expect(inspector.getByText("发布日，本次使用 v2", { exact: true })).toBeVisible();
+    await inspector.getByText("发给模型的完整内容", { exact: true }).click();
     await page.screenshot({
       path: testInfo.outputPath("context-snapshot.png"),
     });
@@ -190,7 +203,7 @@ test("effective knowledge reaches the exact saved model request and survives res
     ]);
     expect(failed.snapshot).not.toBeNull();
     expect(requests).toHaveLength(2);
-    await app.closeWindow();
+    await app.closeFromUi();
     await app.stop();
     app = await launchNative(testInfo, { endpoint });
     page = app.page;

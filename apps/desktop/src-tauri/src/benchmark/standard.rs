@@ -5,10 +5,10 @@ use crate::{
     commands::{AppState, blocking},
     db::Database,
     models::AppResult,
-    tasks::TaskKind,
 };
 use serde_json::{Value, json};
-use std::sync::Arc;
+#[cfg(test)]
+use {std::sync::Arc, crate::tasks::TaskKind};
 use tauri::State;
 
 impl Database {
@@ -80,8 +80,10 @@ pub async fn start_standard_benchmark(
     workspace_id: String,
     batch_id: String,
     approved_plan_hash: String,
+    status_channel: Option<tauri::ipc::JavaScriptChannelId>,
+    webview: tauri::Webview,
 ) -> AppResult<Value> {
-    let lease = Arc::new(state.claim_task(&batch_id, &workspace_id, TaskKind::Benchmark)?);
+    let lease = batch::batch_lease(&state, &workspace_id, &batch_id, &approved_plan_hash, true, status_channel.map(|id| id.channel_on(webview))).await?;
     let db = state.database.clone()?;
     let scope = workspace_id.clone();
     let id = batch_id.clone();
@@ -114,9 +116,11 @@ pub fn stop_standard_benchmark(
     state: State<'_, AppState>,
     workspace_id: String,
     batch_id: String,
+    only_waiting: Option<bool>,
 ) -> AppResult<()> {
     let db = state.database.as_ref().map_err(Clone::clone)?;
     db.require_batch_scope(&workspace_id, &batch_id, true)?;
+    if only_waiting == Some(true) { return state.tasks.cancel_waiting(&batch_id, &workspace_id, crate::tasks::TaskKind::Benchmark); }
     state.cancel_personalized_task(&workspace_id, &batch_id)?;
     db.mark_batch_stopping(&workspace_id, &batch_id)
 }

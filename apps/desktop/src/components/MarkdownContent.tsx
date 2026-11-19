@@ -109,6 +109,7 @@ export const MarkdownContent = memo(function MarkdownContent({
             <button
               type="button"
               className={`answer-citation${item.error ? " invalid" : ""}`}
+              data-answer-citation={item.start}
               aria-label={`${item.label}，${item.error ? "无法定位" : "查看引用文字"}`}
               title={item.error ?? "查看本次发给模型的文字"}
               onClick={() => onCitation(item)}

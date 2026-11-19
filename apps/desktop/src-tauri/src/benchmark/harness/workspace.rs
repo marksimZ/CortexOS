@@ -225,13 +225,20 @@ pub async fn get_harness_workspace(
     check_id: String,
     job_id: Option<String>,
 ) -> AppResult<Value> {
+    let tasks = state.tasks.clone();
     blocking(state.database.clone()?, move |db| {
-        db.workspace_state(
+        let request = tasks.scoped_request(
+            &workspace_id,
+            TaskKind::HarnessWorkspace,
+            &format!("{assessment_version}:{check_id}"),
+        )?;
+        let result = db.workspace_state(
             &workspace_id,
             assessment_version,
             &check_id,
             job_id.as_deref(),
-        )
+        )?;
+        Ok(add_job_request(result, request))
     })
     .await
 }
@@ -240,10 +247,34 @@ pub async fn prepare_harness_workspace(
     state: State<'_, AppState>,
     workspace_id: String,
     input: Prepare,
+    wait_for_resources: Option<bool>,
 ) -> AppResult<Value> {
     let id = new_id();
-    let lease = state.claim_task(&id, &workspace_id, TaskKind::Benchmark)?;
     let db = state.database.clone()?;
+    let input = if wait_for_resources == Some(true) {
+        let workspace = workspace_id.clone();
+        blocking(db.clone(), move |db| {
+            let check =
+                db.harness_preflight(&workspace, input.assessment_version, Some(&input.check_id))?;
+            if check["selected"]["contentHash"] != input.check_hash {
+                return Err("执行前检查已不匹配，请重新读取。".into());
+            }
+            Ok(input)
+        })
+        .await?
+    } else {
+        input
+    };
+    let subject = format!("{}:{}", input.assessment_version, input.check_id);
+    let lease = queue_job(
+        &state,
+        &id,
+        &workspace_id,
+        TaskKind::HarnessWorkspace,
+        &subject,
+        wait_for_resources,
+    )
+    .await?;
     let scope = workspace_id.clone();
     let job = id.clone();
     blocking(db.clone(), move |db| {
@@ -265,9 +296,37 @@ pub async fn submit_harness_workspace(
     state: State<'_, AppState>,
     workspace_id: String,
     input: Submit,
+    wait_for_resources: Option<bool>,
 ) -> AppResult<Value> {
-    let lease = state.claim_task(&input.job_id, &workspace_id, TaskKind::Benchmark)?;
     let db = state.database.clone()?;
+    let (subject, input) = if wait_for_resources == Some(true) {
+        let workspace = workspace_id.clone();
+        blocking(db.clone(), move |db| {
+            let record = db.workspace_record(&workspace, &input.job_id)?;
+            if !input.confirmed
+                || record["status"] != "ready"
+                || record["planHash"] != input.plan_hash
+            {
+                return Err("副本状态已变化，请重新读取。".into());
+            }
+            let plan = record.get("plan").ok_or("副本计划缺失。")?;
+            let assessment = plan["assessmentVersion"].as_u64().ok_or("分析版本缺失。")?;
+            let check = plan["checkId"].as_str().ok_or("执行前检查缺失。")?;
+            Ok((format!("{assessment}:{check}"), input))
+        })
+        .await?
+    } else {
+        (String::new(), input)
+    };
+    let lease = queue_job(
+        &state,
+        &input.job_id,
+        &workspace_id,
+        TaskKind::HarnessWorkspace,
+        &subject,
+        wait_for_resources,
+    )
+    .await?;
     let scope = workspace_id.clone();
     let (id, code) = blocking(db.clone(), move |db| {
         db.begin_workspace_submit(&scope, input)
@@ -288,7 +347,14 @@ pub async fn close_harness_workspace(
     state: State<'_, AppState>,
     workspace_id: String,
     job_id: String,
+    only_waiting: Option<bool>,
 ) -> AppResult<Value> {
+    if only_waiting == Some(true) {
+        state
+            .tasks
+            .cancel_waiting(&job_id, &workspace_id, TaskKind::HarnessWorkspace)?;
+        return Ok(json!({"cancelledWait":true}));
+    }
     let db = state.database.clone()?;
     let scope = workspace_id.clone();
     let id = job_id.clone();
@@ -302,7 +368,9 @@ pub async fn close_harness_workspace(
         return Ok(record);
     }
     if ["opening", "grading"].contains(&record["status"].as_str().unwrap_or("")) {
-        state.cancel_personalized_task(&workspace_id, &job_id)?;
+        state
+            .tasks
+            .cancel(&job_id, &workspace_id, TaskKind::HarnessWorkspace)?;
         return Ok(json!({"stopping":true}));
     }
     let _lease = state.claim_task(&job_id, &workspace_id, TaskKind::Benchmark)?;

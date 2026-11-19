@@ -22,7 +22,7 @@ export function useBatchOverview(workspaceId: string, scope: ReportScope) {
         if (!current) return;
         if (batch.id !== id || (batch.scope && batch.scope !== scope)) throw new Error("读取记录与定位链接不一致。");
         setRecord({ key, batch, error: "" });
-        if (["running", "stopping"].includes(batch.status)) timer = window.setTimeout(() => void read(), 1000);
+        if (batch.starting || batch.waitingForResources || ["running", "stopping"].includes(batch.status)) timer = window.setTimeout(() => void read(), 1000);
       } catch (e) {
         if (current) setRecord(previous => ({ key, batch: previous?.key === key ? previous.batch : null, error: errorText(e) }));
       }

@@ -125,4 +125,10 @@ dialog h2 { margin: 0 0 20px; font-size: 20px; }
 .retrieval-summary ul { list-style: none; padding: 0; }
 .retrieval-summary li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 0; box-shadow: inset 0 -1px 0 var(--line); }
 .retrieval-summary li span { color: var(--muted); }
+.retrieval-summary ol.retrieval-stages,.retrieval-candidates { margin-block: 8px; padding: 0; list-style: none; }
+.retrieval-summary .retrieval-stages > li { flex-wrap: wrap; align-items: baseline; padding: 5px 0; }
+.retrieval-summary .retrieval-stages > li > span:first-child { color: var(--text); }
+.retrieval-candidates > li,.retrieval-summary .retrieval-candidates > li { display: block; padding: 6px 0; overflow-wrap: anywhere; }
+.retrieval-candidates p { margin-block: 6px; }
+.retrieval-links { display: flex; flex-wrap: wrap; gap: 4px; }
 .identifier { font-family: var(--font-mono); overflow-wrap: anywhere; font-size: 11px; color: var(--muted); }

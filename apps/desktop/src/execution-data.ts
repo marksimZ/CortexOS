@@ -21,6 +21,8 @@ export const eventLabels: Record<string, string> = {
   model_inspection_completed: "模型检查完成",
   model_request_started: "开始请求模型",
   model_response_received: "收到模型响应",
+  model_fallback: "切换到本机备用模型",
+  local_model_usage: "记录本机模型用量",
   response_completed: "回答完成",
   citations_checked: "检查引用位置",
   run_failed: "运行失败",
@@ -64,8 +66,11 @@ export function projectExecution(data: ExecutionData) {
       model_called: "旧记录只说明开始联系模型，无法确认模型是否收到了问题。",
       model_inspection_started: "开始检查所选本地模型。",
       model_inspection_completed: "已确认本机安装了所选模型。",
-      model_request_started: "开始向本机模型服务发送已保存的请求。",
-      model_response_received: "本机模型服务已返回成功响应。",
+      model_request_started: payload.transport === "cloud" ? "开始向选定的云端模型发送已确认内容。" : "开始向本机模型服务发送已保存的请求。",
+      model_response_received: payload.transport === "cloud" ? "已收到云端模型响应。" : "本机模型服务已返回成功响应。",
+      model_fallback: typeof payload.backupModel === "string" ? "切换到 " + payload.backupModel + "。"
+        + (typeof payload.reason === "string" ? payload.reason : "") : "已准备使用本机备用模型。",
+      local_model_usage: "已记录本机请求用时和模型报告的用量。",
       response_completed: "生成已结束，回答已保存。",
       citations_checked:
         "已检查引用编号和文字范围是否存在于本次资料；没有核实回答内容是否正确。",
@@ -127,10 +132,7 @@ export function projectExecution(data: ExecutionData) {
       nodeId: item.nodeId,
       version: item.version,
       hash: item.contentHash,
-      summary:
-        item.reason === "automatic_effective_knowledge"
-          ? "自动找到并选用的已确认知识"
-          : "你手动选择的已确认知识",
+      summary: "本次选用的参考资料",
     }),
   );
   if (detail.snapshot) {

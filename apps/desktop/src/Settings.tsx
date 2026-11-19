@@ -9,6 +9,12 @@ import {
 } from "lucide-react";
 import { errorText, type Studio } from "./studio";
 import { notify } from "./components/Toast";
+import { RagIndexSettings } from "./components/RagIndexSettings";
+import { LocalRuntimeSettings } from "./components/LocalRuntimeSettings";
+import { CloudRuntimeSettings } from "./components/CloudRuntimeSettings";
+import { RuntimeProfilesSettings } from "./components/RuntimeProfilesSettings";
+import { RuntimeResources } from "./components/RuntimeResources";
+import { StorageInventory } from "./components/StorageInventory";
 
 export function SettingsPage({ studio }: { studio: Studio }) {
   const draft = studio.settingsDraft;
@@ -33,6 +39,9 @@ export function SettingsPage({ studio }: { studio: Studio }) {
         <nav className="settings-navigation" aria-label="设置分类">
           {[
             ["model", "模型连接"],
+            ["cloud", "云端模型"],
+            ["profiles", "运行方案"],
+            ["usage", "资源与用量"],
             ["data", "本地数据"],
             ["about", "关于"],
           ].map(([id, label]) => (
@@ -59,6 +68,7 @@ export function SettingsPage({ studio }: { studio: Studio }) {
               模型连接
             </h2>
           </div>
+          <div className="settings-fields">
           <form
             className="settings-fields"
             onSubmit={(event) => {
@@ -224,7 +234,7 @@ export function SettingsPage({ studio }: { studio: Studio }) {
                 </div>
               </div>
               <p>
-                一次只生成一个回答，模型空闲 5 分钟后可从内存卸载。Token
+                一次只生成一个回答。Token
                 是模型计算文字长度的单位，不等于字数。总容量包含说明、资料、对话与回答，需为回答留出空间；容量越大，通常越占显卡内存。“温度”越高，回答的措辞和选取通常越多变，不代表更正确。
               </p>
             </details>
@@ -245,6 +255,41 @@ export function SettingsPage({ studio }: { studio: Studio }) {
               </span>
             </div>
           </form>
+            {studio.desktop && studio.workspaceId && (
+              <>
+                <LocalRuntimeSettings key={`runtime:${studio.workspaceId}`} workspaceId={studio.workspaceId} model={draft.model} running={!!studio.activeRun || studio.sending} />
+                <RagIndexSettings key={`index:${studio.workspaceId}`} workspaceId={studio.workspaceId} />
+              </>
+            )}
+          </div>
+        </section>
+        <section
+          id="cloud-section"
+          hidden={section !== "cloud"}
+          className="settings-section"
+          aria-labelledby="runtime-cloud-settings"
+        >
+          {section === "cloud" && (studio.desktop && studio.workspaceId
+            ? <CloudRuntimeSettings key={studio.workspaceId} workspaceId={studio.workspaceId} />
+            : <div className="section-description"><h2 id="runtime-cloud-settings">云端连接</h2>
+              <p>{studio.desktop ? "请先选择工作区。" : "请在桌面版中管理云端连接。"}</p></div>)}
+        </section>
+        <section
+          id="profiles-section"
+          hidden={section !== "profiles"}
+          className="settings-section"
+          aria-labelledby="runtime-profiles-settings"
+        >
+          {section === "profiles" && (studio.desktop && studio.workspaceId
+            ? <RuntimeProfilesSettings key={studio.workspaceId} workspaceId={studio.workspaceId} localModels={studio.health?.models.map(model => model.name) ?? []} />
+            : <div className="section-description"><h2 id="runtime-profiles-settings">运行方案</h2>
+              <p>{studio.desktop ? "请先选择工作区。" : "请在桌面版中管理运行方案。"}</p></div>)}
+        </section>
+        <section id="usage-section" hidden={section !== "usage"} className="settings-section" aria-labelledby="runtime-usage-settings">
+          {section === "usage" && (studio.desktop && studio.workspaceId
+            ? <RuntimeResources key={studio.workspaceId} workspaceId={studio.workspaceId} />
+            : <div className="section-description"><h2 id="runtime-usage-settings">资源与用量</h2>
+              <p>{studio.desktop ? "请先选择工作区。" : "请在桌面版中查看资源与用量。"}</p></div>)}
         </section>
         <section
           id="data-section"
@@ -273,8 +318,8 @@ export function SettingsPage({ studio }: { studio: Studio }) {
                 <dd>只读取你在“知识”页主动选择的文件</dd>
               </div>
               <div>
-                <dt>备份与导出</dt>
-                <dd>暂不支持</dd>
+                <dt>升级备份</dt>
+                <dd>数据库版本升级前自动创建</dd>
               </div>
             </dl>
             {studio.data?.dataPath && (
@@ -284,10 +329,11 @@ export function SettingsPage({ studio }: { studio: Studio }) {
                 {studio.data.dataPath}
               </p>
             )}
+            {studio.desktop && <StorageInventory />}
             <details className="field-help">
               <summary>隐私与存储说明</summary>
               <p>
-                问题和所选资料只发给本机模型。添加文件后，会在本机保存副本；不会自动扫描文件夹。对话保存在本机数据库中。
+                添加文件时，由你选择原始文件，应用在本机保存副本。使用云端模型时，发送前可核对传给云端的内容。
               </p>
             </details>
           </div>

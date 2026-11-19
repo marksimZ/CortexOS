@@ -61,7 +61,7 @@ export default defineConfig({
     ...(process.env.CORTEXOS_DELIVERY_CHECK === "1"
       ? [{ name: "delivery", testMatch: "windows-delivery.spec.ts" }]
       : []),
-    { name: "edge", testMatch: ["app.spec.ts", "graph-preview.spec.ts", "ui-usability.spec.ts", "cloud-connection.spec.ts", "personalized.spec.ts", "benchmark-result-drawer.spec.ts"] },
+    { name: "edge", testMatch: ["app.spec.ts", "graph-preview.spec.ts", "ui-usability.spec.ts", "cloud-connection.spec.ts", "personalized.spec.ts", "benchmark-result-drawer.spec.ts", "knowledge-scope.spec.ts", "rag-evaluation.spec.ts", "local-runtime.spec.ts", "runtime-cloud.spec.ts", "runtime-profiles.spec.ts"] },
     {
       name: "desktop",
       testMatch: [
@@ -77,11 +77,14 @@ export default defineConfig({
         "prototype-ui.spec.ts",
         "ui-usability-native.spec.ts",
         "ui-micro-native.spec.ts",
+        "storage-native.spec.ts",
+        "storage-recovery-native.spec.ts",
         "chat.spec.ts",
         "markdown-camera.spec.ts",
         "chat-design.spec.ts",
         "context.spec.ts",
         "retrieval.spec.ts",
+        "rag-native.spec.ts",
         "trace.spec.ts",
         "knowledge.spec.ts",
         "knowledge-layout.spec.ts",

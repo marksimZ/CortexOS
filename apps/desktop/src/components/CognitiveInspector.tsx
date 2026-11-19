@@ -1,8 +1,8 @@
 import { AppDialog, openDialog } from "./AppDialog";
-import { RetrievalSummary } from "./RetrievalSummary";
+import { RetrievalInspection } from "./RetrievalInspection";
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { errorText, type RunDetail, type Studio } from "../studio";
+import { errorText, type ContextSnapshot, type RunDetail, type Studio } from "../studio";
 const statusNames: Record<string, string> = {
   streaming: "生成中",
   completed: "已完成",
@@ -20,6 +20,8 @@ const eventNames: Record<string, string> = {
   model_inspection_completed: "本地模型检查完成",
   model_request_started: "开始发送模型请求",
   model_response_received: "收到模型服务响应",
+  model_fallback: "切换到本机备用模型",
+  local_model_usage: "记录本机模型用量",
   response_completed: "回答完成",
   citations_checked: "检查引用位置",
   run_cancelled: "用户停止生成",
@@ -43,30 +45,32 @@ export function CognitiveInspector({
     (event) => event.kind === "response_completed",
   )?.payload as { metrics?: { finishReason?: string } } | undefined;
   const outputLimited = completion?.metrics?.finishReason === "length";
+  const responseRecorded = !!completion || detail?.events.some(event => event.kind === "model_response_received");
   useEffect(() => {
     if (!runId) return;
     let current = true;
+    let timer: number;
     setDetail(null);
     setError(null);
     openDialog(dialog.current);
-    const load = () =>
-      studio
-        .getRun(runId)
-        .then((result) => {
-          if (current) setDetail(result);
-        })
-        .catch((value) => {
-          if (current) setError(errorText(value));
-        });
+    const load = async () => {
+      try {
+        const result = await studio.getRun(runId);
+        if (!current) return;
+        setDetail(result);
+        setError(null);
+        if (result.run.status !== "running") return;
+      } catch (value) {
+        if (current) setError(errorText(value));
+      }
+      if (current) timer = window.setTimeout(load, 1000);
+    };
     void load();
-    const timer = window.setInterval(() => {
-      void load();
-    }, 1000);
     return () => {
       current = false;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
-  }, [runId, studio.getRun]);
+  }, [runId, studio.workspaceId, studio.getRun]);
   return (
     <AppDialog
       ref={dialog}
@@ -151,55 +155,30 @@ export function CognitiveInspector({
               </li>
             ))}
           </ol>
-          <h3>本次使用的资料</h3>
-          <RetrievalSummary report={detail.contextManifest.retrieval} />
-          {detail.contextManifest.knowledgeRefs?.map((item) => (
-            <details key={item.nodeId} className="knowledge-disclosure">
-              <summary>
-                {item.title}，本次使用 v{item.version}
-              </summary>
-              <p className="context-content">{item.content}</p>
-              <p>
-                {item.reason === "automatic_effective_knowledge"
-                  ? "自动找到并选用的参考资料"
-                  : "你选择的参考资料"}
-                ；用作参考不代表回答已核实。
-              </p>
-              <code>{item.nodeId}</code>
-            </details>
-          ))}
+          <h3>查找过程与资料</h3>
+          <RetrievalInspection detail={detail} beforeLocate={() => dialog.current?.close()} showContext />
+          {detail.contextManifest.modelRoute && <p>
+            {detail.contextManifest.modelRoute.task === "knowledge" ? "知识问答" : "普通问答"}，
+            {detail.contextManifest.modelRoute.reason === "lower_estimated_cost" ? "采用估算费用较低的方案"
+              : detail.contextManifest.modelRoute.reason === "prices_unavailable" ? "费率未知，使用首选方案"
+              : detail.contextManifest.modelRoute.reason === "workspace_default" ? "使用工作区当前方案" : "使用该任务的首选方案"}
+          </p>}
+          {detail.contextManifest.modelFallback && <p>
+            已从 {detail.contextManifest.modelFallback.primaryModel} 切换到本机模型 {detail.contextManifest.modelFallback.backupModel}。
+            {detail.contextManifest.modelFallback.reason}
+          </p>}
+          {detail.primarySnapshot && <RequestSnapshot label="主模型请求快照" snapshot={detail.primarySnapshot} />}
           {detail.snapshot ? (
-            <details className="advanced-settings">
-              <summary>发给模型的完整内容</summary>
-              <p>
-                这里保存了当时实际发送的内容。这条记录只保存模型名称，不能确定以后使用的模型文件是否相同；即使相同，重新提问也可能得到不同回答。
-              </p>
-              {detail.snapshot.request.messages.map((item, index) => (
-                <details key={index}>
-                  <summary>
-                    {index + 1}.{" "}
-                    {(
-                      {
-                        system: "系统说明",
-                        user: "你的消息",
-                        assistant: "模型回答",
-                      } as Record<string, string>
-                    )[item.role] ?? item.role}
-                  </summary>
-                  <p className="context-content">{item.content}</p>
-                </details>
-              ))}
-              <p className="identifier">
-                SHA-256：{detail.snapshot.requestHash}
-              </p>
-            </details>
+            <RequestSnapshot label={detail.primarySnapshot ? "本机备用请求快照" : responseRecorded ? "发给模型的完整内容" : "为模型准备的完整内容"}
+              snapshot={detail.snapshot} />
           ) : (
             <p>这条旧记录只保存了资料清单，没有保存发给模型的完整内容。</p>
           )}
           <details className="advanced-settings">
             <summary>资料预算与记录说明</summary>
             <p>
-              {detail.contextManifest.messageRefs.length} 条对话消息；没有直接搜索文件全文。
+              使用 {detail.contextManifest.messageRefs.length} 条对话消息。
+              {!!detail.contextManifest.retrieval?.sourceChunksUsed && <> 已选用 {detail.contextManifest.retrieval.sourceChunksUsed} 处经确认的文件片段。</>}
             </p>
             <p>
               预计资料用量 {detail.contextManifest.estimatedUnits} /{" "}
@@ -224,4 +203,16 @@ export function CognitiveInspector({
       </div>
     </AppDialog>
   );
+}
+
+function RequestSnapshot({ label, snapshot }: { label: string; snapshot: ContextSnapshot }) {
+  const roles: Record<string, string> = { system: "系统说明", user: "你的消息", assistant: "模型回答" };
+  return <details className="advanced-settings">
+    <summary>{label}</summary>
+    {snapshot.request.messages.map((message, index) => <details key={index}>
+      <summary>{index + 1}. {roles[message.role] ?? message.role}</summary>
+      <p className="context-content">{message.content}</p>
+    </details>)}
+    <p className="identifier">SHA-256 {snapshot.requestHash}</p>
+  </details>;
 }

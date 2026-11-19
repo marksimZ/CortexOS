@@ -141,8 +141,17 @@ pub async fn list_harness_experiments(
     workspace_id: String,
     assessment_version: u32,
 ) -> AppResult<Value> {
+    let tasks = state.tasks.clone();
     blocking(state.database.clone()?, move |db| {
-        db.experiment_state(&workspace_id, assessment_version)
+        let request = tasks.scoped_request(
+            &workspace_id,
+            TaskKind::HarnessExperiment,
+            &assessment_version.to_string(),
+        )?;
+        Ok(add_job_request(
+            db.experiment_state(&workspace_id, assessment_version)?,
+            request,
+        ))
     })
     .await
 }
@@ -152,6 +161,7 @@ pub async fn start_harness_experiment(
     state: State<'_, AppState>,
     workspace_id: String,
     input: ExperimentInput,
+    wait_for_resources: Option<bool>,
 ) -> AppResult<Value> {
     if !input.confirmed
         || !(1..=3).contains(&input.repetitions)
@@ -165,9 +175,25 @@ pub async fn start_harness_experiment(
         return Err("请选择至少两个任务组合、1–3 次重复并确认实验。每批最多 24 个任务。".into());
     }
     let id = new_id();
-    let lease = state.claim_task(&id, &workspace_id, TaskKind::Benchmark)?;
-    let cancel = lease.receiver();
     let db = state.database.clone()?;
+    if wait_for_resources == Some(true) {
+        let workspace = workspace_id.clone();
+        let assessment = input.assessment_version;
+        blocking(db.clone(), move |db| {
+            db.fit_read(&workspace, Some(assessment))
+        })
+        .await?;
+    }
+    let lease = queue_job(
+        &state,
+        &id,
+        &workspace_id,
+        TaskKind::HarnessExperiment,
+        &input.assessment_version.to_string(),
+        wait_for_resources,
+    )
+    .await?;
+    let cancel = lease.receiver();
     let provider = state.provider.clone()?;
     let options = db.experiment_state(&workspace_id, input.assessment_version)?;
     let available = options["options"].as_array().ok_or("检查列表缺失。")?;
@@ -377,11 +403,21 @@ pub async fn stop_harness_experiment(
     state: State<'_, AppState>,
     workspace_id: String,
     experiment_id: String,
+    only_waiting: Option<bool>,
 ) -> AppResult<()> {
+    if only_waiting == Some(true) {
+        return state.tasks.cancel_waiting(
+            &experiment_id,
+            &workspace_id,
+            TaskKind::HarnessExperiment,
+        );
+    }
     let db = state.database.clone()?;
     let (_, _, status, _, _) = db.experiment_plan(&workspace_id, &experiment_id)?;
     if status == "running" {
-        state.cancel_personalized_task(&workspace_id, &experiment_id)?;
+        state
+            .tasks
+            .cancel(&experiment_id, &workspace_id, TaskKind::HarnessExperiment)?;
     }
     Ok(())
 }

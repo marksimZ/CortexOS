@@ -3,11 +3,16 @@ use serde::Serialize;
 use serde_json::Value;
 use std::{future::Future, pin::Pin, time::Duration};
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Model {
     pub id: String,
     pub generation: &'static str,
+    pub embedding: &'static str,
+    pub reranking: &'static str,
+    pub max_input_tokens: Option<u64>,
+    pub max_output_tokens: Option<u64>,
+    pub protocol: &'static str,
 }
 pub type CatalogFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Vec<Model>, ConnectionState>> + Send + 'a>>;
@@ -34,91 +39,102 @@ impl ProviderAdapter for OfficialProvider {
         Box::pin(super::completion::official(provider, key, input))
     }
     fn catalog<'a>(&'a self, provider: Provider, key: &'a str) -> CatalogFuture<'a> {
-        Box::pin(async move {
-            let client = reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .connect_timeout(Duration::from_secs(8))
-                .timeout(Duration::from_secs(20))
-                .build()
-                .map_err(|_| ConnectionState::ServiceError)?;
-            let mut models = Vec::new();
-            let mut cursor: Option<String> = None;
-            // Bounded pagination, no automatic retry or inference requests.
-            for _ in 0..10 {
-                let mut url = reqwest::Url::parse(match provider {
-                    Provider::Openai => "https://api.openai.com/v1/models",
-                    Provider::Anthropic => "https://api.anthropic.com/v1/models",
-                    Provider::Gemini => "https://generativelanguage.googleapis.com/v1beta/models",
-                })
-                .map_err(|_| ConnectionState::ServiceError)?;
-                if provider == Provider::Anthropic {
-                    url.query_pairs_mut().append_pair("limit", "1000");
-                }
-                if provider == Provider::Gemini {
-                    url.query_pairs_mut().append_pair("pageSize", "1000");
-                }
-                if let Some(ref value) = cursor {
-                    url.query_pairs_mut().append_pair(
-                        if provider == Provider::Gemini {
-                            "pageToken"
-                        } else {
-                            "after_id"
-                        },
-                        value,
-                    );
-                }
-                let mut secret = reqwest::header::HeaderValue::from_str(key)
-                    .map_err(|_| ConnectionState::InvalidCredential)?;
-                secret.set_sensitive(true);
-                let mut request = client.get(url);
-                request = match provider {
-                    Provider::Openai => request.bearer_auth(key),
-                    Provider::Anthropic => request
-                        .header("x-api-key", secret)
-                        .header("anthropic-version", "2023-06-01"),
-                    Provider::Gemini => request.header("x-goog-api-key", secret),
-                };
-                let mut response = request
-                    .send()
-                    .await
-                    .map_err(|_| ConnectionState::NetworkUnavailable)?;
-                let status = response.status().as_u16();
-                let mut bytes = Vec::new();
-                while let Some(chunk) = response
-                    .chunk()
-                    .await
-                    .map_err(|_| ConnectionState::NetworkUnavailable)?
-                {
-                    if bytes.len() + chunk.len() > 1024 * 1024 {
-                        return Err(ConnectionState::ServiceError);
-                    }
-                    bytes.extend_from_slice(&chunk);
-                }
-                let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-                if status != 200 {
-                    return Err(classify(status, &body));
-                }
-                let (page, next) = parse(provider, &body)?;
-                if page.iter().any(|model| model.id.contains(key)) {
-                    return Err(ConnectionState::ServiceError);
-                }
-                models.extend(page);
-                if models.len() > 5000 {
-                    return Err(ConnectionState::ServiceError);
-                }
-                if next.is_none() {
-                    models.sort_by(|a, b| a.id.cmp(&b.id));
-                    models.dedup_by(|a, b| a.id == b.id);
-                    return Ok(models);
-                }
-                if next == cursor {
-                    return Err(ConnectionState::ServiceError);
-                }
-                cursor = next;
-            }
-            Err(ConnectionState::ServiceError)
-        })
+        Box::pin(catalog(provider, key, None))
     }
+}
+
+pub async fn catalog(
+    provider: Provider,
+    key: &str,
+    compatible_base: Option<&reqwest::Url>,
+) -> Result<Vec<Model>, ConnectionState> {
+    let client = super::transport::CATALOG_CLIENT.as_ref().map_err(|error| *error)?;
+    let mut models = Vec::new();
+    let mut cursor: Option<String> = None;
+    // Bounded pagination, no automatic retry or inference requests.
+    for _ in 0..10 {
+        let mut url = if let Some(base) = compatible_base {
+            base.join("models")
+        } else {
+            reqwest::Url::parse(match provider {
+                Provider::Openai => "https://api.openai.com/v1/models",
+                Provider::Anthropic => "https://api.anthropic.com/v1/models",
+                Provider::Gemini => "https://generativelanguage.googleapis.com/v1beta/models",
+            })
+        }
+        .map_err(|_| ConnectionState::ServiceError)?;
+        if provider == Provider::Anthropic {
+            url.query_pairs_mut().append_pair("limit", "1000");
+        }
+        if provider == Provider::Gemini {
+            url.query_pairs_mut().append_pair("pageSize", "1000");
+        }
+        if let Some(ref value) = cursor {
+            url.query_pairs_mut().append_pair(
+                if provider == Provider::Gemini {
+                    "pageToken"
+                } else {
+                    "after_id"
+                },
+                value,
+            );
+        }
+        let mut secret = reqwest::header::HeaderValue::from_str(key)
+            .map_err(|_| ConnectionState::InvalidCredential)?;
+        secret.set_sensitive(true);
+        let mut request = client.get(url).timeout(Duration::from_secs(20));
+        request = match provider {
+            Provider::Openai => request.bearer_auth(key),
+            Provider::Anthropic => request
+                .header("x-api-key", secret)
+                .header("anthropic-version", "2023-06-01"),
+            Provider::Gemini => request.header("x-goog-api-key", secret),
+        };
+        let mut response = request
+            .send()
+            .await
+            .map_err(|_| ConnectionState::NetworkUnavailable)?;
+        let status = response.status().as_u16();
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| ConnectionState::NetworkUnavailable)?
+        {
+            if bytes.len() + chunk.len() > 1024 * 1024 {
+                return Err(ConnectionState::ServiceError);
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+        if status != 200 {
+            return Err(classify(status, &body));
+        }
+        let (mut page, next) = parse(provider, &body)?;
+        if compatible_base.is_some() {
+            for model in &mut page {
+                model.protocol = "openai_chat_completions";
+                model.reranking = "unknown";
+            }
+        }
+        if page.iter().any(|model| model.id.contains(key)) {
+            return Err(ConnectionState::ServiceError);
+        }
+        models.extend(page);
+        if models.len() > 5000 {
+            return Err(ConnectionState::ServiceError);
+        }
+        if next.is_none() {
+            models.sort_by(|a, b| a.id.cmp(&b.id));
+            models.dedup_by(|a, b| a.id == b.id);
+            return Ok(models);
+        }
+        if next == cursor {
+            return Err(ConnectionState::ServiceError);
+        }
+        cursor = next;
+    }
+    Err(ConnectionState::ServiceError)
 }
 pub fn classify(status: u16, body: &Value) -> ConnectionState {
     let code = body
@@ -176,20 +192,38 @@ pub fn parse(
         {
             return Err(ConnectionState::ServiceError);
         }
-        let generation = if provider == Provider::Gemini {
-            if !value["supportedGenerationMethods"]
-                .as_array()
-                .is_some_and(|a| a.iter().any(|v| v == "generateContent"))
+        let listed = |accepted: &[&str]| match value["supportedGenerationMethods"].as_array() {
+            Some(methods)
+                if methods
+                    .iter()
+                    .any(|method| accepted.iter().any(|name| method == *name)) =>
             {
-                continue;
+                "listed"
             }
-            "listed"
-        } else {
-            "unknown"
+            Some(_) => "unsupported",
+            None => "unknown",
+        };
+        let (generation, embedding, protocol) = match provider {
+            Provider::Openai => ("unknown", "unknown", "openai_responses"),
+            Provider::Anthropic => ("unknown", "unsupported", "anthropic_messages"),
+            Provider::Gemini => (
+                listed(&["generateContent"]),
+                listed(&["embedContent", "batchEmbedContents"]),
+                "gemini_generate_content",
+            ),
         };
         models.push(Model {
             id: id.into(),
             generation,
+            embedding,
+            reranking: "unsupported",
+            max_input_tokens: (provider == Provider::Gemini)
+                .then(|| value["inputTokenLimit"].as_u64())
+                .flatten(),
+            max_output_tokens: (provider == Provider::Gemini)
+                .then(|| value["outputTokenLimit"].as_u64())
+                .flatten(),
+            protocol,
         });
     }
     let next = if provider == Provider::Gemini {

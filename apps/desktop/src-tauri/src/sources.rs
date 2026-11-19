@@ -39,6 +39,7 @@ pub struct Snapshot {
     pub content: String,
     pub content_hash: String,
     pub created_at: String,
+    pub(crate) structure: crate::source_chunks::StructureSummary,
 }
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -350,7 +351,13 @@ impl Database {
     pub fn source_snapshot(&self, workspace: &str, id: &str, version: i64) -> AppResult<Snapshot> {
         let c = self.connection()?;
         let document=c.query_row("SELECT id,name,latest_version,enabled,revision FROM source_documents WHERE workspace_id=?1 AND id=?2",params![workspace,id],source).optional().map_err(error)?.ok_or_else(missing)?;
-        c.query_row("SELECT content,content_hash,created_at FROM source_versions WHERE source_id=?1 AND version=?2",params![id,version],|r|Ok(Snapshot{document:document.clone(),version,content:r.get(0)?,content_hash:r.get(1)?,created_at:r.get(2)?})).optional().map_err(error)?.ok_or_else(missing)
+        let (content, content_hash, created_at): (String, String, String) = c.query_row(
+            "SELECT content,content_hash,created_at FROM source_versions WHERE source_id=?1 AND version=?2",
+            params![id,version], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)),
+        ).optional().map_err(error)?.ok_or_else(missing)?;
+        drop(c);
+        let structure = crate::source_chunks::build(workspace, id, version, &document.name, &content).summary();
+        Ok(Snapshot { document, version, content, content_hash, created_at, structure })
     }
     pub fn revoke_source(&self, workspace: &str, id: &str, expected: i64) -> AppResult<()> {
         let mut c = self.connection()?;

@@ -1,18 +1,21 @@
 import { expect,test,type TestInfo } from '@playwright/test';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createServer } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { mkdir,writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { launchNative,nativeInvoke } from './native';
 import type { Snapshot } from '../src/benchmark/harness/types';
 import type { ProgrammingJob,ProgrammingPublished,ProgrammingSpec,ValidationPayload } from '../src/benchmark/harness/programmingTypes';
+import type { Batch } from '../src/benchmark/personalized';
 
 const exec=promisify(execFile);
-async function setup(info:TestInfo){
+async function setup(info:TestInfo,endpoint?:string){
  await mkdir(info.outputPath('fixtures'),{recursive:true});const doc=info.outputPath('fixtures/development.md'),zip=info.outputPath('fixtures/project.zip');
  await writeFile(doc,'Use Python pure functions.\nKeep immutable evidence.\n');
  await exec('py',['-3','-X','utf8','-c','import sys,zipfile\nwith zipfile.ZipFile(sys.argv[1],"w") as z:\n z.writestr("src/value.py","def adjust(n):\\n    return n\\n")',zip],{windowsHide:true});
- const app=await launchNative(info,{sourcePath:doc});const {page}=app;page.setDefaultTimeout(15000);
+ const app=await launchNative(info,{sourcePath:doc,endpoint});const {page}=app;page.setDefaultTimeout(15000);
  const workspaceId=(await nativeInvoke<{id:string}>(page,'create_workspace',{name:'编程任务对照验收'})).id;
  const snapshot=await nativeInvoke<Snapshot>(page,'import_harness_document',{workspaceId});
  await nativeInvoke(page,'save_harness_fit',{workspaceId,input:{snapshotIds:[snapshot.id],requirements:[],weights:{compatibility:3,automation:3,governance:3,context:3},expectedVersion:0,note:''}});
@@ -32,6 +35,146 @@ async function setup(info:TestInfo){
  const wait=async()=>{await expect.poll(async()=>(await get()).selected?.status,{timeout:180000,intervals:[500,1000]}).not.toBe('validating');const state=await get();expect(state.selected).toBeTruthy();return state;};
  return {app,page,workspaceId,job,origin,spec,open,panel,get,start,wait};
 }
+
+test('project validation wait survives reload, cancels separately and rechecks the revision',async({},info)=>{
+ test.setTimeout(95_000);
+ const model='queue-fixture:latest',digest='a'.repeat(64);
+ const details={format:'gguf',family:'fixture',parameter_size:'synthetic',quantization_level:'synthetic'};
+ let started=false,embeddingCalls=0,release!:()=>void;
+ const events:string[]=[];
+ const hold=new Promise<void>(resolve=>{release=resolve;});
+ const server=createServer(async(req,res)=>{
+  const reply=(value:unknown)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
+  if(req.url==='/api/version')return reply({version:'queue-fixture'});
+  if(req.url==='/api/tags')return reply({models:[{name:model,digest,size:100,details},{name:'queue-embedding:latest',digest,size:100,details}]});
+  if(req.url==='/api/ps')return reply({models:[]});
+  let raw='';
+  for await(const chunk of req)raw+=chunk.toString();
+  const body=JSON.parse(raw||'{}');
+  if(req.url==='/api/show')return reply({
+   details,capabilities:body.model==='queue-embedding:latest'?['embedding']:['completion','tools'],
+   model_info:{'general.architecture':'fixture','fixture.context_length':8192},
+  });
+  if(req.url==='/api/embed'){
+   embeddingCalls++;
+   events.push('embedding-request');
+   return reply({embeddings:body.input.map(()=>[1,0])});
+  }
+  if(req.url==='/api/chat'){
+   res.writeHead(200,{'Content-Type':'application/x-ndjson'});
+   res.write(JSON.stringify({message:{role:'assistant',content:'9'},done:false})+'\n');
+   started=true;
+   await hold;
+   res.end(JSON.stringify({message:{role:'assistant',content:''},done:true,done_reason:'stop',eval_count:1,prompt_eval_count:5})+'\n');
+   return;
+  }
+  res.writeHead(404).end();
+ });
+ await new Promise<void>(done=>server.listen(0,'127.0.0.1',done));
+ let app:Awaited<ReturnType<typeof launchNative>>|undefined;
+ try{
+  const address=server.address();
+  if(!address||typeof address==='string')throw new Error('Loopback fixture port unavailable');
+  const ctx=await setup(info,`http://127.0.0.1:${address.port}`);
+  app=ctx.app;
+  const {page,workspaceId,job,origin,spec,get,open,panel}=ctx;
+  const datasets=await nativeInvoke<{id:string;version:number;contentHash:string}[]>(page,'list_benchmark_datasets',{workspaceId});
+  const dataset=datasets.find(d=>d.id==='cortex-core-60'&&d.version===2)!;
+  const holder=await nativeInvoke<Batch>(page,'plan_standard_benchmark',{
+   workspaceId,input:{datasetId:dataset.id,datasetVersion:2,datasetHash:dataset.contentHash,
+    models:[{kind:'local',local:{model,expectedDigest:digest,parameters:{numCtx:4096,numPredict:64,temperature:0,timeoutSeconds:120},requirements:['completion']}}],
+    caseIds:['math-001'],repetitions:1,maxOutputTokens:64,price:null,pythonImage:null,releaseModels:[]},
+  });
+  await nativeInvoke(page,'start_standard_benchmark',{workspaceId,batchId:holder.id,approvedPlanHash:holder.planHash});
+  try{await expect.poll(()=>started).toBe(true);}
+  catch(e){
+   await info.attach('holder-report',{body:JSON.stringify(await nativeInvoke<Batch>(page,'get_standard_benchmark',{workspaceId,batchId:holder.id}),null,2),contentType:'application/json'});
+   throw e;
+  }
+  const input={draftId:job.id,expectedRevision:1,draftHash:job.revisions[0].contentHash,imageId:`sha256:${'f'.repeat(64)}`};
+  const args={workspaceId,waitForResources:true,input};
+  const start=()=>nativeInvoke<{id:string}>(page,'start_harness_programming_validation',args).catch(e=>({error:String(e)}));
+  // A document reload can disconnect the original IPC promise. The application queue must remain accessible.
+  const initial=start();
+  await expect.poll(async()=>(await get()).request?.status).toBe('waiting');
+  expect((await get()).history).toEqual([]);
+  const waitingId=(await get()).request!.id;
+  await expect(start()).resolves.toHaveProperty('error',expect.stringContaining('已提交'));
+  const other=await nativeInvoke<{id:string}>(page,'create_workspace',{name:'验证隔离'});
+  await expect(nativeInvoke(page,'stop_harness_programming_validation',{
+   workspaceId:other.id,validationId:waitingId,onlyWaiting:true,
+  })).rejects.toThrow('不在等待队列');
+  await open();
+  const queueStatus=panel().getByRole('status').filter({hasText:'正在等待运行资源'});
+  await expect(queueStatus).toBeVisible();
+  await expect(queueStatus.locator('.fit-status')).toHaveAttribute('data-tone','neutral');
+  await queueStatus.scrollIntoViewIfNeeded();
+  await expect(panel().getByRole('button',{name:'取消等待',exact:true})).toBeInViewport();
+  await page.screenshot({path:info.outputPath('validation-waiting.png')});
+  await panel().getByRole('button',{name:'取消等待',exact:true}).click();
+  await expect(panel().getByRole('button',{name:'取消等待',exact:true})).toBeHidden();
+  expect((await get()).history).toEqual([]);
+  expect((await nativeInvoke<Batch>(page,'get_standard_benchmark',{workspaceId,batchId:holder.id})).status).toBe('running');
+  void initial;
+  const stale=start().then(result=>{events.push('stale-validation-released');return result;});
+  await expect.poll(async()=>(await get()).request?.status).toBe('waiting');
+  const experimentListing=()=>nativeInvoke<{request?:{id:string;status:string};history:unknown[]}>(page,'list_harness_experiments',{workspaceId,assessmentVersion:1});
+  const submittedExperiment=performance.now();
+  const experiment=nativeInvoke(page,'start_harness_experiment',{
+   workspaceId,waitForResources:true,input:{assessmentVersion:1,repetitions:1,confirmed:true,
+    selections:Array.from({length:2},()=>({runtimeId:randomUUID(),runtimeHash:digest,model,digest,weight:1}))},
+  }).catch(e=>String(e));
+  await expect.poll(async()=>(await experimentListing()).request?.status).toBe('waiting');
+  const experimentObservedMs=performance.now()-submittedExperiment;
+  const experimentId=(await experimentListing()).request!.id;
+  const cancelStart=performance.now();
+  await nativeInvoke(page,'stop_harness_experiment',{workspaceId,experimentId,onlyWaiting:true});
+  await expect(experiment).resolves.toContain('已取消等待');
+  const cancelRoundTripMs=performance.now()-cancelStart;
+  expect((await experimentListing()).history).toEqual([]);
+  const updated=await nativeInvoke<ProgrammingJob>(page,'save_harness_programming_draft',{
+   workspaceId,input:{jobId:job.id,expectedRevision:1,origin,spec:{...spec,prompt:`${spec.prompt} 请勿修改输入。`}},
+  });
+  const knowledge=await nativeInvoke<string>(page,'save_knowledge',{input:{workspaceId,title:'队列检查',content:'资源顺序使用固定向量验证。',kind:'knowledge',changeReason:'调度专项'}});
+  await nativeInvoke(page,'approve_knowledge',{workspaceId,nodeId:knowledge,expectedRevision:1});
+  const indexModel='queue-embedding:latest';
+  const indexId=randomUUID();
+  const index=page.evaluate(async({workspaceId,indexId,indexModel,digest})=>{
+   const {invoke,transformCallback}=(window as any).__TAURI_INTERNALS__;
+   const callback=transformCallback((envelope:{message?:string})=>{
+    if(envelope.message)(window as any).__queueFixtureEvents.push(envelope.message);
+   });
+   (window as any).__queueFixtureEvents=[];
+   return invoke('rag_build_index',{workspaceId,requestId:indexId,statusChannel:`__CHANNEL__:${callback}`,input:{model:indexModel,digest,confirmed:true}});
+  },{workspaceId,indexId,indexModel,digest}).catch(e=>({error:String(e)}));
+  await expect.poll(()=>page.evaluate(()=>(window as any).__queueFixtureEvents?.[0]??'')).toContain('正在等待');
+  expect(embeddingCalls).toBe(0);
+  release();
+  await expect(stale).resolves.toHaveProperty('error',expect.stringContaining('草案已有新修订'));
+  const indexResult=await index;
+  expect(indexResult).toMatchObject({indexed:1});
+  expect(embeddingCalls).toBe(1);
+  expect(events).toEqual(['stale-validation-released','embedding-request']);
+  expect((await get()).history).toEqual([]);
+  // An intentionally absent digest stops at the existing environment check.
+  const revision=updated.revisions[0];
+  const attempted=await nativeInvoke<{id:string}>(page,'start_harness_programming_validation',{
+   ...args,input:{...input,expectedRevision:revision.revision,draftHash:revision.contentHash},
+  });
+  await expect.poll(async()=>(await get()).selected?.status).toBe('failed');
+  const record=(await get()).selected!;
+  expect(record.id).toBe(attempted.id);
+  expect(record.pendingContainers).toEqual([]);
+  expect(record.records).toEqual({});
+  expect(record.error).toBeTruthy();
+  await writeFile(info.outputPath('queue-measurements.json'),JSON.stringify({experimentObservedMs,cancelRoundTripMs,embeddingCalls,events},null,2));
+ }finally{
+  release();
+  await app?.stop();
+  server.closeAllConnections();
+  await new Promise<void>(done=>server.close(()=>done()));
+ }
+});
 
 test('real controls, human approval and immutable published versions stay bound to each draft revision',async({},info)=>{
  test.setTimeout(300000);const ctx=await setup(info);const {app,page,workspaceId,job,start,wait,get}=ctx;

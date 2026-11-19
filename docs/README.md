@@ -1,5 +1,7 @@
 # CortexOS 文档
 
+> 2026-11-17 Phase E 与 Phase F 开发交付，见 [知识检索](phase-e-delivery.md)、[统一本地与云端模型](phase-f-delivery.md)和[迁移兼容性](phase-ef-migrations.md)。
+
 > 2026-11-14 [Harness Fit Lab Phase D 补齐交付](harness-fit-phase-d-completion.md)，包含多文件任务、仓库验证、权限记录、真实两模型对照、历史十题补验和报告导出。
 
 > 2026-11-14 [Harness Fit Lab Phase D 首版](harness-fit-d4-d5.md) 已通过用户验收。交付记录包含三工具真实对照、报告与 3D 回放、JSON/CSV 导出及原计划剩余项。
@@ -43,6 +45,7 @@
 | [架构](architecture.md) | 模块、数据流和代码入口 |
 | [数据库契约](database-schema.md) | 数据不变量与迁移；实际结构以 SQL 为准 |
 | [开发与交互规范](development-standards.md) | 开发约束和验收要求 |
+| [Phase E／F 审计](rag-runtime-audit.md)与[实施计划](rag-runtime-plan.md) | 检索升级、证据追溯及统一本地与云端模型 |
 | [HTML 参考界面规范](design/html-prototype-ui.md) | 当前共享视觉与交互标准，替代早期 V3 |
 | [界面用词规范](design/plain-language.md) | 普通话表达与技术准确性 |
 | [检查方法](test-plan.md) | 专项检查入口及真实模型检查 |

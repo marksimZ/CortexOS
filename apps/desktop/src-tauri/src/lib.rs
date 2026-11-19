@@ -7,21 +7,32 @@ mod execution;
 mod generation;
 mod graph;
 mod graph_query;
+mod http_transport;
 mod knowledge;
+mod knowledge_conflicts;
+mod knowledge_graph_retrieval;
+mod knowledge_scope;
 mod models;
+mod model_runtime;
+mod runtime_profiles;
+mod runtime_usage;
+mod local_runtime;
 mod ollama;
 mod retrieval;
+mod rag;
+mod source_chunks;
 mod sources;
+mod storage;
 mod tasks;
 
 use std::sync::atomic::Ordering;
 use tauri::Manager;
 
 pub fn run() {
-    let context = tauri::generate_context!();
+    #[allow(unused_mut)]
+    let mut context = tauri::generate_context!();
     #[cfg(debug_assertions)]
-    let context = {
-        let mut context = context;
+    {
         if let Some(port) = std::env::var("CORTEXOS_TEST_CDP_PORT")
             .ok()
             .and_then(|value| value.parse::<u16>().ok())
@@ -34,21 +45,82 @@ pub fn run() {
                 ));
             }
         }
-        context
-    };
+    }
+    #[cfg(windows)]
+    let primary_window = context.config_mut().app.windows.iter_mut()
+        .find(|window| window.label == "main" && window.create)
+        .map(|window| {
+            window.create = false;
+            window.clone()
+        });
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
+        .setup(move |app| {
             let mut directory = app.path().app_data_dir()?;
             #[cfg(debug_assertions)]
             if let Ok(value) = std::env::var("CORTEXOS_TEST_DATA_DIR") {
                 directory = std::path::PathBuf::from(value);
             }
-            app.manage(commands::AppState::new(&directory));
+            let state = commands::AppState::new(&directory);
+            #[cfg(windows)]
+            if primary_window.is_some() && state.database.is_ok() {
+                storage::recovery::before_webview(app.handle(), &directory);
+            }
+            app.manage(state);
             app.manage(cloud::CloudState::new());
+            #[cfg(windows)]
+            if let Some(window) = &primary_window {
+                tauri::WebviewWindowBuilder::from_config(app.handle(), window)?.build()?;
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            storage::storage_inventory,
+            storage::cancel_storage_inventory,
+            #[cfg(windows)]
+            storage::recovery::storage_recovery_history,
+            #[cfg(windows)]
+            storage::recovery::storage_recovery_request,
+            runtime_usage::report::model_runtime_usage,
+            runtime_usage::report::model_runtime_resources,
+            cloud::privacy::model_cloud_privacy_rules,
+            runtime_profiles::routing::model_chat_routing,
+            runtime_profiles::routing::chat_runtime_route,
+            runtime_usage::model_runtime_policy,
+            rag::cloud::get_cloud_rag_index,
+            rag::cloud::build_cloud_rag_index,
+            cloud::privacy::list_model_cloud_knowledge,
+            cloud::privacy::set_model_cloud_knowledge,
+            runtime_profiles::list_model_runtime_profiles,
+            runtime_profiles::save_model_runtime_profile,
+            runtime_profiles::activate_model_runtime_profile,
+            runtime_profiles::delete_model_runtime_profile,
+            cloud::runtime_connections::list_runtime_cloud_connections,
+            cloud::runtime_connections::add_runtime_cloud_connection,
+            cloud::runtime_connections::remove_runtime_cloud_connection,
+            cloud::runtime_connections::refresh_runtime_cloud_catalog,
+            cloud::runtime_connections::probe_runtime_cloud_model,
+            cloud::runtime_connections::set_runtime_cloud_model_limits,
+            local_runtime::local_model_preferences,
+            local_runtime::inspect_local_model_runtime,
+            local_runtime::release_local_runtime_model,
+            benchmark::rag_evaluation::get_rag_evaluation,
+            benchmark::rag_evaluation::run_rag_evaluation,
+            benchmark::rag_evaluation::runtime::preview_rag_runtime_experiment,
+            benchmark::rag_evaluation::runtime::run_rag_runtime_experiment,
+            benchmark::rag_evaluation::runtime::cancel_rag_runtime_experiment,
+            benchmark::rag_evaluation::runtime::get_rag_runtime_experiment,
+            benchmark::rag_evaluation::runtime::export_rag_runtime_experiment,
+            rag::rag_index_status,
+            rag::rag_embedding_models,
+            rag::rag_build_index,
+            rag::rag_cancel_index,
+            rag::rag_set_index_options,
+            knowledge_scope::list_knowledge_snapshots,
+            knowledge_scope::capture_knowledge_snapshot,
+            knowledge_scope::list_knowledge_snapshot_members,
+            knowledge_scope::create_knowledge_branch,
+            knowledge_graph_retrieval::get_knowledge_clusters,
             benchmark::harness::workspace::get_harness_workspace,
             benchmark::harness::runtime::get_harness_codex_images,
             benchmark::harness::runtime::aider::get_harness_aider_images,
@@ -165,12 +237,14 @@ pub fn run() {
             commands::check_ollama,
             commands::save_settings,
             commands::get_run,
+            commands::get_chat_run_status,
             commands::list_runs,
             commands::load_execution_graph,
             commands::save_execution_view,
             commands::preview_context,
             commands::set_conversation_retrieval,
             commands::cancel_run,
+            commands::list_context_options,
             commands::list_knowledge,
             commands::get_knowledge,
             commands::save_knowledge,

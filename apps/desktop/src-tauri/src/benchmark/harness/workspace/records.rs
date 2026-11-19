@@ -147,6 +147,9 @@ impl Database {
         if !input.confirmed
             || input.plan_hash != record["planHash"]
             || record["status"] != "ready"
+            || !record["plan"]["expiresAt"]
+                .as_str()
+                .is_some_and(|value| value > now().as_str())
             || input.code.trim().is_empty()
             || input.code.len() > 24000
             || record["plan"]["bundle"]["originalCode"] == input.code

@@ -56,7 +56,7 @@ test('project tasks bind actual sources, preserve revisions and publish isolated
   expect(job.candidates[1].task.case.expected.answers).toEqual(['src/a.py','src/b.py']);
   const first=page.locator('.task-item').first();
   await first.getByText('答案、来源与评分检查',{exact:true}).click();
-  await first.getByRole('button',{name:/development.md · 行/}).click();
+  await first.getByRole('button',{name:/development\.md，第 \d+–\d+ 行/}).click();
   await expect(page.getByRole('dialog',{name:/development.md/})).toBeVisible();
   await expect(page.locator('.fit-source-dialog [data-active=true]')).toContainText(rule.evidence!.excerpt);
   await page.getByRole('button',{name:'关闭任务原文',exact:true}).click();

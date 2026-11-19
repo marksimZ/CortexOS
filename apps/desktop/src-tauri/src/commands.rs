@@ -17,7 +17,11 @@ use tauri::{State, ipc::Channel};
 pub struct AppState {
     pub database: AppResult<Arc<Database>>,
     pub(crate) provider: AppResult<Ollama>,
-    tasks: Arc<crate::tasks::TaskSlot>,
+    pub(crate) runtime_cloud: Arc<tokio::sync::Mutex<()>>,
+    pub(crate) tasks: Arc<crate::tasks::TaskSlot>,
+    pub(crate) storage_scans: Arc<crate::tasks::TaskSlot>,
+    #[cfg(windows)]
+    pub(crate) storage_preview: Arc<Mutex<Option<crate::storage::recovery::PreviewTicket>>>,
     pub closing: Arc<AtomicBool>,
     pub(crate) close_cleanup: Arc<AtomicBool>,
     pending_source: Arc<Mutex<Option<crate::sources::PendingSource>>>,
@@ -29,7 +33,11 @@ impl AppState {
             database: Database::open(directory).map(Arc::new),
             pending_source: Arc::new(Mutex::new(None)),
             provider: Ollama::new(),
+            runtime_cloud: Arc::new(tokio::sync::Mutex::new(())),
             tasks: Arc::new(crate::tasks::TaskSlot::default()),
+            storage_scans: Arc::new(crate::tasks::TaskSlot::default()),
+            #[cfg(windows)]
+            storage_preview: Arc::new(Mutex::new(None)),
             closing: Arc::new(AtomicBool::new(false)),
             close_cleanup: Arc::new(AtomicBool::new(false)),
         }
@@ -37,6 +45,20 @@ impl AppState {
     pub(crate) fn cancel_personalized_task(&self, workspace: &str, id: &str) -> AppResult<()> {
         self.tasks
             .cancel(id, workspace, crate::tasks::TaskKind::Benchmark)
+    }
+    pub(crate) async fn index_lease(&self, workspace: &str, request_id: Option<String>, status: Option<Channel<String>>) -> AppResult<crate::tasks::Lease> {
+        if let Some(id) = request_id {
+            uuid::Uuid::parse_str(&id).map_err(|_| "索引任务编号无效。")?;
+            self.tasks.wait_task(&id, workspace, crate::tasks::TaskKind::RagIndex, &self.closing, |message| {
+                if let Some(channel) = &status { let _ = channel.send(message.to_owned()); }
+            }).await
+        } else {
+            self.claim_task(&new_id(), workspace, crate::tasks::TaskKind::RagIndex)
+        }
+    }
+    pub(crate) fn cancel_rag_index(&self, workspace: &str, id: Option<&str>) -> AppResult<()> {
+        if let Some(id) = id { return self.tasks.cancel(id, workspace, crate::tasks::TaskKind::RagIndex); }
+        self.tasks.cancel_kind(workspace, crate::tasks::TaskKind::RagIndex)
     }
     pub fn has_active(&self) -> bool {
         self.tasks.has_active()
@@ -287,6 +309,17 @@ pub async fn get_run(
 }
 
 #[tauri::command]
+pub async fn get_chat_run_status(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    run_id: String,
+) -> AppResult<String> {
+    blocking(state.database.clone()?, move |db| {
+        db.chat_run_status(&workspace_id, &run_id)
+    }).await
+}
+
+#[tauri::command]
 pub async fn cancel_run(
     state: State<'_, AppState>,
     workspace_id: String,
@@ -304,45 +337,171 @@ pub async fn start_chat(
     conversation_id: String,
     content: String,
     context_selection: Option<Vec<ContextSelection>>,
+    knowledge_scope: Option<crate::knowledge_scope::Request>,
+    use_graph: Option<bool>,
+    cloud_consent: Option<crate::runtime_profiles::CloudConsent>,
+    use_knowledge_route: Option<bool>,
+    on_preparing: Channel<RunPreparing>,
     on_update: Channel<StreamUpdate>,
 ) -> AppResult<RunSummary> {
     let database = state.database.clone()?;
-    let provider = state.provider.clone()?;
+    use crate::runtime_profiles::{ChatRuntime, CloudChat, CloudTargets, Target, ranking};
     let id = new_id();
     let lease = state.claim_task(&id, &workspace_id, crate::tasks::TaskKind::Chat)?;
-    let settings = blocking(database.clone(), |db| db.settings()).await?;
+    let _ = on_preparing.send(RunPreparing { id:id.clone(), workspace_id:workspace_id.clone(), conversation_id:conversation_id.clone() });
+    let (ws, chat) = (workspace_id.clone(),conversation_id.clone());
+    let explicit_context = knowledge_scope.is_some() || use_graph==Some(true)
+        || context_selection.as_ref().is_some_and(|items|!items.is_empty());
+    let (mut settings, decision) = blocking(database.clone(), move |db| {
+        let settings = db.settings()?;
+        let c = db.connection()?;
+        let knowledge = crate::retrieval::enabled(&c,&ws,&chat)? || explicit_context
+            || use_knowledge_route == Some(true);
+        let decision = crate::runtime_profiles::routing::select(&c,&ws,knowledge,&settings)?;
+        Ok((settings,decision))
+    }).await?;
+    let crate::runtime_profiles::routing::Selection { profile:runtime, decision:model_route, local_backup } = decision;
+    let (consent, cloud_guard) = if let Some(profile) = runtime.as_ref().filter(|profile| profile.has_cloud_target()) {
+        let consent = profile.cloud_consent(cloud_consent)?;
+        let guard = state.runtime_cloud.clone().try_lock_owned().map_err(|_| "正在处理另一项云端设置。")?;
+        (Some(consent),Some(guard))
+    } else {
+        if cloud_consent.is_some() { return Err("运行方案已变化，请重新确认发送。".into()); }
+        (None,None)
+    };
+    let workspace = workspace_id.clone();
+    let (runtime, targets) = blocking(database.clone(), move |db| {
+        let targets = CloudTargets::resolve(&db,&workspace,runtime.as_ref())?;
+        Ok((runtime,targets))
+    }).await?;
+    let provider = if let Some(target) = &targets.generation {
+        settings.model = target.model.clone();
+        state.provider.clone().ok()
+    } else {
+        if let Some(Target::Local { model:Some(model) }) = runtime.as_ref().map(|profile| &profile.input.generation) {
+            settings.model = model.clone();
+        }
+        Some(state.provider.clone()?)
+    };
+    crate::db::chat_budget(&settings, content.trim())?;
+    let requested_at = now();
+    let workspace = workspace_id.clone();
+    let conversation = conversation_id.clone();
+    let text = content.trim().to_owned();
+    let scoped = knowledge_scope.is_some();
+    let force_graph = use_graph.unwrap_or_default();
+    let selection = context_selection.unwrap_or_default();
+    let manual = !selection.is_empty();
+    let cloud_lookup = targets.generation.as_ref().map(|_|consent.as_ref().is_some_and(|v|!v.granted_versions.is_empty()));
+    let (route, runtime) = blocking(database.clone(), move |db| {
+        let c = db.connection()?;
+        let enabled = cloud_lookup.unwrap_or(crate::retrieval::enabled(&c, &workspace, &conversation)?);
+        let graph_mode = if cloud_lookup.is_some() {crate::retrieval::GraphMode::Disabled} else {force_graph.into()};
+        let route = crate::retrieval::route(&c,&workspace,&text,enabled,scoped && cloud_lookup.is_none(),graph_mode,manual)?
+            .with_runtime(&c,&workspace,runtime.as_ref())?;
+        Ok((route,runtime))
+    }).await?;
+    let mut cancel = lease.receiver();
+    let timeout = Duration::from_secs(settings.timeout_seconds);
+    let meter = crate::runtime_usage::Meter::new(database.clone(),workspace_id.clone(),id.clone(),"chat");
+    let semantic = if let Some(index) = route.profile.clone() {
+        let question = content.trim().to_owned();
+        let query = async {
+            if let Some(cloud) = &targets.embedding {
+                Some(crate::rag::cloud::query(cloud,index,question,requested_at,timeout,&meter).await)
+            } else if let Some(local) = &provider {
+                Some(crate::rag::query(local,index,question,requested_at,&meter).await)
+            } else { None }
+        };
+        tokio::select! {
+            biased;
+            _ = cancel.wait_for(|v| *v) => return Err("已停止查找，问题尚未发送。".into()),
+            result = query => result,
+        }
+    } else { None };
+    let ranking = if targets.reranking.is_some() && route.searches() {
+        let workspace = workspace_id.clone();
+        let text = content.trim().to_owned();
+        let (inputs, targets, runtime, consent, semantic, knowledge_scope) = blocking(database.clone(), move |db| {
+            let c = db.connection()?;
+            let ranked = targets.reranking.as_ref().unwrap();
+            let allowed = consent.as_ref().map_or(&[][..],|value|&value.ranking_versions);
+            let inputs = if allowed.is_empty() { vec![] } else {
+                let cloud = targets.generation.as_ref().map(|target|CloudChat {
+                    target, share_selection:false, granted_versions:&consent.as_ref().unwrap().granted_versions, public_fixture:false,
+                });
+                let scope = if cloud.is_none() {
+                    knowledge_scope.as_ref().map(|scope|crate::knowledge_scope::resolve(&c,&workspace,scope)).transpose()?
+                } else { None };
+                let context = runtime.as_ref().map(|profile|ChatRuntime {profile,cloud,ranking:None});
+                let report = crate::db::chat_retrieval(&c,&workspace,&text,&route,route.semantic(semantic.as_ref()),scope.as_ref(),context.as_ref())?;
+                ranking::permitted_inputs(&c,&workspace,ranked,&report,allowed)?
+            };
+            Ok((inputs, targets, runtime, consent, semantic, knowledge_scope))
+        }).await?;
+        let result = tokio::select! {
+            biased;
+            _ = cancel.wait_for(|v| *v) => return Err("已停止重排，问题尚未发送给回答模型。".into()),
+            result = ranking::rerank(targets.reranking.as_ref().unwrap(),content.trim(),inputs,timeout,&meter) => result,
+        };
+        (Some(result),targets,runtime,consent,semantic,knowledge_scope)
+    } else {
+        (None,targets,runtime,consent,semantic,knowledge_scope)
+    };
+    let (ranking, targets, runtime, consent, semantic, knowledge_scope) = ranking;
+    if *cancel.borrow() {
+        return Err("已停止准备回答，问题尚未发送给回答模型。".into());
+    }
     let prepare_id = id.clone();
     let model_settings = settings.clone();
-    let prepared = blocking(database.clone(), move |db| {
-        db.prepare_context_run(
+    let (prepared, cloud) = blocking(database.clone(), move |db| {
+        let runtime = runtime.as_ref().map(|profile| ChatRuntime {
+            profile,
+            cloud: targets.generation.as_ref().map(|target| CloudChat {
+                target, share_selection: consent.as_ref().unwrap().share_selection,
+                granted_versions:&consent.as_ref().unwrap().granted_versions, public_fixture:false,
+            }),
+            ranking:ranking.as_ref(),
+        });
+        let prepared = db.prepare_chat_runtime(
             &prepare_id,
             &workspace_id,
             &conversation_id,
             &content,
             &model_settings,
-            &context_selection.unwrap_or_default(),
+            &selection,
             false,
-        )
+            semantic.as_ref(),
+            knowledge_scope.as_ref(),
+            force_graph,
+            runtime.as_ref(),
+            Some(&model_route),
+        )?;
+        Ok((prepared, targets.generation))
     })
     .await?;
     let result = prepared.run.clone();
     tauri::async_runtime::spawn(async move {
-        let outcome = crate::generation::execute(
-            database,
-            provider,
-            prepared,
-            settings,
-            crate::generation::InspectionPolicy::Chat,
-            lease.receiver(),
-            |u| {
-                let _ = on_update.send(u);
-            },
-        )
-        .await;
+        let outcome = crate::generation::execute_chat(database,provider,cloud,prepared,settings,local_backup,
+            lease.receiver(),|u|{let _=on_update.send(u);}).await;
+        drop(cloud_guard);
         drop(lease);
         let _ = on_update.send(outcome.update);
     });
     Ok(result)
+}
+
+#[tauri::command]
+pub async fn list_context_options(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    day: String,
+    after: Option<crate::knowledge::ContextOptionCursor>,
+) -> AppResult<crate::knowledge::ContextOptionsPage> {
+    blocking(state.database.clone()?, move |db| {
+        db.context_options(&workspace_id, &day, after.as_ref())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -370,8 +529,12 @@ pub async fn get_knowledge(
 pub async fn save_knowledge(
     state: State<'_, AppState>,
     input: crate::knowledge::SaveKnowledge,
+    validity: Option<crate::knowledge_scope::Validity>,
 ) -> AppResult<String> {
-    blocking(state.database.clone()?, move |db| db.save_knowledge(input)).await
+    blocking(state.database.clone()?, move |db| match validity {
+        Some(value)=>db.save_version(input,None,Some(value)),
+        None=>db.save_knowledge(input),
+    }).await
 }
 #[tauri::command]
 pub async fn approve_knowledge(
@@ -485,20 +648,53 @@ pub async fn preview_context(
     conversation_id: Option<String>,
     content: String,
     context_selection: Vec<ContextSelection>,
+    knowledge_scope: Option<crate::knowledge_scope::Request>,
+    use_graph: Option<bool>,
 ) -> AppResult<serde_json::Value> {
     blocking(state.database.clone()?, move |db| {
-        let settings = db.settings()?;
-        Ok(db
-            .prepare_context_run(
-                &new_id(),
-                &workspace_id,
-                &conversation_id.unwrap_or_default(),
-                &content,
-                &settings,
-                &context_selection,
-                true,
-            )?
-            .manifest)
+        use crate::runtime_profiles::{ChatRuntime, CloudChat, Target};
+        let mut settings = db.settings()?;
+        let decision = {
+            let c = db.connection()?;
+            let automatic = match conversation_id.as_deref() {
+                Some(id) if !id.is_empty() => crate::retrieval::enabled(&c,&workspace_id,id)?,
+                _ => true,
+            };
+            let knowledge = automatic || !context_selection.is_empty() || knowledge_scope.is_some() || use_graph==Some(true);
+            crate::runtime_profiles::routing::select(&c,&workspace_id,knowledge,&settings)?
+        };
+        let profile = decision.profile;
+        let cloud = match profile.as_ref().map(|item| &item.input.generation) {
+            Some(Target::Local { model: Some(model) }) => {
+                settings.model = model.clone();
+                None
+            }
+            Some(Target::Cloud { connection_id, model }) => {
+                settings.model = model.clone();
+                Some(crate::cloud::runtime_connections::resolve_target(&db, &workspace_id, connection_id, model,
+                    crate::cloud::runtime_connections::Capability::Generation)?)
+            }
+            _ => None,
+        };
+        let runtime = profile.as_ref().map(|profile| ChatRuntime {
+            profile,
+            cloud: cloud.as_ref().map(|target| CloudChat { target, share_selection: true, granted_versions: &[], public_fixture:false }),
+            ranking: None,
+        });
+        Ok(db.prepare_chat_runtime(
+            &new_id(),
+            &workspace_id,
+            &conversation_id.unwrap_or_default(),
+            &content,
+            &settings,
+            &context_selection,
+            true,
+            None,
+            knowledge_scope.as_ref(),
+            use_graph.unwrap_or_default(),
+            runtime.as_ref(),
+            Some(&decision.decision),
+        )?.manifest)
     })
     .await
 }
@@ -710,9 +906,13 @@ pub async fn save_source_knowledge(
     state: State<'_, AppState>,
     input: crate::knowledge::SaveKnowledge,
     source: crate::sources::SourceRef,
+    validity: Option<crate::knowledge_scope::Validity>,
 ) -> AppResult<String> {
     blocking(state.database.clone()?, move |db| {
-        db.save_knowledge_with_evidence(input, Some(source))
+        match validity {
+            Some(value)=>db.save_version(input,Some(source),Some(value)),
+            None=>db.save_knowledge_with_evidence(input, Some(source)),
+        }
     })
     .await
 }

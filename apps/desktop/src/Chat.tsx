@@ -1,5 +1,6 @@
 import { AppDialog, openDialog } from "./components/AppDialog";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { ArrowDown, PanelRight, Pencil } from "lucide-react";
 import { navigate, useNavigation } from "./navigation";
 import { ChatMessage } from "./components/ChatMessage";
@@ -11,6 +12,12 @@ import { useChatScroll } from "./components/useChatScroll";
 import { PaneDivider, splitStyle } from "./components/PaneDivider";
 import { notify } from "./components/Toast";
 import { errorText, preference, remember, type Message, type Studio } from "./studio";
+import { runtimeRoles, type ChatRuntimeRoute, type CloudDisclosure, type CloudDraft, type CloudKnowledgeGrant, type Profile,
+  type RuntimeConnection, type RuntimeRole } from "./runtime-profiles";
+
+const cloudNames: Record<string, string> = {
+  openai: "OpenAI", anthropic: "Anthropic", gemini: "Google Gemini", compatible: "OpenAI 兼容服务",
+};
 
 export function ChatPage({
   studio,
@@ -24,23 +31,74 @@ export function ChatPage({
   const route = useNavigation();
   useEffect(() => {
     if (!route.message || studio.loadingMessages) return;
-    const element = document.getElementById(`message-${route.message}`);
+    const message = document.getElementById(`message-${route.message}`);
+    const element = (route.citation === undefined ? null : message?.querySelector<HTMLElement>(`[data-answer-citation="${route.citation}"]`)) ?? message;
     element?.scrollIntoView({ block: "center" });
     element?.focus({ preventScroll: true });
-  }, [route.message, studio.messages.length, studio.loadingMessages]);
+  }, [route.message, route.citation, studio.messages.length, studio.loadingMessages]);
   const conversation = studio.conversations.find(
     (item) => item.id === studio.conversationId,
   );
-  const currentRunning =
-    studio.activeRun?.conversationId === studio.conversationId;
-  const modelReady = studio.health?.models.some(
-    (model) => model.name === studio.settings.model,
-  );
+  const preparing = studio.preparingRun?.conversationId === studio.conversationId && !studio.activeRun;
+  const currentRunning = preparing || studio.activeRun?.conversationId === studio.conversationId;
+  const knowledgeRoute = studio.autoRetrieval || !!studio.knowledgeScope || !!studio.contextSelection.length || studio.useGraph;
+  const [runtime, setRuntime] = useState<{ workspace: string; knowledgeRoute: boolean; profile?: Profile; localBackup: string | null; disclosure: CloudDisclosure }>();
+  const currentRuntime = runtime?.workspace === studio.workspaceId && runtime.knowledgeRoute === knowledgeRoute ? runtime : undefined;
+  const target = currentRuntime?.profile?.generation;
+  const cloudAnswer = target?.kind === "cloud";
+  const cloudLookup = currentRuntime?.profile?.embedding.kind === "cloud" || currentRuntime?.profile?.reranking.kind === "cloud";
+  const cloudTurn = cloudAnswer || cloudLookup;
+  const modelName = (target?.kind !== "off" ? target?.model : null) ?? studio.settings.model;
+  const modelReady = cloudAnswer
+    ? currentRuntime?.disclosure.generation?.connection.probes.some(item => item.model === modelName && item.capability === "generation" && item.state === "verified")
+    : studio.health?.models.some(model => model.name === modelName || model.name === currentRuntime?.localBackup);
+  const cloudDialog = useRef<HTMLDialogElement>(null);
+  const [cloudDraft, setCloudDraft] = useState<CloudDraft>();
+  const [shareSelection, setShareSelection] = useState(false);
+  const [shareGranted, setShareGranted] = useState(false);
+  const [allowRanking, setAllowRanking] = useState(false);
+  useEffect(() => {
+    const workspace = studio.workspaceId;
+    if (!studio.desktop || !workspace) return;
+    let current = true;
+    void invoke<ChatRuntimeRoute>("chat_runtime_route", { workspaceId: workspace, knowledge: knowledgeRoute }).then(async selected => {
+      if (!current) return;
+      const profile = selected.profile ?? undefined;
+      const disclosure: CloudDisclosure = {};
+      const roles = Object.keys(runtimeRoles) as RuntimeRole[];
+      if (profile && roles.some(role => profile[role].kind === "cloud")) {
+        const rows = await invoke<RuntimeConnection[]>("list_runtime_cloud_connections", { workspaceId: workspace });
+        const grants = new Map<string, Promise<CloudKnowledgeGrant[]>>();
+        await Promise.all(roles.map(async role => {
+          const target = profile[role];
+          if (target.kind !== "cloud") return;
+          const connection = rows.find(item => item.id === target.connectionId);
+          if (!connection) return;
+          let allowed: CloudKnowledgeGrant[] = [];
+          if (role !== "embedding") {
+            if (!grants.has(target.connectionId)) {
+              grants.set(target.connectionId, invoke<{ grants: CloudKnowledgeGrant[] }>(
+                "list_model_cloud_knowledge", { workspaceId: workspace, connectionId: target.connectionId },
+              ).then(result => result.grants.filter(item => item.available)).catch(() => []));
+            }
+            allowed = await grants.get(target.connectionId) ?? [];
+          }
+          disclosure[role] = { connection, grants: allowed };
+        }));
+      }
+      if (current) setRuntime({ workspace, knowledgeRoute, profile, localBackup: selected.localBackup, disclosure });
+    }).catch(() => {});
+    return () => { current = false; };
+  }, [studio.desktop, studio.workspaceId, knowledgeRoute, studio.settings]);
+  useEffect(() => {
+    if (cloudDraft) openDialog(cloudDialog.current);
+  }, [cloudDraft]);
   const canSend =
     studio.desktop &&
     !!studio.workspaceId &&
     !!modelReady &&
     !!studio.draft.trim() &&
+    (cloudAnswer || studio.knowledgeScopeReady) &&
     !studio.activeRun &&
     !studio.sending &&
     !studio.savingRetrieval &&
@@ -74,7 +132,8 @@ export function ChatPage({
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
-  const latestRun = [...studio.messages].reverse().find(message => message.role === "assistant" && message.modelRunId)?.modelRunId ?? null;
+  const latestRun = useMemo(() => [...studio.messages].reverse().find(message => message.role === "assistant" && message.modelRunId)?.modelRunId ?? null, [studio.messages]);
+  const evidenceRun = studio.messages.find(message => message.role === "assistant" && message.id === route.message)?.modelRunId ?? latestRun;
 
   useEffect(() => {
     if (!currentRunning) setCancelling(false);
@@ -85,14 +144,30 @@ export function ChatPage({
     return () => window.clearTimeout(timer);
   }, [copied]);
 
-  const send = (content?: string) => {
+  const send = async (content?: string) => {
+    if (cloudTurn && currentRuntime?.profile && studio.workspaceId) {
+      const question = (content ?? studio.draft).trim();
+      if (question) {
+        setShareSelection(false);
+        setShareGranted(false);
+        setAllowRanking(false);
+        setCloudDraft({
+          question, retry: content !== undefined,
+          workspace: studio.workspaceId, conversation: studio.conversationId,
+          selection: studio.knowledgeScope ? [] : studio.contextSelection,
+          profile: currentRuntime.profile, disclosure: currentRuntime.disclosure,
+          knowledgeRoute,
+        });
+      }
+      return;
+    }
     navigate("chat", {
       workspace: studio.workspaceId,
       conversation: studio.conversationId,
     });
     return studio.send(content);
   };
-  const copy = async (id: string, text: string) => {
+  const copy = useCallback(async (id: string, text: string) => {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(id);
@@ -100,7 +175,16 @@ export function ChatPage({
     } catch {
       studio.reportError("无法自动复制，请选中回答文字后复制。");
     }
-  };
+  }, [studio.reportError]);
+  const retryAction = useRef<(runId: string | null) => void>(() => {});
+  useLayoutEffect(() => {
+    retryAction.current = (runId) => {
+      const question = studio.messages.find((message) => message.role === "user" && message.modelRunId === runId);
+      if (question) void send(question.content);
+    };
+  }, [send, studio.messages]);
+  const retry = useCallback((runId: string | null) => retryAction.current(runId), []);
+  const canRetry = !!modelReady && !studio.activeRun && !studio.sending;
 
   return (
     <div
@@ -176,13 +260,13 @@ export function ChatPage({
                   key={message.id}
                   message={message}
                   located={route.message === message.id}
-                  copied={copied}
+                  copied={copied === message.id}
                   copy={copy}
                   onSaveKnowledge={onSaveKnowledge}
                   setSelectedRun={setSelectedRun}
-                  modelReady={modelReady}
-                  studio={studio}
-                  send={send}
+                  canRetry={canRetry}
+                  reportError={studio.reportError}
+                  retry={retry}
                 />
               ))}
             </div>
@@ -194,7 +278,7 @@ export function ChatPage({
             />
           )}
         </div>
-        {scroll.showJump && (
+        {studio.messages.length > 0 && scroll.showJump && (
           <button
             className="jump-latest button secondary"
             onClick={scroll.jump}
@@ -206,19 +290,86 @@ export function ChatPage({
         <ChatComposer
           studio={studio}
           modelReady={modelReady}
+          modelName={modelName}
+          cloudAnswer={cloudAnswer}
+          cloudLookup={cloudLookup}
           currentRunning={currentRunning}
+          preparing={preparing}
           cancelling={cancelling}
           setCancelling={setCancelling}
           canSend={canSend}
           send={send}
         />
         <p className="sr-only" role="status">
-          {currentRunning ? "本地助手正在生成回答" : "当前没有生成任务"}
+          {preparing ? "正在准备回答" : currentRunning ? "正在生成回答" : "当前没有生成任务"}
           {copied ? "，回答已复制" : ""}
         </p>
       </section>
-      {evidenceOpen && <ChatEvidence studio={studio} overlay={!wide} runId={latestRun} onInspect={() => setSelectedRun(latestRun)} onClose={() => setEvidenceOpen(false)} />}
+      {evidenceOpen && <ChatEvidence studio={studio} overlay={!wide} runId={evidenceRun} onInspect={() => setSelectedRun(evidenceRun)} onClose={() => setEvidenceOpen(false)} />}
       {wide && evidenceOpen && <PaneDivider root={splitRoot} ratio={splitRatio} onChange={setSplitRatio} onCollapse={() => setEvidenceOpen(false)} label="调整回答依据宽度" />}
+      <AppDialog className="form-dialog" ref={cloudDialog} aria-labelledby="cloud-send-title" onClose={() => setCloudDraft(undefined)}>
+        {cloudDraft && <form onSubmit={event => {
+          event.preventDefault();
+          if (cloudDraft.workspace !== studio.workspaceId || cloudDraft.conversation !== studio.conversationId) {
+            cloudDialog.current?.close();
+            studio.reportError("当前会话已变化，请重新确认要发送的内容。");
+            return;
+          }
+          cloudDialog.current?.close();
+          navigate("chat", { workspace: studio.workspaceId, conversation: studio.conversationId });
+          void studio.send(cloudDraft.retry ? cloudDraft.question : undefined, {
+            question: cloudDraft.question,
+            knowledgeRoute: cloudDraft.knowledgeRoute,
+            selection: cloudDraft.profile.generation.kind === "cloud"
+              ? (shareSelection ? cloudDraft.selection : []) : cloudDraft.selection,
+            consent: {
+              profileId: cloudDraft.profile.id, updatedAt: cloudDraft.profile.updatedAt, shareSelection,
+              grantedVersions: shareGranted
+                ? cloudDraft.disclosure.generation?.grants.map(({ nodeId, version }) => ({ nodeId, version })) ?? [] : [],
+              rankingVersions: allowRanking
+                ? cloudDraft.disclosure.reranking?.grants.map(({ nodeId, version }) => ({ nodeId, version })) ?? [] : [],
+            },
+          });
+        }}>
+          <h2 id="cloud-send-title">确认发送到云端</h2>
+          <ul className="cloud-runtime-capabilities">{(Object.keys(runtimeRoles) as RuntimeRole[]).map(role => {
+            const target = cloudDraft.profile[role];
+            if (target.kind !== "cloud") return null;
+            const connection = cloudDraft.disclosure[role]?.connection;
+            return <li key={role}><span><strong>{runtimeRoles[role]}</strong>　{connection && (cloudNames[connection.provider] ?? connection.label)} / {target.model}
+              {connection?.address && <><br />{connection.address}</>}</span></li>;
+          })}</ul>
+          <p>云端回答发送本次问题。向量查找启用且索引可用时发送问题。历史对话留在本机，云端服务可能计费。</p>
+          {cloudDraft.profile.generation.kind === "cloud" && cloudDraft.selection.length > 0 && <label className="retrieval-switch">
+            <input type="checkbox" checked={shareSelection} onChange={event => setShareSelection(event.target.checked)} />
+            同时发送手动选中的 {cloudDraft.selection.length} 条知识
+          </label>}
+          {!!cloudDraft.disclosure.generation?.grants.length && <>
+            <label className="retrieval-switch">
+              <input type="checkbox" checked={shareGranted} onChange={event => setShareGranted(event.target.checked)} />
+              查找并发送此连接已获授权的相关知识
+            </label>
+            <details className="field-help">
+              <summary>可参与查找的 {cloudDraft.disclosure.generation.grants.length} 个知识版本</summary>
+              <ul>{cloudDraft.disclosure.generation.grants.map(grant => <li key={grant.nodeId + "/" + grant.version}>{grant.title}（版本 {grant.version}）</li>)}</ul>
+            </details>
+          </>}
+          {!!cloudDraft.disclosure.reranking?.grants.length && <>
+            <label className="retrieval-switch">
+              <input type="checkbox" checked={allowRanking} onChange={event => setAllowRanking(event.target.checked)} />
+              将问题和授权候选送到重排模型
+            </label>
+            <details className="field-help">
+              <summary>可参与重排的 {cloudDraft.disclosure.reranking.grants.length} 个知识版本</summary>
+              <ul>{cloudDraft.disclosure.reranking.grants.map(grant => <li key={grant.nodeId + "/" + grant.version}>{grant.title}（版本 {grant.version}）</li>)}</ul>
+            </details>
+          </>}
+          <div className="dialog-actions">
+            <button type="button" className="button secondary" onClick={() => cloudDialog.current?.close()}>取消</button>
+            <button className="button primary">确认发送</button>
+          </div>
+        </form>}
+      </AppDialog>
       <AppDialog
         className="form-dialog"
         ref={renameDialog}

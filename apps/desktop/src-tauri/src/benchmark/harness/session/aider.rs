@@ -15,15 +15,14 @@ pub async fn get_harness_aider_session(
     assessment_version: u32,
     job_id: Option<String>,
 ) -> AppResult<Value> {
-    blocking(state.database.clone()?, move |db| {
-        db.session_state(
-            Kind::Aider,
-            &workspace_id,
-            assessment_version,
-            "",
-            job_id.as_deref(),
-        )
-    })
+    read_command(
+        state,
+        workspace_id,
+        assessment_version,
+        String::new(),
+        job_id,
+        Kind::Aider,
+    )
     .await
 }
 #[tauri::command]
@@ -31,6 +30,7 @@ pub async fn start_harness_aider_session(
     state: State<'_, AppState>,
     workspace_id: String,
     input: AiderInput,
+    wait_for_resources: Option<bool>,
 ) -> AppResult<Value> {
     start_command(
         state,
@@ -44,6 +44,7 @@ pub async fn start_harness_aider_session(
             confirmed: input.confirmed,
         },
         Kind::Aider,
+        wait_for_resources,
     )
     .await
 }
@@ -52,6 +53,7 @@ pub async fn cleanup_harness_aider_session(
     state: State<'_, AppState>,
     workspace_id: String,
     job_id: String,
+    only_waiting: Option<bool>,
 ) -> AppResult<Value> {
-    cleanup_command(state, workspace_id, job_id, Kind::Aider).await
+    cleanup_command(state, workspace_id, job_id, Kind::Aider, only_waiting).await
 }

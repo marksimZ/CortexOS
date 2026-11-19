@@ -1,63 +1,60 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
-import { errorText, type ContextManifest, type Studio } from "./studio";
+import { errorText, localDay, type ContextManifest, type Studio } from "./studio";
 import { RetrievalSummary } from "./components/RetrievalSummary";
-import type { KnowledgeNode, KnowledgeDetail } from "./Knowledge";
+import { KnowledgeScopePicker } from "./components/KnowledgeScopePicker";
+import { KnowledgeGraphOptions } from "./components/KnowledgeGraphOptions";
+type ContextCursor = { id: string; updatedAt: string };
+type ContextOption = ContextCursor & {
+  title: string;
+  latestVersion: number;
+  effectiveVersion: number;
+};
+type ContextOptionsPage = { items: ContextOption[]; hasMore: boolean };
 
-export function ContextPicker({ studio }: { studio: Studio }) {
+export function ContextPicker({ studio, cloudAnswer = false }: { studio: Studio; cloudAnswer?: boolean }) {
   const previewGeneration = useRef(0);
-  const [items, setItems] = useState<KnowledgeNode[]>([]);
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<ContextOption[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [listRequest, setListRequest] = useState<{ after: ContextCursor | null }>({ after: null });
+  const loadedRequest = useRef<typeof listRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ContextManifest | null>(null);
   const [busy, setBusy] = useState(false);
-  const [revision, setRevision] = useState(0);
+  const manual = !studio.knowledgeScope;
   useEffect(() => {
+    if (!open || !manual || !studio.workspaceId || !studio.desktop || loadedRequest.current === listRequest) return;
     let current = true;
-    if (!studio.workspaceId || !studio.desktop) return;
-    setError(null);
-    void invoke<KnowledgeNode[]>("list_knowledge", {
+    setListLoading(true);
+    setListError(null);
+    void invoke<ContextOptionsPage>("list_context_options", {
       workspaceId: studio.workspaceId,
+      day: localDay(),
+      after: listRequest.after,
     })
-      .then(async (data) => {
-        const effective = await Promise.all(
-          data
-            .filter((item) => item.effectiveVersion !== null)
-            .map(async (item) => {
-              const detail = await invoke<KnowledgeDetail>("get_knowledge", {
-                workspaceId: studio.workspaceId,
-                nodeId: item.id,
-              });
-              const version = detail.versions.find(
-                (v) => v.version === detail.node.effectiveVersion,
-              )!;
-              return {
-                ...detail.node,
-                sourceAvailable: (detail.sourceEvidence ?? [])
-                  .filter(
-                    (e) => e.knowledgeVersion === detail.node.effectiveVersion,
-                  )
-                  .every((e) => e.enabled),
-                title: version.title,
-                kind: version.kind,
-              };
-            }),
-        );
-        if (current)
-          setItems(
-            effective.filter(
-              (item) =>
-                ["knowledge", "context", "decision"].includes(item.kind) &&
-                item.sourceAvailable,
-            ),
-          );
+      .then((page) => {
+        if (!current) return;
+        loadedRequest.current = listRequest;
+        setItems((previous) => {
+          if (!listRequest.after) return page.items;
+          const incoming = new Set(page.items.map((item) => item.id));
+          return [...previous.filter((item) => !incoming.has(item.id)), ...page.items];
+        });
+        setHasMore(page.hasMore);
       })
       .catch((value) => {
-        if (current) setError(errorText(value));
+        if (current) setListError(errorText(value));
+      })
+      .finally(() => {
+        if (current) setListLoading(false);
       });
     return () => {
       current = false;
     };
-  }, [studio.workspaceId, studio.desktop, revision]);
+  }, [open, manual, studio.workspaceId, studio.desktop, listRequest]);
   useEffect(() => {
     previewGeneration.current++;
     setPreview(null);
@@ -66,11 +63,22 @@ export function ContextPicker({ studio }: { studio: Studio }) {
     studio.contextSelection,
     studio.settings,
     studio.autoRetrieval,
+    studio.knowledgeScope,
+    studio.useGraph,
   ]);
   if (!studio.desktop || !studio.workspaceId) return null;
   return (
-    <details className="context-picker">
-      <summary>手动选择：{studio.contextSelection.length} 项知识</summary>
+    <details className="context-picker" onToggle={(event) => {
+      if (event.target !== event.currentTarget) return;
+      setOpen(event.currentTarget.open);
+    }}>
+      <summary>{studio.knowledgeScope
+        ? studio.knowledgeScope.kind === "branch" ? "在实验分支查找"
+          : studio.knowledgeScope.kind === "snapshot" ? "按知识快照查找" : `按 ${studio.knowledgeScope.date || "事实日期"} 查找`
+        : `手动选择：${studio.contextSelection.length} 项知识`}</summary>
+      <KnowledgeScopePicker studio={studio} />
+      <KnowledgeGraphOptions key={JSON.stringify(studio.knowledgeScope)} studio={studio} />
+      {!studio.knowledgeScope ? <>
       <div className="context-toolbar">
         <span>
           可选择已确认的知识、背景或决定。发送时会保存本次使用的版本。
@@ -78,12 +86,15 @@ export function ContextPicker({ studio }: { studio: Studio }) {
         <button
           type="button"
           className="button text-button"
-          onClick={() => setRevision((x) => x + 1)}
+              disabled={listLoading}
+              onClick={() => setListRequest({ after: null })}
         >
           刷新知识列表
         </button>
       </div>
-      {items.length === 0 && <p>尚无已确认知识。可先在知识页保存并确认。</p>}
+      {listLoading && <p role="status">正在读取知识列表…</p>}
+      {listError && <p role="alert" className="form-error">{listError}</p>}
+      {!listLoading && !listError && items.length === 0 && <p>尚无已确认知识。可先在知识页保存并确认。</p>}
       <div className="context-options">
         {items.map((item) => {
           const selected = studio.contextSelection.find(
@@ -100,7 +111,7 @@ export function ContextPicker({ studio }: { studio: Studio }) {
                     event.target.checked
                       ? [
                           ...studio.contextSelection,
-                          { nodeId: item.id, version: item.effectiveVersion! },
+                          { nodeId: item.id, version: item.effectiveVersion },
                         ]
                       : studio.contextSelection.filter(
                           (x) => x.nodeId !== item.id,
@@ -119,10 +130,20 @@ export function ContextPicker({ studio }: { studio: Studio }) {
           );
         })}
       </div>
+      {hasMore && <button
+        type="button"
+        className="button text-button"
+        disabled={listLoading}
+        onClick={() => {
+          const last = items.at(-1);
+          if (last) setListRequest({ after: { id: last.id, updatedAt: last.updatedAt } });
+        }}
+      >加载更多知识</button>}
+      </> : !!studio.contextSelection.length && <p>切回当前知识后会恢复已手动选择的资料。</p>}
       <button
         type="button"
         className="button secondary"
-        disabled={busy || !studio.draft.trim() || studio.savingRetrieval}
+        disabled={busy || !studio.draft.trim() || studio.savingRetrieval || !studio.knowledgeScopeReady}
         onClick={() => {
           setBusy(true);
           setError(null);
@@ -131,7 +152,9 @@ export function ContextPicker({ studio }: { studio: Studio }) {
             workspaceId: studio.workspaceId,
             conversationId: studio.conversationId,
             content: studio.draft,
-            contextSelection: studio.contextSelection,
+            contextSelection: studio.knowledgeScope ? [] : studio.contextSelection,
+            knowledgeScope: studio.knowledgeScope,
+            useGraph: studio.useGraph,
           })
             .then((value) => {
               if (generation === previewGeneration.current) setPreview(value);
@@ -143,7 +166,7 @@ export function ContextPicker({ studio }: { studio: Studio }) {
             .finally(() => setBusy(false));
         }}
       >
-        {busy ? "正在准备…" : "查看本次会用的资料"}
+        {busy ? "正在准备…" : cloudAnswer ? "查看可发送的所选资料" : "查看本次会用的资料"}
       </button>
       {error && (
         <p role="alert" className="form-error">
@@ -152,12 +175,18 @@ export function ContextPicker({ studio }: { studio: Studio }) {
       )}
       {preview && (
         <div>
+          {preview.knowledgeScope?.kind === "snapshot" && <p>使用快照「{preview.knowledgeScope.name}」。
+            {!!preview.knowledgeScope.unavailableCount && `有 ${preview.knowledgeScope.unavailableCount} 项的来源已停用。`}</p>}
+          {preview.knowledgeScope?.kind === "branch" && <p>使用实验分支「{preview.knowledgeScope.name}」。
+            {!!preview.knowledgeScope.unavailableCount && `有 ${preview.knowledgeScope.unavailableCount} 项的来源已停用。`}</p>}
+          {preview.knowledgeScope?.kind === "factDate" && <p>事实日期 {preview.knowledgeScope.factDate}。
+            {!!preview.knowledgeScope.unknownDateCount && `已跳过 ${preview.knowledgeScope.unknownDateCount} 个日期未记录的知识版本。`}</p>}
           <p>
             预计发送内容用量 {preview.estimatedUnits} / {preview.budgetUnits}
             （按 UTF-8 字节估算，不是模型实际的 Token 数）；包含{" "}
             {preview.messageRefs.length} 条对话消息。
           </p>
-          <RetrievalSummary report={preview.retrieval} />
+          <RetrievalSummary report={preview.retrieval} references={preview.knowledgeRefs} workspaceId={studio.workspaceId} />
           {preview.knowledgeRefs?.map((item) => (
             <details key={item.nodeId}>
               <summary>

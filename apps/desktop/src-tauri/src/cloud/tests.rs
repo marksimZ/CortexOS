@@ -54,6 +54,7 @@ fn setup() -> (CloudState, Arc<MemoryVault>, Arc<MockProvider>) {
         result: Mutex::new(Ok(vec![Model {
             id: "fixture-model".into(),
             generation: "unknown",
+            ..Model::default()
         }])),
         delay: Duration::from_millis(1),
     });
@@ -107,6 +108,7 @@ impl ProviderAdapter for SlowCompletionMock {
             Ok(vec![Model {
                 id: "fixture-model".into(),
                 generation: "unknown",
+                ..Model::default()
             }])
         })
     }
@@ -155,6 +157,7 @@ impl ProviderAdapter for CompletionMock {
             Ok(vec![Model {
                 id: "fixture-model".into(),
                 generation: "unknown",
+                ..Model::default()
             }])
         })
     }
@@ -432,6 +435,7 @@ async fn cloud_cancel_and_delete_do_not_allow_late_unlock() {
         result: Mutex::new(Ok(vec![Model {
             id: "fixture-model".into(),
             generation: "unknown",
+            ..Model::default()
         }])),
         delay: Duration::from_secs(5),
     });
@@ -494,9 +498,13 @@ fn cloud_protocol_parsers_and_error_classification() {
         assert_eq!(models[0].generation, "unknown");
         assert!(provider::parse(provider, &json!({"data":[{"id":"malformed\nmodel"}]})).is_err());
     }
-    let (models,next) = provider::parse(Provider::Gemini,&json!({"models":[{"name":"models/text","supportedGenerationMethods":["generateContent"]},{"name":"models/embed","supportedGenerationMethods":["embedContent"]}],"nextPageToken":"page2"})).unwrap();
-    assert_eq!(models.len(), 1);
+    let (models,next) = provider::parse(Provider::Gemini,&json!({"models":[{"name":"models/text","supportedGenerationMethods":["generateContent"],"inputTokenLimit":2048,"outputTokenLimit":512},{"name":"models/embed","supportedGenerationMethods":["embedContent"]}],"nextPageToken":"page2"})).unwrap();
+    assert_eq!(models.len(), 2);
     assert_eq!(models[0].generation, "listed");
+    assert_eq!(models[0].max_input_tokens, Some(2048));
+    assert_eq!(models[0].max_output_tokens, Some(512));
+    assert_eq!(models[1].generation, "unsupported");
+    assert_eq!(models[1].embedding, "listed");
     assert_eq!(next.as_deref(), Some("page2"));
     assert!(provider::parse(Provider::Anthropic, &json!({"data":[],"has_more":true})).is_err());
     assert_eq!(

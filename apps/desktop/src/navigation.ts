@@ -16,6 +16,7 @@ export function useNavigation() {
       ? (path as PageName)
       : "chat";
     const number = Number(params.get("version"));
+    const citation = params.has("citation") ? Number(params.get("citation")) : -1;
     return {
       page,
       personalized: params.get("view") === "personalized",
@@ -26,6 +27,7 @@ export function useNavigation() {
       node: params.get("node"),
       event: params.get("event"),
       message: params.get("message"),
+      citation: Number.isSafeInteger(citation) && citation >= 0 ? citation : undefined,
       version: Number.isSafeInteger(number) && number > 0 ? number : undefined,
       mode: params.get("mode") === "execution" ? "execution" : "knowledge",
       back: /^(#\/graph\?|#\/chat\?|#\/benchmark\?)/.test(params.get("back") ?? "")

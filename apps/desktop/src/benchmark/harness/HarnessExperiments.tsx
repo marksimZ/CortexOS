@@ -1,3 +1,4 @@
+import { JobRequest, type PendingJob } from './JobRequest';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { X } from 'lucide-react';
@@ -22,7 +23,7 @@ const time = (ms:number|null) => ms==null?'—':`${(ms/1000).toFixed(1)} 秒`;
 interface Option {id:string;hash:string;harness:string;harnessVersion:string;taskKey:string;datasetId:string;datasetVersion:number;function:string|null}
 interface Model {name:string;digest:string|null}
 interface Selection {id:number;runtime:string;model:string}
-interface Listing {history:{id:string;status:string;createdAt:string}[];options:Option[];active:{id:string;assessmentVersion:number}|null;maxRuns:number}
+interface Listing {request?:PendingJob;history:{id:string;status:string;createdAt:string}[];options:Option[];active:{id:string;assessmentVersion:number}|null;maxRuns:number}
 interface Result {
   id:string;taskKey:string;function:string;datasetVersion:number;weight:number;repetition:number;
   harness:string;harnessVersion:string;model:string;digest:string;status:string;error:string|null;failureCategory:string;
@@ -88,6 +89,7 @@ export function HarnessExperiments({workspaceId,assessmentVersion}:{workspaceId:
   const [report,setReport]=useState<Report|null>(null);
   const [selected,setSelected]=useState('');
   const [traceId,setTraceId]=useState('');
+  const [submitting,setSubmitting]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   const [filter,setFilter]=useState('all');
@@ -97,12 +99,12 @@ export function HarnessExperiments({workspaceId,assessmentVersion}:{workspaceId:
   const epoch=useRef(0);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;epoch.current++;};},[]);
 
-  async function load(id?:string, refreshModels=false) {
+  async function load(id?:string, refreshModels=false, followRequest=false) {
     const ticket=++epoch.current;
     const data=await invoke<Listing>('list_harness_experiments',scope);
     if (!alive.current || ticket!==epoch.current) return;
     setListing(data);
-    const current=id??selected;
+    const current=followRequest ? data.history[0]?.id??'' : id??selected;
     const choice=data.history.some(h=>h.id===current)?current:data.history[0]?.id??'';
     setSelected(choice);
     const result=choice?await invoke<Report>('get_harness_experiment',{workspaceId,experimentId:choice}):null;
@@ -121,39 +123,43 @@ export function HarnessExperiments({workspaceId,assessmentVersion}:{workspaceId:
   }
   async function act(operation:()=>Promise<void>) {
     setBusy(true);setError('');
-    try {await operation();} catch(value) {if (alive.current) setError(errorText(value));}
+    try {await operation();} catch(value) {if (alive.current && errorText(value)!=='已取消等待。') setError(errorText(value));}
     finally {if (alive.current) setBusy(false);}
   }
   useEffect(()=>{void act(()=>load(undefined,true));},[]);
   useEffect(()=>{
-    if (!listing?.active || busy) return;
+    if (!submitting && !listing?.request && (!listing?.active || busy)) return;
     let current=true;
     let timer:ReturnType<typeof setTimeout>;
     async function poll() {
-      try {await load(selected);} catch(value) {if (current && alive.current) setError(errorText(value));}
+      try {await load(selected,false,!!listing?.request);} catch(value) {if (current && alive.current) setError(errorText(value));}
       if (current) timer=setTimeout(()=>void poll(),900);
     }
     timer=setTimeout(()=>void poll(),900);
     return()=>{current=false;clearTimeout(timer);};
-  },[listing?.active?.id,selected,busy]);
+  },[listing?.active?.id,listing?.request?.id,selected,busy,submitting]);
 
   const options=listing?.options??[];
   const resolved=selections.map(s=>({option:options.find(o=>o.id===s.runtime),model:models.find(m=>m.name===s.model)}));
   const runCount=selections.length*repetitions;
-  const canStart=!busy&&!listing?.active&&selections.length>=2&&runCount<=(listing?.maxRuns??24)&&resolved.every(({option,model})=>option&&model?.digest);
+  const canStart=!busy&&!submitting&&!listing?.request&&!listing?.active&&selections.length>=2&&runCount<=(listing?.maxRuns??24)&&resolved.every(({option,model})=>option&&model?.digest);
   function update(id:number, patch:Partial<Selection>) {setSelections(items=>items.map(item=>item.id===id?{...item,...patch}:item));}
   function start() {
     if (!canStart) return;
     dialog.current?.close();
+    setSubmitting(true);
     void act(async()=>{
-      const next=await invoke<{id:string}>('start_harness_experiment',{workspaceId,input:{assessmentVersion,repetitions,confirmed:true,selections:resolved.map(({option,model})=>({runtimeId:option!.id,runtimeHash:option!.hash,model:model!.name,digest:model!.digest,weight:weights[option!.taskKey]??1}))}});
-      setTraceId('');await load(next.id);
+      try{
+        const next=await invoke<{id:string}>('start_harness_experiment',{workspaceId,waitForResources:true,input:{assessmentVersion,repetitions,confirmed:true,selections:resolved.map(({option,model})=>({runtimeId:option!.id,runtimeHash:option!.hash,model:model!.name,digest:model!.digest,weight:weights[option!.taskKey]??1}))}});
+        if(alive.current){setTraceId('');await load(next.id);}
+      }finally{if(alive.current)setSubmitting(false);}
     });
   }
   const switchReport=(id:string)=>{setTraceId('');setFilter('all');void act(()=>load(id));};
   return <section className="harness-experiment" aria-label="组合对照实验">
     <div className="fit-section-heading"><h3>模型与编程工具对照</h3><button className="button secondary" disabled={busy} onClick={()=>void act(()=>load(selected,true))}>刷新检查与记录</button></div>
     {error&&<p className="cloud-error" role="alert">{error}</p>}
+    {listing?.request&&<JobRequest key={listing.request.id} job={listing.request} onError={setError} cancel={()=>invoke('stop_harness_experiment',{workspaceId,experimentId:listing.request!.id,onlyWaiting:true})}/>}
     {modelError&&<p className="cloud-error" role="alert">{modelError}</p>}
     <details className="task-setup" open={!listing?.history.length || undefined}>
       <summary>配置实验</summary>

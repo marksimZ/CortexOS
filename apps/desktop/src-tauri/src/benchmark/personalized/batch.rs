@@ -605,6 +605,24 @@ pub fn list_personalized_batches(
             .personalized_batch_history(&workspace_id)
     })
 }
+pub(crate) async fn batch_lease(
+    state: &AppState, workspace: &str, id: &str, hash: &str, standard: bool,
+    status: Option<tauri::ipc::Channel<String>>,
+) -> AppResult<Arc<crate::tasks::Lease>> {
+    let Some(channel) = status else {
+        return state.claim_task(id, workspace, TaskKind::Benchmark).map(Arc::new);
+    };
+    let (w, b, h) = (workspace.to_owned(), id.to_owned(), hash.to_owned());
+    crate::commands::blocking(state.database.clone()?, move |db| {
+        let allowed: bool = db.connection()?.query_row(
+            "SELECT EXISTS(SELECT 1 FROM benchmark_batches WHERE workspace_id=?1 AND id=?2 AND plan_hash=?3 AND (json_extract(plan_json,'$.input.datasetId')='cortex-core-60')=?4 AND status IN ('planned','interrupted','cancelled','failed'))",
+            params![w,b,h,standard], |row| row.get(0)).map_err(error)?;
+        if allowed { Ok(()) } else { Err("计划不属于此工作区、已变更或当前不可启动。".into()) }
+    }).await?;
+    state.tasks.wait_task(id, workspace, TaskKind::Benchmark, &state.closing, |message| {
+        let _ = channel.send(message.to_owned());
+    }).await.map(Arc::new)
+}
 #[tauri::command]
 pub async fn start_personalized_batch(
     state: State<'_, AppState>,
@@ -612,9 +630,12 @@ pub async fn start_personalized_batch(
     workspace_id: String,
     batch_id: String,
     approved_plan_hash: String,
+    status_channel: Option<tauri::ipc::JavaScriptChannelId>,
+    webview: tauri::Webview,
 ) -> AppResult<Value> {
+    if status_channel.is_some() { cloud.guard()?; }
+    let lease = batch_lease(&state, &workspace_id, &batch_id, &approved_plan_hash, false, status_channel.map(|id| id.channel_on(webview))).await?;
     let connection = cloud.guard()?;
-    let lease = Arc::new(state.claim_task(&batch_id, &workspace_id, TaskKind::Benchmark)?);
     let db = state.database.clone()?;
     let plan =
         db.begin_personalized_batch(&workspace_id, &batch_id, &approved_plan_hash, &connection)?;

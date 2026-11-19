@@ -1,5 +1,6 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CloudConsent, ModelRoute } from "./runtime-profiles";
 
 export interface ModelSettings {
   model: string;
@@ -47,6 +48,17 @@ export interface ContextSelection {
   nodeId: string;
   version: number;
 }
+export type KnowledgeScope =
+  | { kind: "snapshot"; snapshotId: string }
+  | { kind: "branch"; snapshotId: string }
+  | { kind: "factDate"; date: string };
+
+export function localDay() {
+  const now = new Date();
+  return [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+    .map((part, index) => String(part).padStart(index === 0 ? 4 : 2, "0"))
+    .join("-");
+}
 export interface KnowledgeReference extends ContextSelection {
   citationId?: string;
   title: string;
@@ -54,10 +66,37 @@ export interface KnowledgeReference extends ContextSelection {
   content: string;
   contentHash: string;
   reason: string;
+  sourceChunk?: { expanded: boolean; matchStartLine: number; matchEndLine: number; sourcePath: string };
+  versionLineage?: VersionLineage;
   sourceEvidence?: Omit<
     import("./SourceBrowser").SourceEvidence,
     "knowledgeVersion"
   >[];
+}
+export interface VersionLineage {
+  replacesVersion: number | null;
+  replacedByVersion: number | null;
+}
+
+interface ConflictSide extends ContextSelection {
+  title: string;
+  citationId: string | null;
+}
+export interface RetrievalGraphNode extends ContextSelection {
+  title: string;
+  source?: { sourceId: string; version: number; name: string; startLine: number; endLine: number };
+}
+export interface KnowledgeClusters {
+  groups: {
+    id: string;
+    name: string;
+    nodeCount: number;
+    edgeCount: number;
+    fileCount: number;
+    relationCounts: Record<string, number>;
+    examples: { node: RetrievalGraphNode; excerpt: string; excerptTruncated: boolean }[];
+  }[];
+  truncated: boolean;
 }
 export interface CitationOccurrence {
   start: number;
@@ -75,6 +114,7 @@ export interface CitationReport {
   occurrences: CitationOccurrence[];
   availableCount: number;
 }
+type RetrievalMethod = "none" | "fts5" | "fts5_rerank" | "hybrid" | "hybrid_rerank" | "version_aware";
 export interface RetrievalReport {
   enabled: boolean;
   status: "disabled" | "no_search_terms" | "no_match" | "matched";
@@ -83,6 +123,52 @@ export interface RetrievalReport {
   candidateLimit?: number;
   candidatesTruncated?: boolean;
   queryTruncated?: boolean;
+  semanticStatus?: "completed" | "unavailable" | "index_changed";
+  semanticNote?: string;
+  embedding?: { model: string; provider?: string; elapsedMicros: number; cloudTransfer?: {
+    status: string; attempted: boolean; inputTokens?: number | null;
+  } };
+  reranker?: string;
+  rerankerTarget?: { provider: string; model: string };
+  cloudRerank?: { status: string; reason?: string; attempted: boolean; appliedCount: number };
+  elapsedMicros?: number;
+  stages?: { kind: string; elapsedMicros: number; available?: boolean }[];
+  sourceChunksUsed?: number;
+  route?: {
+    policyVersion: number;
+    plannedMethod: RetrievalMethod;
+    usedMethod: RetrievalMethod;
+    reason: "conversation_disabled" | "no_searchable_text" | "standalone_greeting" | "version_scope" | "identifier" | "embedding_index" | "no_embedding_index" | "runtime_no_matching_index";
+    graphReason: "user_enabled" | "relationship_question" | null;
+    fallbackReason: "preview" | "unavailable" | "index_changed" | "no_query_vector" | null;
+  };
+  conflicts?: {
+    edgeId: string;
+    edgeVersion: number;
+    recordedIn: "current_graph" | "saved_snapshot";
+    from: ConflictSide;
+    to: ConflictSide;
+  }[];
+  conflictsTruncated?: boolean;
+  graph?: {
+    status: "no_seeds" | "no_paths" | "matched";
+    maxHops: number;
+    truncated: boolean;
+    paths: {
+      nodes: RetrievalGraphNode[];
+      steps: {
+        edgeId: string;
+        edgeVersion: number;
+        recordedIn: "current_graph" | "saved_snapshot";
+        relation: string;
+        from: RetrievalGraphNode;
+        to: RetrievalGraphNode;
+        reversed: boolean;
+      }[];
+      citationId: string | null;
+      crossDocument: boolean;
+    }[];
+  };
   candidates: {
     nodeId: string;
     version: number;
@@ -92,6 +178,15 @@ export interface RetrievalReport {
     included: boolean;
     reason: string;
     costUnits: number;
+    lexicalRank?: number;
+    semanticRank?: number;
+    fusionRank?: number;
+    rerankScore?: number;
+    sourceLocation?: import("./SourceBrowser").SourceRef & {
+      name: string;
+      match: { startLine: number; endLine: number } | null;
+    };
+    recallSource?: "explicit_conflict" | "graph_relation";
   }[];
 }
 export interface ContextManifest {
@@ -106,6 +201,11 @@ export interface ContextManifest {
   retrievalUsed: boolean;
   retrieval?: RetrievalReport;
   knowledgeRefs?: KnowledgeReference[];
+  modelRoute?: ModelRoute;
+  modelFallback?: { primaryModel: string; backupModel: string; reason: string };
+  knowledgeScope?:
+    | { kind: "snapshot" | "branch"; name: string; factDate: string; eligibleCount: number; unavailableCount: number }
+    | { kind: "factDate"; factDate: string; eligibleCount: number; unknownDateCount: number };
 }
 export interface ContextSnapshot {
   request: {
@@ -123,6 +223,7 @@ export interface RunDetail {
   settings: ModelSettings;
   contextManifest: ContextManifest;
   snapshot: ContextSnapshot | null;
+  primarySnapshot?: ContextSnapshot;
   events: { seq: number; kind: string; occurredAt: string; payload: unknown }[];
 }
 export interface Bootstrap {
@@ -132,7 +233,7 @@ export interface Bootstrap {
   activeTask?: {
     id: string;
     workspaceId: string;
-    kind: "chat" | "benchmark";
+    kind: "chat" | "benchmark" | "harness_validation" | "harness_workspace" | "harness_session" | "harness_experiment" | "rag_index" | "local_maintenance";
     executionRunId: string | null;
   } | null;
   dataPath: string;
@@ -198,9 +299,12 @@ export function useStudio() {
   const [storedMessages, setMessages] = useState<Message[]>([]);
   const [updates, setUpdates] = useState<Record<string, StreamUpdate>>({});
   const [activeRun, setActiveRun] = useState<RunSummary | null>(null);
+  const [preparingRun, setPreparingRun] = useState<Pick<RunSummary, "id" | "workspaceId" | "conversationId"> | null>(null);
   const [contexts, setContexts] = useState<Record<string, ContextSelection[]>>(
     {},
   );
+  const [knowledgeScopes, setKnowledgeScopes] = useState<Record<string, KnowledgeScope | null>>({});
+  const [graphLookups, setGraphLookups] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [health, setHealth] = useState<ModelHealth | null>(null);
   const [checking, setChecking] = useState(false);
@@ -219,8 +323,10 @@ export function useStudio() {
   const view = useRef({ workspaceId, conversationId });
   view.current = { workspaceId, conversationId };
   const viewVersion = useRef(0);
+  const messageRequest = useRef(0);
   const pendingSend = useRef(false);
   const finishedRuns = useRef(new Set<string>());
+  const streamedRun = useRef<string | null>(null);
   const channel = useRef<Channel<StreamUpdate> | null>(null);
   const reportError = useCallback(
     (value: unknown) => setError(errorText(value)),
@@ -229,11 +335,16 @@ export function useStudio() {
 
   const refreshMessages = useCallback(
     async (workspace: string, conversation: string) => {
+      if (view.current.workspaceId !== workspace || view.current.conversationId !== conversation) return;
+      const version = viewVersion.current;
+      const request = ++messageRequest.current;
       const messages = await invoke<Message[]>("load_messages", {
         workspaceId: workspace,
         conversationId: conversation,
       });
       if (
+        version === viewVersion.current &&
+        request === messageRequest.current &&
         view.current.workspaceId === workspace &&
         view.current.conversationId === conversation
       ) {
@@ -264,6 +375,7 @@ export function useStudio() {
   const openConversation = useCallback(
     async (workspace: string, conversation: string) => {
       const version = ++viewVersion.current;
+      const request = ++messageRequest.current;
       view.current = { workspaceId: workspace, conversationId: conversation };
       setConversationId(conversation);
       setMessages([]);
@@ -274,7 +386,7 @@ export function useStudio() {
           workspaceId: workspace,
           conversationId: conversation,
         });
-        if (version === viewVersion.current) setMessages(messages);
+        if (version === viewVersion.current && request === messageRequest.current) setMessages(messages);
       } finally {
         if (version === viewVersion.current) setLoadingMessages(false);
       }
@@ -346,29 +458,35 @@ export function useStudio() {
 
   useEffect(() => {
     if (!activeRun) return;
-    let pending = false;
-    const timer = window.setInterval(async () => {
-      if (pending) return;
-      pending = true;
+    const run = activeRun;
+    let current = true;
+    let timer: number;
+    async function poll() {
+      if (!current || finishedRuns.current.has(run.id)) return;
       try {
-        const detail = await invoke<RunDetail>("get_run", {
-          workspaceId: activeRun.workspaceId,
-          runId: activeRun.id,
+        const status = await invoke<string>("get_chat_run_status", {
+          workspaceId: run.workspaceId,
+          runId: run.id,
         });
-        if (detail.run.status !== "running")
-          setActiveRun((current) =>
-            current?.id === activeRun.id ? null : current,
-          );
-        await refreshMessages(activeRun.workspaceId, activeRun.conversationId);
-        if (detail.run.status !== "running")
-          await refreshConversations(activeRun.workspaceId);
+        if (!current || finishedRuns.current.has(run.id)) return;
+        if (status !== "running") {
+          finishedRuns.current.add(run.id);
+          setActiveRun((value) => value?.id === run.id ? null : value);
+          await Promise.all([
+            refreshMessages(run.workspaceId, run.conversationId),
+            refreshConversations(run.workspaceId),
+          ]);
+          return;
+        }
+        if (streamedRun.current !== run.id && view.current.workspaceId === run.workspaceId && view.current.conversationId === run.conversationId)
+          await refreshMessages(run.workspaceId, run.conversationId);
       } catch (value) {
-        reportError(value);
-      } finally {
-        pending = false;
+        if (current) reportError(value);
       }
-    }, 1000);
-    return () => window.clearInterval(timer);
+      if (current && !finishedRuns.current.has(run.id)) timer = window.setTimeout(poll, 1000);
+    }
+    timer = window.setTimeout(poll, 1000);
+    return () => { current = false; window.clearTimeout(timer); };
   }, [activeRun, refreshMessages, refreshConversations, reportError]);
 
   const createWorkspace = async (name: string) => {
@@ -412,6 +530,13 @@ export function useStudio() {
 
   const draftKey = `${workspaceId}:${conversationId ?? "new"}`;
   const contextSelection = contexts[draftKey] ?? emptyContext;
+  const knowledgeScope = knowledgeScopes[draftKey] ?? null;
+  const useGraph = graphLookups[draftKey] ?? false;
+  const setUseGraph = (value: boolean) =>
+    setGraphLookups((previous) => ({ ...previous, [draftKey]: value }));
+  const knowledgeScopeReady = !knowledgeScope || !!(knowledgeScope.kind === "factDate" ? knowledgeScope.date : knowledgeScope.snapshotId);
+  const setKnowledgeScope = (value: KnowledgeScope | null) =>
+    setKnowledgeScopes((previous) => ({ ...previous, [draftKey]: value }));
   const setContextSelection = (items: ContextSelection[]) =>
     setContexts((previous) => ({ ...previous, [draftKey]: items }));
   const draft = drafts[draftKey] ?? "";
@@ -453,6 +578,8 @@ export function useStudio() {
           ...previous,
           [`${workspace}:${conversation}`]: savedSelection,
         }));
+        setKnowledgeScopes((previous) => ({ ...previous, [draftKey]: null, [`${workspace}:${conversation}`]: knowledgeScope }));
+        setGraphLookups((previous) => ({ ...previous, [draftKey]: false, [`${workspace}:${conversation}`]: useGraph }));
       }
       await invoke("set_conversation_retrieval", {
         workspaceId: workspace,
@@ -468,13 +595,14 @@ export function useStudio() {
     }
   };
 
-  const send = async (override?: string) => {
+  const send = async (override?: string, cloud?: { question: string; selection: ContextSelection[]; consent: CloudConsent; knowledgeRoute: boolean }) => {
     const workspace = view.current.workspaceId;
-    const content = (override ?? draft).trim();
-    const selectedContext = contextSelection;
+    const content = (cloud?.question ?? override ?? draft).trim();
+    const selectedContext = cloud?.selection ?? contextSelection;
     if (
       !workspace ||
       !content ||
+      (!cloud && !knowledgeScopeReady) ||
       activeRun ||
       pendingSend.current ||
       savingRetrieval
@@ -484,12 +612,15 @@ export function useStudio() {
     setSending(true);
     setError(null);
     let conversation = view.current.conversationId;
+    let receivingPreparation = true;
     try {
       conversation = conversation ?? (await newConversation()).id;
       setContexts((previous) => ({
         ...previous,
-        [`${workspace}:${conversation}`]: selectedContext,
+        [`${workspace}:${conversation}`]: contextSelection,
       }));
+      setKnowledgeScopes((previous) => ({ ...previous, [`${workspace}:${conversation}`]: knowledgeScope }));
+      setGraphLookups((previous) => ({ ...previous, [`${workspace}:${conversation}`]: useGraph }));
       if (override === undefined)
         setDrafts((current) => ({
           ...current,
@@ -504,23 +635,30 @@ export function useStudio() {
           return { ...previous, [update.messageId]: update };
         });
         if (update.status !== "running") {
+          const alreadyRefreshed = finishedRuns.current.has(update.runId);
           finishedRuns.current.add(update.runId);
           setActiveRun((current) =>
             current?.id === update.runId ? null : current,
           );
           if (update.errorMessage) reportError(update.errorMessage);
-          void refreshMessages(update.workspaceId, update.conversationId).catch(
-            reportError,
-          );
-          void refreshConversations(update.workspaceId).catch(reportError);
+          if (!alreadyRefreshed) {
+            void refreshMessages(update.workspaceId, update.conversationId).catch(reportError);
+            void refreshConversations(update.workspaceId).catch(reportError);
+          }
         }
       };
       const prepareStarted = performance.now();
+      const preparation = new Channel<Pick<RunSummary, "id" | "workspaceId" | "conversationId">>();
+      preparation.onmessage = value => { if (receivingPreparation) setPreparingRun(value); };
       const run = await invoke<RunSummary>("start_chat", {
         workspaceId: workspace,
         conversationId: conversation,
         content,
-        contextSelection: selectedContext,
+        contextSelection: cloud ? selectedContext : knowledgeScope ? [] : selectedContext,
+        ...(cloud ? { cloudConsent: cloud.consent, useKnowledgeRoute: cloud.knowledgeRoute } : {}),
+        knowledgeScope,
+        useGraph,
+        onPreparing: preparation,
         onUpdate: stream,
       });
       if (performance.getEntriesByName("cortex.profile.enabled").length) {
@@ -530,6 +668,7 @@ export function useStudio() {
           end: performance.now(),
         });
       }
+      streamedRun.current = run.id;
       if (!finishedRuns.current.has(run.id)) setActiveRun(run);
       if (override === undefined)
         setDrafts((current) => ({
@@ -537,21 +676,30 @@ export function useStudio() {
           [draftKey]: "",
           [`${workspace}:${conversation}`]: "",
         }));
-      await refreshMessages(workspace, conversation);
-      await refreshConversations(workspace);
+      if (draftKey !== `${workspace}:${conversation}`) {
+        setKnowledgeScopes((previous) => ({ ...previous, [draftKey]: null }));
+        setGraphLookups((previous) => ({ ...previous, [draftKey]: false }));
+      }
+      if (!finishedRuns.current.has(run.id)) {
+        await refreshMessages(workspace, conversation);
+        if (!finishedRuns.current.has(run.id)) await refreshConversations(workspace);
+      }
     } catch (value) {
       reportError(value);
     } finally {
+      receivingPreparation = false;
       pendingSend.current = false;
       setSending(false);
+      setPreparingRun(null);
     }
   };
 
   const cancel = async () => {
-    if (!activeRun) return;
+    const run = activeRun ?? preparingRun;
+    if (!run) return;
     await invoke("cancel_run", {
-      workspaceId: activeRun.workspaceId,
-      runId: activeRun.id,
+      workspaceId: run.workspaceId,
+      runId: run.id,
     });
   };
   const saveSettings = async (next: ModelSettings) => {
@@ -561,7 +709,7 @@ export function useStudio() {
     setSettings(saved);
     setSettingsDraft(saved);
   };
-  const messages = storedMessages.map((message) => {
+  const messages = useMemo(() => storedMessages.map((message) => {
     const update = updates[message.id];
     return update
       ? {
@@ -570,7 +718,7 @@ export function useStudio() {
           status: update.status === "running" ? "streaming" : update.status,
         }
       : message;
-  });
+  }), [storedMessages, updates]);
   const getRun = useCallback(
     (runId: string) =>
       invoke<RunDetail>("get_run", {
@@ -591,10 +739,16 @@ export function useStudio() {
     conversations,
     messages,
     activeRun,
+    preparingRun,
     draft,
     setDraft,
     contextSelection,
     setContextSelection,
+    knowledgeScope,
+    setKnowledgeScope,
+    knowledgeScopeReady,
+    useGraph,
+    setUseGraph,
     autoRetrieval,
     setAutoRetrieval,
     savingRetrieval,

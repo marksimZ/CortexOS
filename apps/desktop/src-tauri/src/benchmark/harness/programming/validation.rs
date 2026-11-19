@@ -252,12 +252,7 @@ impl Database {
         .map_err(error)?;
         Ok(())
     }
-    fn begin_programming_validation(
-        &self,
-        workspace: &str,
-        id: &str,
-        input: &Start,
-    ) -> AppResult<Value> {
+    fn validation_draft(&self, workspace: &str, input: &Start) -> AppResult<Value> {
         if !python::valid_image(&input.image_id) {
             return Err("请选择实际的本地Python镜像。".into());
         }
@@ -266,6 +261,15 @@ impl Database {
         if draft["contentHash"] != input.draft_hash {
             return Err("草案已更新，请重新读取。".into());
         }
+        Ok(draft)
+    }
+    fn begin_programming_validation(
+        &self,
+        workspace: &str,
+        id: &str,
+        input: &Start,
+    ) -> AppResult<Value> {
+        let draft = self.validation_draft(workspace, input)?;
         let mut plan = json!({"purpose":PURPOSE,"rulesVersion":RULES,"draftId":input.draft_id,"revision":input.expected_revision,"draftHash":input.draft_hash,"imageId":input.image_id,"caseHash":draft["body"]["case"]["content_hash"],"sandboxPolicy":python::policy(),"evaluatorVersion":evaluation::ENGINE_VERSION,"taskExecution":"Not Run"});
         plan["codeHashes"] = json!(
             project::variants(&draft["body"])
@@ -278,7 +282,15 @@ impl Database {
         }
         let raw = plan.to_string();
         let c = self.connection()?;
-        c.execute("INSERT INTO benchmark_generation_jobs(id,workspace_id,status,plan_json,plan_hash,created_at) VALUES(?1,?2,'validating',?3,?4,?5)",params![id,workspace,raw,hash(raw.as_bytes()),now()]).map_err(error)?;
+        let inserted = c.execute(
+            "INSERT INTO benchmark_generation_jobs(id,workspace_id,status,plan_json,plan_hash,created_at)
+             SELECT ?1,?2,'validating',?3,?4,?5
+             WHERE ?7=(SELECT MAX(revision) FROM benchmark_generated_cases WHERE job_id=?6 AND case_id=?6)",
+            params![id, workspace, raw, hash(raw.as_bytes()), now(), input.draft_id, input.expected_revision],
+        ).map_err(error)?;
+        if inserted == 0 {
+            return Err("草案已有新修订，请重新读取并验证。".into());
+        }
         Ok(draft["body"].clone())
     }
     fn finish_programming_validation(
@@ -299,7 +311,7 @@ impl Database {
     ) -> AppResult<Value> {
         self.programming_job(workspace, draft)?;
         let c = self.connection()?;
-        let mut q=c.prepare("SELECT id,status,created_at,json_extract(plan_json,'$.revision') FROM benchmark_generation_jobs WHERE workspace_id=?1 AND json_extract(plan_json,'$.purpose')='harness_programming_validation' AND json_extract(plan_json,'$.draftId')=?2 ORDER BY created_at DESC,id DESC LIMIT 50").map_err(error)?;
+        let mut q=c.prepare("SELECT id,status,created_at,json_extract(plan_json,'$.revision') FROM benchmark_generation_jobs WHERE workspace_id=?1 AND json_extract(plan_json,'$.purpose')='harness_programming_validation' AND json_extract(plan_json,'$.draftId')=?2 ORDER BY created_at DESC,rowid DESC LIMIT 50").map_err(error)?;
         let history=q.query_map(params![workspace,draft],|r|Ok(json!({"id":r.get::<_,String>(0)?,"status":r.get::<_,String>(1)?,"createdAt":r.get::<_,String>(2)?,"revision":r.get::<_,u32>(3)?}))).map_err(error)?.collect::<Result<Vec<_>,_>>().map_err(error)?;
         drop(q);
         let mut q=c.prepare("SELECT id,version,content_hash,created_at FROM benchmark_datasets WHERE json_extract(provenance_json,'$.workspaceId')=?1 AND json_extract(provenance_json,'$.purpose')='harness_programming_tasks' AND json_extract(provenance_json,'$.generationJobId')=?2 ORDER BY version DESC LIMIT 100").map_err(error)?;
@@ -443,6 +455,9 @@ fn execute(
     image: &str,
     cancel: watch::Receiver<bool>,
 ) -> AppResult<()> {
+    if *cancel.borrow() {
+        return db.finish_programming_validation(workspace, id, "cancelled", None);
+    }
     let environment = match python::harness_environment(image, Some(&cancel)) {
         Ok(e) => e,
         Err(reason) => {
@@ -517,8 +532,24 @@ pub async fn get_harness_programming_validation(
     draft_id: String,
     validation_id: Option<String>,
 ) -> AppResult<Value> {
+    let tasks = state.tasks.clone();
     blocking(state.database.clone()?, move |db| {
-        db.programming_validation_state(&workspace_id, &draft_id, validation_id.as_deref())
+        let request =
+            tasks.scoped_request(&workspace_id, TaskKind::HarnessValidation, &draft_id)?;
+        let mut response =
+            db.programming_validation_state(&workspace_id, &draft_id, validation_id.as_deref())?;
+        if let Some((id, waiting)) = request {
+            let started = response["history"]
+                .as_array()
+                .is_some_and(|rows| rows.iter().any(|row| row["id"] == id));
+            if started && validation_id.is_none() && response["selected"]["id"] != id {
+                response["selected"] = db.validation_record(&workspace_id, &id)?;
+            } else if !started {
+                response["request"] =
+                    json!({"id":id,"status":if waiting {"waiting"} else {"starting"}});
+            }
+        }
+        Ok(response)
     })
     .await
 }
@@ -527,10 +558,34 @@ pub async fn start_harness_programming_validation(
     state: State<'_, AppState>,
     workspace_id: String,
     input: Start,
+    wait_for_resources: Option<bool>,
 ) -> AppResult<Value> {
     let id = new_id();
-    let lease = state.claim_task(&id, &workspace_id, TaskKind::Benchmark)?;
     let db = state.database.clone()?;
+    let (lease, input) = if wait_for_resources == Some(true) {
+        let scope = workspace_id.clone();
+        let input = blocking(db.clone(), move |db| {
+            db.validation_draft(&scope, &input)?;
+            Ok(input)
+        })
+        .await?;
+        let lease = state
+            .tasks
+            .wait_scoped(
+                &id,
+                &workspace_id,
+                TaskKind::HarnessValidation,
+                &input.draft_id,
+                &state.closing,
+            )
+            .await?;
+        (lease, input)
+    } else {
+        (
+            state.claim_task(&id, &workspace_id, TaskKind::HarnessValidation)?,
+            input,
+        )
+    };
     let scope = workspace_id.clone();
     let task = id.clone();
     let image = input.image_id.clone();
@@ -565,12 +620,22 @@ pub async fn stop_harness_programming_validation(
     state: State<'_, AppState>,
     workspace_id: String,
     validation_id: String,
+    only_waiting: Option<bool>,
 ) -> AppResult<()> {
+    if only_waiting == Some(true) {
+        return state.tasks.cancel_waiting(
+            &validation_id,
+            &workspace_id,
+            TaskKind::HarnessValidation,
+        );
+    }
     let db = state.database.clone()?;
     let scope = workspace_id.clone();
     let task = validation_id.clone();
     blocking(db, move |db| db.validation_record(&scope, &task)).await?;
-    state.cancel_personalized_task(&workspace_id, &validation_id)
+    state
+        .tasks
+        .cancel(&validation_id, &workspace_id, TaskKind::HarnessValidation)
 }
 #[tauri::command]
 pub async fn cleanup_harness_programming_validation(

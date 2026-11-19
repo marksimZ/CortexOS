@@ -1,18 +1,13 @@
 import { benchmarkReturn } from "./benchmark/reportNavigation";
 import { AppDialog, openDialog } from "./components/AppDialog";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { AppShell, pages } from "./components/AppShell";
-import {
-  KnowledgePage,
-  KnowledgeEditor,
-  type EditKnowledge,
-} from "./Knowledge";
+import { lazyView } from "./components/lazyView";
+import type { EditKnowledge } from "./Knowledge";
 import { ChatPage } from "./Chat";
-import { GraphPage, RelationshipEditor, type EditEdge } from "./Graph";
-import { SettingsPage } from "./Settings";
-import { BenchmarkPage } from "./benchmark/BenchmarkPage";
-import { errorText, useStudio } from "./studio";
+import type { EditEdge } from "./Graph";
+import { errorText, useStudio, type Message } from "./studio";
 import { notify } from "./components/Toast";
 import "./styles/tokens.css";
 import "./styles/layout.css";
@@ -21,6 +16,13 @@ import "./styles/features.css";
 import "./styles/motion.css";
 import "./markdown.css";
 import { useNavigation, navigate } from "./navigation";
+
+const KnowledgePage = lazyView(() => import("./Knowledge"), (module) => module.KnowledgePage);
+const KnowledgeEditor = lazyView(() => import("./Knowledge"), (module) => module.KnowledgeEditor);
+const GraphPage = lazyView(() => import("./Graph"), (module) => module.GraphPage);
+const RelationshipEditor = lazyView(() => import("./Graph"), (module) => module.RelationshipEditor);
+const SettingsPage = lazyView(() => import("./Settings"), (module) => module.SettingsPage);
+const BenchmarkPage = lazyView(() => import("./benchmark/BenchmarkPage"), (module) => module.BenchmarkPage);
 
 export default function App() {
   const studio = useStudio();
@@ -33,6 +35,9 @@ export default function App() {
   const [knowledgeEdit, setKnowledgeEdit] = useState<EditKnowledge | null>(
     null,
   );
+  const saveMessageAsKnowledge = useCallback((source: Message, excerpt: string) => {
+    setKnowledgeEdit({ workspaceId: source.workspaceId, source, excerpt });
+  }, []);
   const [knowledgeSelection, setKnowledgeSelection] = useState<{
     workspace: string;
     id: string;
@@ -130,13 +135,7 @@ export default function App() {
           <ChatPage
             studio={studio}
             onCreateWorkspace={openCreateWorkspace}
-            onSaveKnowledge={(source, excerpt) =>
-              setKnowledgeEdit({
-                workspaceId: source.workspaceId,
-                source,
-                excerpt,
-              })
-            }
+            onSaveKnowledge={saveMessageAsKnowledge}
           />
         )}
         {page === "knowledge" && (

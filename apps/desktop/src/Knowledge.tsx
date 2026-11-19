@@ -6,6 +6,7 @@ import {
   type SourceRef,
 } from "./SourceBrowser";
 import { invoke } from "@tauri-apps/api/core";
+import { getKnowledge } from "./knowledge-detail";
 import { notify } from "./components/Toast";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState } from "react";
@@ -21,7 +22,7 @@ import {
   History,
 } from "lucide-react";
 import { navigate, useNavigation } from "./navigation";
-import { errorText, type Message, type Studio } from "./studio";
+import { errorText, type Message, type Studio, type VersionLineage } from "./studio";
 
 export const kinds: Record<string, string> = {
   knowledge: "知识",
@@ -50,6 +51,8 @@ interface Version {
   changeReason: string;
   createdAt: string;
   approvedAt: string | null;
+  validity?: { validFrom: string | null; validTo: string | null };
+  lineage?: VersionLineage;
 }
 export interface KnowledgeDetail {
   node: KnowledgeNode;
@@ -68,8 +71,6 @@ export interface EditKnowledge {
   sourceDocument?: SourceRef;
   sourceName?: string;
 }
-export const getKnowledge = (workspaceId: string, nodeId: string) =>
-  invoke<KnowledgeDetail>("get_knowledge", { workspaceId, nodeId });
 const status = (node: KnowledgeNode) =>
   node.latestVersion === node.effectiveVersion
     ? "已确认"
@@ -489,9 +490,13 @@ export function KnowledgeInspector({
                   <span>{status(detail.node)}</span>
                   <span>
                     {detail.node.effectiveVersion
-                      ? `回答使用 v${detail.node.effectiveVersion}`
+                      ? `当前确认 v${detail.node.effectiveVersion}`
                       : "确认后用于回答"}
                   </span>
+                  {currentVersion.validity?.validFrom && <span>{currentVersion.validity.validFrom} 起生效</span>}
+                  {currentVersion.validity?.validTo && <span>{currentVersion.validity.validTo} 起失效</span>}
+                  {!!currentVersion.lineage?.replacesVersion && <span>接替 v{currentVersion.lineage.replacesVersion}</span>}
+                  {!!currentVersion.lineage?.replacedByVersion && <span>后由 v{currentVersion.lineage.replacedByVersion} 接替</span>}
                 </p>
               </div>
               <div className="knowledge-detail-actions">
@@ -665,7 +670,7 @@ export function KnowledgeInspector({
               <h2 id="approval-title">确认知识版本</h2>
               <p>
                 将“{detail.versions[0].title}”的 v{detail.node.latestVersion}{" "}
-                设为之后回答使用的版本。确认表示你已检查内容，系统没有替你核实事实。
+                设为当前确认版本。回答查找资料时会遵循已填写的生效和失效日期。
               </p>
               <div className="approval-content">
                 {detail.versions[0].content}
@@ -738,6 +743,8 @@ export function KnowledgeEditor({
   const [content, setContent] = useState(
     original?.content ?? request.excerpt ?? "",
   );
+  const [validFrom, setValidFrom] = useState(original?.validity?.validFrom ?? "");
+  const [validTo, setValidTo] = useState(original?.validity?.validTo ?? "");
   const [reason, setReason] = useState(
     original
       ? ""
@@ -764,6 +771,8 @@ export function KnowledgeEditor({
     title !== (original?.title ?? "") ||
     kind !== (original?.kind ?? "knowledge") ||
     content !== (original?.content ?? "") ||
+    validFrom !== (original?.validity?.validFrom ?? "") ||
+    validTo !== (original?.validity?.validTo ?? "") ||
     reason !==
       (original
         ? ""
@@ -817,6 +826,7 @@ export function KnowledgeEditor({
         request.sourceDocument ? "save_source_knowledge" : "save_knowledge",
         {
           ...(request.sourceDocument ? { source: request.sourceDocument } : {}),
+          validity: { validFrom: validFrom || null, validTo: validTo || null },
           input: {
             workspaceId: request.workspaceId,
             nodeId: request.detail?.node.id ?? null,
@@ -941,6 +951,22 @@ export function KnowledgeEditor({
               </p>
             </details>
           )}
+          <details className="knowledge-disclosure">
+            <summary>事实有效日期（选填）</summary>
+            <div className="knowledge-edit-fields">
+              <div className="field">
+                <label htmlFor="knowledge-valid-from">生效日期</label>
+                <input id="knowledge-valid-from" type="date" value={validFrom} readOnly={saving}
+                  onChange={(event) => setValidFrom(event.target.value)} />
+              </div>
+              <div className="field">
+                <label htmlFor="knowledge-valid-to">失效日期</label>
+                <input id="knowledge-valid-to" type="date" value={validTo} readOnly={saving}
+                  onChange={(event) => setValidTo(event.target.value)} />
+              </div>
+            </div>
+            <p>失效日期当天起不再用于查找。留空表示未记录该日期。</p>
+          </details>
           <div className="field">
             <label htmlFor="knowledge-reason">
               {original ? "修改说明" : "记录说明"}
@@ -999,7 +1025,7 @@ export function KnowledgeEditor({
           <footer className="dialog-actions panel-footer">
             <span className="editor-status">
               {request.detail?.node.effectiveVersion
-                ? `保存草稿后，回答仍使用 v${request.detail.node.effectiveVersion}`
+                ? `保存草稿后，当前确认版本仍为 v${request.detail.node.effectiveVersion}`
                 : "保存为待确认草稿"}
             </span>
             <button

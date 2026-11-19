@@ -1,0 +1,37 @@
+{
+  "id": "cortex-rag",
+  "version": 1,
+  "snapshotDate": "2026-06-01",
+  "documents": [
+    { "id": "checkpoint", "title": "恢复手册", "versions": [{ "from": "2025-01-01", "text": "使用离线快照重建服务。" }] },
+    { "id": "deploy", "title": "Deployment 发布规程", "versions": [{ "from": "2025-01-01", "text": "Deployment 发布需要双人复核。" }] },
+    { "id": "review", "title": "上线审批", "versions": [{ "from": "2025-01-01", "text": "上线审批由系统管理员签字。" }] },
+    { "id": "window", "title": "上线窗口", "versions": [{ "from": "2025-01-01", "text": "上线窗口为周四 22 点。" }] },
+    { "id": "retention", "title": "日志保留期限", "versions": [
+      { "from": "2025-01-01", "until": "2026-03-01", "text": "日志保留 30 天。" },
+      { "from": "2026-03-01", "text": "日志保留 90 天。" }
+    ] },
+    { "id": "retired", "title": "废止的无线密码", "versions": [{ "from": "2025-01-01", "until": "2026-03-01", "text": "旧无线 PIN 为 1234。" }] },
+    { "id": "meeting-east", "title": "会议地点行政通知", "versions": [{ "from": "2025-01-01", "text": "会议地点为东楼。" }] },
+    { "id": "meeting-west", "title": "会议地点组织通知", "versions": [{ "from": "2025-01-01", "text": "会议地点为西楼。" }] },
+    { "id": "entrance", "title": "ZX-47 接入端点", "versions": [{ "from": "2025-01-01", "text": "ZX-47 接入要先检查专线。" }] },
+    { "id": "fiber", "title": "厂区光纤编号", "versions": [{ "from": "2025-01-01", "text": "厂区使用 A 号光纤。" }] },
+    { "id": "handoff", "title": "机房维护分工", "versions": [{ "from": "2025-01-01", "text": "机房值班组负责光纤巡检。" }] }
+  ],
+  "relations": [
+    { "from": "meeting-east", "to": "meeting-west", "kind": "contradicts" },
+    { "from": "entrance", "to": "fiber", "kind": "depends_on" },
+    { "from": "fiber", "to": "handoff", "kind": "depends_on" }
+  ],
+  "cases": [
+    { "id": "RAG-01", "kind": "精确事实", "question": "日志保留期限是多少天？", "gold": [["retention",2]], "semanticHints": ["retention"], "replay": { "claims": [["日志保留 90 天。",1]] } },
+    { "id": "RAG-02", "kind": "模糊语义", "question": "How do we recover from catastrophic data loss?", "gold": [["checkpoint",1]], "semanticHints": ["checkpoint"], "replay": { "claims": [["使用离线快照重建服务。",1]] } },
+    { "id": "RAG-03", "kind": "中英混合", "question": "Deployment 发布要几个人复核？", "gold": [["deploy",1]], "semanticHints": ["deploy"], "replay": { "claims": [["Deployment 发布需要双人复核。",1]] } },
+    { "id": "RAG-04", "kind": "多文档证据", "question": "上线审批由谁签字？上线窗口是什么时候？", "gold": [["review",1],["window",1]], "semanticHints": ["review","window"], "replay": { "claims": [["上线审批由系统管理员签字。",1],["上线窗口为周四 22 点。",2]] } },
+    { "id": "RAG-05", "kind": "版本变更", "question": "2026 年 2 月执行的日志保留期限是多少天？", "factDate": "2026-02-15", "gold": [["retention",1]], "semanticHints": ["retention"], "replay": { "claims": [["日志保留 30 天。",1]] } },
+    { "id": "RAG-06", "kind": "过期知识", "question": "如今还能依据旧无线 PIN 开通吗？", "gold": [], "semanticHints": [], "replay": { "abstained": true, "claims": [] } },
+    { "id": "RAG-07", "kind": "冲突知识", "question": "两个会议地点通知各自写了哪里？", "gold": [["meeting-east",1],["meeting-west",1]], "semanticHints": [], "conflict": true, "replay": { "conflictDetected": true, "claims": [["会议地点为东楼。",1],["会议地点为西楼。",2]] } },
+    { "id": "RAG-08", "kind": "无答案", "question": "冥王星近日点是多少？", "gold": [], "semanticHints": [], "replay": { "abstained": true, "claims": [] } },
+    { "id": "RAG-09", "kind": "跨文件关系", "question": "ZX-47 接入端点用什么资源，由哪个团队处理？", "gold": [["entrance",1],["fiber",1],["handoff",1]], "semanticHints": ["entrance"], "replay": { "claims": [["ZX-47 接入要先检查专线。",1],["厂区使用 A 号光纤。",2],["机房值班组负责光纤巡检。",3]] } }
+  ]
+}

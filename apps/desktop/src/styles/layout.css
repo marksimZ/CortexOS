@@ -114,8 +114,19 @@ p,li,dd { text-wrap: pretty; overflow-wrap: anywhere; }
 .context-picker[open] { flex-basis: 100%; background: var(--surface-subtle); padding: 12px; border-radius: 12px; max-height: min(300px,40dvh); overflow: auto; }
 .context-picker label { display: flex; align-items: start; gap: 8px; margin: 8px 0; }
 .context-picker .context-title { flex: 1; }
+.knowledge-scope { margin-block: 12px; }
+.knowledge-scope .select-field { width: min(100%, 22rem); }
+.knowledge-scope input { max-width: 100%; }
+.knowledge-scope-actions { margin-block: 8px; }
+.knowledge-branch-replacements { padding-inline-start: 18px; overflow-wrap: anywhere; }
+.knowledge-branch-replacements .button { margin-inline-start: 6px; }
+.retrieval-summary .knowledge-graph-paths { padding-inline-start: 18px; }
+.retrieval-summary .knowledge-graph-paths > li { display: block; overflow-wrap: anywhere; }
+.knowledge-graph-paths > li > div:first-child { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.knowledge-graph-steps p { margin: 4px 0; }
 .context-content { white-space: pre-wrap; overflow-wrap: anywhere; }
 .jump-latest { position: absolute; z-index: 4; bottom: 190px; left: 50%; transform: translateX(-50%); box-shadow: var(--shadow); }
+.chat-main:has(.context-picker[open]) .jump-latest { display: none; }
 .chat-evidence { margin-top: 0; padding: 18px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; min-height: 0;  }
 .main-content:has(> .error-banner) .chat-evidence { margin-top: 0; }
 .evidence-heading { display: flex; align-items: center; justify-content: space-between; }

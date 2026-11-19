@@ -192,6 +192,7 @@ test("native chat preserves real SQLite data through cancellation, errors and re
       "model_inspection_completed",
       "model_request_started",
       "model_response_received",
+      "local_model_usage",
       "citations_checked",
       "run_cancelled",
     ]);
@@ -262,7 +263,7 @@ test("native chat preserves real SQLite data through cancellation, errors and re
     ).toContainText("已经生成的部分内容");
     const closingRun = (await nativeInvoke<Bootstrap>(page, "bootstrap"))
       .activeRun!;
-    await application.closeWindow();
+    await application.closeFromUi();
     await application.stop();
     application = await launchNative(testInfo, { endpoint });
     page = application.page;

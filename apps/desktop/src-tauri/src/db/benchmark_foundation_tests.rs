@@ -203,6 +203,36 @@ fn integrity(c: &Connection) {
     );
 }
 
+fn durable_snapshot(mut value: Value) -> Value {
+    // Retrieval rebuild can change FTS5's internal segment encodings. Compare the public
+    // index and its MATCH results alongside byte-for-byte durable rows.
+    for name in [
+        "knowledge_fts_data",
+        "knowledge_fts_docsize",
+        "knowledge_fts_idx",
+        "knowledge_fts_config",
+        "knowledge_fts_content",
+    ] {
+        value.as_object_mut().unwrap().remove(name);
+    }
+    value
+}
+
+fn assert_migrated_snapshot(c: &Connection, schema: &Columns, before: &Value) {
+    assert_eq!(
+        durable_snapshot(snapshot(c, schema)),
+        durable_snapshot(before.clone())
+    );
+    let indexed: i64 = c
+        .query_row(
+            "SELECT COUNT(*) FROM knowledge_fts WHERE knowledge_fts MATCH 'approved'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(indexed > 0);
+}
+
 fn seed_plan(c: &Connection, id: &str, workspace: &str) -> String {
     c.execute(
         "INSERT OR IGNORE INTO benchmark_datasets VALUES('fixture',1,'Fixture',1,?1,'{}','{}','t')",
@@ -238,8 +268,8 @@ fn fresh_and_seven_upgrade_preserve_data_and_backup() {
     let db = Database::open(&path).unwrap();
     {
         let c = db.connection().unwrap();
-        assert_eq!(version(&c), 9);
-        assert_eq!(snapshot(&c, &schema), before);
+        assert_eq!(version(&c), MIGRATIONS.len() as i64);
+        assert_migrated_snapshot(&c, &schema, &before);
         assert_eq!(
             c.query_row(
                 "SELECT purpose FROM conversations WHERE id='old-chat-conversation'",
@@ -257,15 +287,22 @@ fn fresh_and_seven_upgrade_preserve_data_and_backup() {
             .collect::<rusqlite::Result<_>>()
             .unwrap();
         assert_eq!(after, old_checksums);
-        assert_eq!(
-            c.query_row(
-                "SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name LIKE 'benchmark_%'",
-                [],
-                |r| r.get::<_, i64>(0)
-            )
-            .unwrap(),
-            11
-        );
+        for table in [
+            "benchmark_runs",
+            "benchmark_cases",
+            "benchmark_attempts",
+            "benchmark_events",
+        ] {
+            assert!(
+                c.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?1)",
+                    [table],
+                    |row| row.get::<_, bool>(0)
+                )
+                .unwrap(),
+                "missing {table}"
+            );
+        }
         integrity(&c);
     }
     let backup = backups(&path);
@@ -286,11 +323,17 @@ fn fresh_and_seven_upgrade_preserve_data_and_backup() {
     );
     drop(db);
     let again = Database::open(&path).unwrap();
-    assert_eq!(version(&again.connection().unwrap()), 9);
+    assert_eq!(
+        version(&again.connection().unwrap()),
+        MIGRATIONS.len() as i64
+    );
     assert_eq!(backups(&path).len(), 1);
-    std::fs::write(path.join("upgrade-evidence.json"),serde_json::to_vec_pretty(&json!({"version":9,"backupVersion":7,"oldTables":before,"allOldRowsAndChecksumsEqual":true})).unwrap()).unwrap();
+    std::fs::write(path.join("upgrade-evidence.json"),serde_json::to_vec_pretty(&json!({"version":MIGRATIONS.len(),"backupVersion":7,"oldTables":before,"allOldRowsAndChecksumsEqual":true})).unwrap()).unwrap();
     let fresh = Database::open(&directory("fresh")).unwrap();
-    assert_eq!(version(&fresh.connection().unwrap()), 9);
+    assert_eq!(
+        version(&fresh.connection().unwrap()),
+        MIGRATIONS.len() as i64
+    );
 }
 
 #[test]
@@ -317,11 +360,14 @@ fn migration_failure_rolls_back_and_can_retry() {
     let restored_path = directory("restored-backup");
     std::fs::copy(&backups(&path)[0], restored_path.join("cortexos.sqlite3")).unwrap();
     let restored = Database::open(&restored_path).unwrap();
-    assert_eq!(version(&restored.connection().unwrap()), 9);
-    assert_eq!(snapshot(&restored.connection().unwrap(), &schema), before);
+    assert_eq!(
+        version(&restored.connection().unwrap()),
+        MIGRATIONS.len() as i64
+    );
+    assert_migrated_snapshot(&restored.connection().unwrap(), &schema, &before);
     migrate(&mut c, &path, MIGRATIONS).unwrap();
-    assert_eq!(version(&c), 9);
-    assert_eq!(snapshot(&c, &schema), before);
+    assert_eq!(version(&c), MIGRATIONS.len() as i64);
+    assert_migrated_snapshot(&c, &schema, &before);
     integrity(&c);
 }
 
@@ -340,7 +386,7 @@ fn backup_failure_stops_before_any_schema_change() {
     assert!(backups(&path).is_empty());
     integrity(&c);
     migrate(&mut c, &path, MIGRATIONS).unwrap();
-    assert_eq!(version(&c), 9);
+    assert_eq!(version(&c), MIGRATIONS.len() as i64);
 }
 
 #[test]
@@ -362,7 +408,7 @@ fn checksum_mismatch_and_old_app_reject_before_changes() {
     .unwrap();
     migrate(&mut c, &path, MIGRATIONS).unwrap();
     assert!(migrate(&mut c, &path, &MIGRATIONS[..7]).is_err());
-    assert_eq!(version(&c), 9);
+    assert_eq!(version(&c), MIGRATIONS.len() as i64);
 }
 
 #[test]

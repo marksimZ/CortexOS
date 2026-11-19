@@ -25,23 +25,77 @@ function Results({record,examples}:{record:Validation;examples:ProgrammingExampl
 export function ProgrammingValidation({workspaceId,draftId,revision,dirty,disabled,onRunning,onSource}:{workspaceId:string;draftId:string;revision:ProgrammingRevision;dirty:boolean;disabled:boolean;onRunning:(running:boolean)=>void;onSource:(e:Evidence)=>void}){
  const [data,setData]=useState<ValidationPayload|null>(null),[images,setImages]=useState<{imageId:string;tag:string;pythonVersion:string}[]>([]),[image,setImage]=useState('');
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[approved,setApproved]=useState(false),[reviewer,setReviewer]=useState(''),[published,setPublished]=useState<ProgrammingPublished|null>(null);
+ const [submitting,setSubmitting]=useState(false),[cancellingWait,setCancellingWait]=useState(false);
  const active=useRef(true),selected=useRef<string|null>(null),epoch=useRef(0),errorRef=useRef<HTMLDivElement>(null),confirmDialog=useRef<HTMLDialogElement>(null),publishedDialog=useRef<HTMLDialogElement>(null);
  const act=async(fn:()=>Promise<void>)=>{setBusy(true);setError('');try{await fn();}catch(e){if(active.current){setError(errorText(e));setTimeout(()=>errorRef.current?.focus(),0);}}finally{if(active.current)setBusy(false);}};
- const read=async(id:string|null=selected.current)=>{const ticket=++epoch.current;const next=await invoke<ValidationPayload>('get_harness_programming_validation',{workspaceId,draftId,validationId:id});if(active.current&&ticket===epoch.current){setData(next);selected.current=next.selected?.id??null;onRunning(next.selected?.status==='validating');}};
+ const read=async(id:string|null=selected.current)=>{
+  const ticket=++epoch.current;
+  const next=await invoke<ValidationPayload>('get_harness_programming_validation',{workspaceId,draftId,validationId:id});
+  if(active.current&&ticket===epoch.current){setData(next);selected.current=next.selected?.id??null;}
+ };
  useEffect(()=>{active.current=true;selected.current=null;setApproved(false);void act(()=>read(null));return()=>{active.current=false;epoch.current++;onRunning(false);};},[workspaceId,draftId,revision.revision]);
  const record=data?.selected,running=record?.status==='validating',matches=record?.plan.revision===revision.revision&&record.plan.draftHash===revision.contentHash;
- useEffect(()=>{if(!running)return;let cancelled=false,timer:number;const tick=async()=>{try{await read();}catch(e){if(active.current)setError(errorText(e));}if(!cancelled)timer=window.setTimeout(()=>void tick(),1000);};timer=window.setTimeout(()=>void tick(),1000);return()=>{cancelled=true;window.clearTimeout(timer);};},[running,workspaceId,draftId]);
+ const request=data?.request,starting=Boolean(request)||submitting;
+ useEffect(()=>onRunning(Boolean(running||starting)),[onRunning,running,starting]);
+ useEffect(()=>{
+  if(!running&&!starting)return;
+  let cancelled=false,timer:number;
+  const tick=async()=>{
+   try{await read(starting?null:selected.current);}
+   catch(e){if(!cancelled&&active.current)setError(errorText(e));}
+   if(!cancelled)timer=window.setTimeout(()=>void tick(),1000);
+  };
+  timer=window.setTimeout(()=>void tick(),1000);
+  return()=>{cancelled=true;window.clearTimeout(timer);};
+ },[running,starting,workspaceId,draftId]);
  useEffect(()=>setApproved(false),[record?.id,record?.contentHash,revision.contentHash,dirty]);
  const discover=()=>act(async()=>{const result=await invoke<{images:typeof images}>('get_harness_python_environment');if(active.current){setImages(result.images);setImage(old=>result.images.some(i=>i.imageId===old)?old:result.images[0]?.imageId??'');if(!result.images.length)setError('未找到已安装的官方Python 3.13镜像。请先准备镜像；这里不会自动下载。');}});
- const start=()=>act(async()=>{confirmDialog.current?.close();const result=await invoke<{id:string}>('start_harness_programming_validation',{workspaceId,input:{draftId,expectedRevision:revision.revision,draftHash:revision.contentHash,imageId:image}});if(active.current){selected.current=result.id;setApproved(false);await read(result.id);}});
+ const start=async()=>{
+  confirmDialog.current?.close();
+  setSubmitting(true);
+  setError('');
+  try{
+   const result=await invoke<{id:string}>('start_harness_programming_validation',{
+    workspaceId,waitForResources:true,
+    input:{draftId,expectedRevision:revision.revision,draftHash:revision.contentHash,imageId:image},
+   });
+   if(active.current){selected.current=result.id;setApproved(false);await read(result.id);}
+  }catch(e){
+   if(active.current){
+    if(errorText(e)!=='已取消等待。')setError(errorText(e));
+    try{await read(null);}catch(readError){if(active.current)setError(errorText(readError));}
+   }
+  }finally{if(active.current)setSubmitting(false);}
+ };
+ const cancelWait=async()=>{
+  if(request?.status!=='waiting')return;
+  setCancellingWait(true);
+  setError('');
+  try{
+   await invoke('stop_harness_programming_validation',{workspaceId,validationId:request.id,onlyWaiting:true});
+   if(active.current)await read(null);
+  }catch(e){if(active.current)setError(errorText(e));}
+  finally{if(active.current)setCancellingWait(false);}
+ };
  const maximum=data?.published[0]?.version??0;
+ const passed=record?.publishable&&matches&&!dirty;
+ const status=request?.status==='waiting'?'正在等待运行资源'
+  :starting&&!running?'正在启动验证'
+  :dirty?'当前修改尚未保存'
+  :!record||!matches?'当前修订未验证'
+  :passed?'三组对照通过'
+  :record.status==='completed'?'对照未通过':states[record.status]??record.status;
  return <section className="programming-validation" aria-label="编程任务验证与发布">
-  <div className="fit-section-heading"><h3>验证与发布</h3><span role="status"><FitStatus tone={record?.publishable&&matches&&!dirty?'success':'attention'}>{dirty?'当前修改尚未保存':!record||!matches?'当前修订未验证':record.publishable?'三组对照通过':record.status==='completed'?'对照未通过':states[record.status]??record.status}</FitStatus></span></div>
+  <div className="fit-section-heading"><h3>验证与发布</h3><span role="status"><FitStatus tone={starting||running?'neutral':passed?'success':'attention'}>{status}</FitStatus></span></div>
   {error&&<div className="cloud-error" role="alert" tabIndex={-1} ref={errorRef}><p>{error}</p><button className="button secondary" disabled={busy} onClick={()=>void act(()=>read())}>重新读取验证记录</button></div>}
   {busy&&<p role="status">正在处理本地验证数据…</p>}
-  <div className="cloud-actions"><button className="button secondary" disabled={busy||disabled||running} onClick={()=>void discover()}>读取本机Python镜像</button>{images.length>0&&<label>验证镜像<SelectMenu aria-label="Python验证镜像" disabled={busy||disabled||running} value={image} onChange={e=>setImage(e.target.value)}>{images.map(i=><option value={i.imageId} key={i.imageId}>Python {i.pythonVersion} / {i.tag}</option>)}</SelectMenu></label>}<button className="button primary" disabled={busy||disabled||dirty||running||!image||!!record?.pendingContainers.length} onClick={()=>openDialog(confirmDialog.current)}>开始容器验证</button>{running&&<button className="button secondary" disabled={busy} onClick={()=>void act(async()=>{await invoke('stop_harness_programming_validation',{workspaceId,validationId:record.id});notify('已请求停止，正在清理本次容器');})}>停止验证</button>}</div>
+  <div className="cloud-actions"><button className="button secondary" disabled={busy||disabled||running||starting} onClick={()=>void discover()}>读取本机Python镜像</button>{images.length>0&&<label>验证镜像<SelectMenu aria-label="Python验证镜像" disabled={busy||disabled||running||starting} value={image} onChange={e=>setImage(e.target.value)}>{images.map(i=><option value={i.imageId} key={i.imageId}>Python {i.pythonVersion} / {i.tag}</option>)}</SelectMenu></label>}
+   <button className="button primary" disabled={busy||disabled||dirty||running||starting||!image||!!record?.pendingContainers.length} onClick={()=>openDialog(confirmDialog.current)}>开始容器验证</button>
+   {request?.status==='waiting'&&<button className="button secondary" disabled={cancellingWait} onClick={()=>void cancelWait()}>{cancellingWait?'正在取消…':'取消等待'}</button>}
+   {running&&<button className="button secondary" disabled={busy} onClick={()=>void act(async()=>{await invoke('stop_harness_programming_validation',{workspaceId,validationId:record.id});notify('已请求停止，正在清理本次容器');})}>停止验证</button>}
+  </div>
   <details className="personal-details"><summary>验证内容与发布条件</summary><p>在固定本地镜像中依次执行三份保存的实现，不调用模型。每份最多60秒，每条用例最多5秒；无网络、无宿主目录和Docker Socket挂载。</p><p>参考实现须全部通过；原代码须有目标用例失败且回归用例通过；错误实现须至少有一条正常返回但未通过的用例。语法错误、超时或环境问题本身不能作为有效错误对照。发布后仍未运行任何Harness。</p></details>
-  {data&&data.history.length>0&&<label className="profile-field">验证历史<SelectMenu aria-label="编程验证历史" value={record?.id??''} disabled={busy||running} onChange={e=>{if(e.target.value){setApproved(false);void act(()=>read(e.target.value));}}}>{data.history.map(h=><option value={h.id} key={h.id}>修订 {h.revision} / {states[h.status]??h.status} / {new Date(h.createdAt).toLocaleString()}</option>)}</SelectMenu></label>}
+  {data&&data.history.length>0&&<label className="profile-field">验证历史<SelectMenu aria-label="编程验证历史" value={record?.id??''} disabled={busy||running||starting} onChange={e=>{if(e.target.value){setApproved(false);void act(()=>read(e.target.value));}}}>{data.history.map(h=><option value={h.id} key={h.id}>修订 {h.revision} / {states[h.status]??h.status} / {new Date(h.createdAt).toLocaleString()}</option>)}</SelectMenu></label>}
   {record&&<>
    {!matches&&<p>这份验证属于草案修订 {record.plan.revision}，不能用于发布当前修订。</p>}
    {record.error&&<><p role="status">{record.status==='interrupted'?'上次验证中断，已完成结果保留，不会自动重跑。':errors[record.error]??(/\p{Script=Han}/u.test(record.error)?record.error:'本次验证未完成，请查看错误详情。')}</p><details><summary>错误详情</summary><pre>{record.error}</pre></details></>}

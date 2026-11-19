@@ -29,6 +29,20 @@ pub struct KnowledgeVersion {
     pub change_reason: String,
     pub created_at: String,
     pub approved_at: Option<String>,
+    pub validity: crate::knowledge_scope::Validity,
+    pub lineage: VersionLineage,
+}
+#[derive(Default, Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionLineage {
+    pub replaces_version: Option<i64>,
+    pub replaced_by_version: Option<i64>,
+}
+
+pub(crate) fn version_lineage(c: &Connection, id: &str, version: i64) -> AppResult<VersionLineage> {
+    c.query_row("SELECT replaces_version,replaced_by_version FROM knowledge_version_lineage WHERE node_id=?1 AND version=?2",
+        params![id,version],|row|Ok(VersionLineage {replaces_version:row.get(0)?,replaced_by_version:row.get(1)?}))
+       .optional().map_err(error).map(Option::unwrap_or_default)
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +53,29 @@ pub struct KnowledgeDetail {
     pub source_excerpt: Option<String>,
     pub source_hash: Option<String>,
     pub source_evidence: Vec<serde_json::Value>,
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextOption {
+    id: String,
+    title: String,
+    latest_version: i64,
+    effective_version: i64,
+    updated_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextOptionCursor {
+    id: String,
+    updated_at: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextOptionsPage {
+    items: Vec<ContextOption>,
+    has_more: bool,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -83,6 +120,42 @@ fn revision(current: &KnowledgeNode, expected: Option<i64>) -> AppResult<()> {
     Ok(())
 }
 impl Database {
+    pub fn context_options(
+        &self,
+        workspace: &str,
+        day: &str,
+        after: Option<&ContextOptionCursor>,
+    ) -> AppResult<ContextOptionsPage> {
+        use crate::knowledge_scope::{SOURCE_AVAILABLE, SUPPORTED, check_date};
+        const PAGE_SIZE: usize = 100;
+        check_date(day)?;
+        let connection = self.connection()?;
+        let mut statement = connection.prepare(&format!(
+            "SELECT n.id,v.title,n.latest_version,v.version,n.updated_at
+             FROM knowledge_nodes n
+             JOIN knowledge_versions v ON v.node_id=n.id AND v.version=n.effective_version
+             LEFT JOIN knowledge_validity d ON d.node_id=v.node_id AND d.version=v.version
+             WHERE n.workspace_id=?1 AND {SUPPORTED} AND {SOURCE_AVAILABLE}
+               AND (d.valid_from IS NULL OR d.valid_from<=?2)
+               AND (d.valid_to IS NULL OR d.valid_to>?2)
+               AND (?3 IS NULL OR n.updated_at<?3 OR (n.updated_at=?3 AND n.id>?4))
+             ORDER BY n.updated_at DESC,n.id LIMIT ?5"
+        )).map_err(error)?;
+        let mut items = statement.query_map(
+            params![workspace, day, after.map(|c| &c.updated_at), after.map(|c| &c.id), PAGE_SIZE as i64 + 1],
+            |row| Ok(ContextOption {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                latest_version: row.get(2)?,
+                effective_version: row.get(3)?,
+                updated_at: row.get(4)?,
+            }),
+        ).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
+        let has_more = items.len() > PAGE_SIZE;
+        items.truncate(PAGE_SIZE);
+        Ok(ContextOptionsPage { items, has_more })
+    }
+
     pub fn knowledge_list(&self, workspace: &str) -> AppResult<Vec<KnowledgeNode>> {
         let connection = self.connection()?;
         let mut statement = connection.prepare(&format!("SELECT {COLUMNS} FROM knowledge_nodes n JOIN knowledge_versions v ON v.node_id=n.id AND v.version=n.latest_version WHERE n.workspace_id=?1 ORDER BY n.updated_at DESC,n.id")).map_err(error)?;
@@ -95,7 +168,13 @@ impl Database {
     pub fn knowledge_detail(&self, workspace: &str, id: &str) -> AppResult<KnowledgeDetail> {
         let connection = self.connection()?;
         let node = read_node(&connection, workspace, id)?;
-        let mut statement = connection.prepare("SELECT v.version,v.title,v.kind,v.content,v.change_reason,v.created_at,a.created_at FROM knowledge_versions v LEFT JOIN knowledge_approval_events a ON a.node_id=v.node_id AND a.version=v.version WHERE v.node_id=?1 ORDER BY v.version DESC").map_err(error)?;
+        let mut statement = connection.prepare("SELECT v.version,v.title,v.kind,v.content,v.change_reason,v.created_at,a.created_at,d.valid_from,d.valid_to,
+            p.replaces_version,p.replaced_by_version
+            FROM knowledge_versions v
+            LEFT JOIN knowledge_approval_events a ON a.node_id=v.node_id AND a.version=v.version
+            LEFT JOIN knowledge_validity d ON d.node_id=v.node_id AND d.version=v.version
+            LEFT JOIN (SELECT * FROM knowledge_version_lineage WHERE node_id=?1) p ON p.version=v.version
+            WHERE v.node_id=?1 ORDER BY v.version DESC").map_err(error)?;
         let versions = statement
             .query_map(params![id], |r| {
                 Ok(KnowledgeVersion {
@@ -106,6 +185,14 @@ impl Database {
                     change_reason: r.get(4)?,
                     created_at: r.get(5)?,
                     approved_at: r.get(6)?,
+                    validity: crate::knowledge_scope::Validity {
+                        valid_from: r.get(7)?,
+                        valid_to: r.get(8)?,
+                    },
+                    lineage: VersionLineage {
+                        replaces_version: r.get(9)?,
+                        replaced_by_version: r.get(10)?,
+                    },
                 })
             })
             .map_err(error)?
@@ -146,6 +233,17 @@ impl Database {
         input: SaveKnowledge,
         source: Option<crate::sources::SourceRef>,
     ) -> AppResult<String> {
+        self.save_version(input, source, None)
+    }
+    pub(crate) fn save_version(
+        &self,
+        input: SaveKnowledge,
+        source: Option<crate::sources::SourceRef>,
+        mut validity: Option<crate::knowledge_scope::Validity>,
+    ) -> AppResult<String> {
+        if let Some(value) = &validity {
+            value.validate()?;
+        }
         let title = validate_name(&input.title)?;
         if ![
             "context",
@@ -197,7 +295,13 @@ impl Database {
             let current = read_node(&tx, &input.workspace_id, id)?;
             revision(&current, input.expected_revision)?;
             let latest: (String,String,String) = tx.query_row("SELECT title,kind,content FROM knowledge_versions WHERE node_id=?1 AND version=?2",params![id,current.latest_version],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).map_err(error)?;
-            if latest == (title.clone(), input.kind.clone(), content.to_string()) {
+            let previous_dates = tx.query_row("SELECT valid_from,valid_to FROM knowledge_validity WHERE node_id=?1 AND version=?2",params![id,current.latest_version],|r|Ok(crate::knowledge_scope::Validity { valid_from:r.get(0)?,valid_to:r.get(1)? })).optional().map_err(error)?.unwrap_or_default();
+            if validity.is_none() {
+                validity = Some(previous_dates.clone());
+            }
+            if latest == (title.clone(), input.kind.clone(), content.to_string())
+                && validity.as_ref() == Some(&previous_dates)
+            {
                 return Err("内容没有变化，无需新增版本。".into());
             }
             tx.execute("UPDATE knowledge_nodes SET latest_version=latest_version+1,revision=revision+1,updated_at=?2 WHERE id=?1",params![id,timestamp]).map_err(error)?;
@@ -244,6 +348,13 @@ impl Database {
             (id, 1)
         };
         tx.execute("INSERT INTO knowledge_versions(node_id,version,title,kind,content,author,change_reason,created_at) VALUES(?1,?2,?3,?4,?5,'user',?6,?7)",params![id,version,title,input.kind,content,reason,timestamp]).map_err(error)?;
+        if let Some(validity) = validity.filter(|value| value.is_known()) {
+            tx.execute(
+                "INSERT INTO knowledge_validity VALUES(?1,?2,?3,?4)",
+                params![id, version, validity.valid_from, validity.valid_to],
+            )
+            .map_err(error)?;
+        }
         if let Some(reference) = source {
             tx.execute(
                 "INSERT INTO knowledge_source_links VALUES(?1,?2,?3,?4,?5,?6,?7)",

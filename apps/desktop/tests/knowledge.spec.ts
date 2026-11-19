@@ -56,7 +56,7 @@ test("knowledge drafts preserve source, approval, conflicts and edits across res
     expect(detail.node.effectiveVersion).toBeNull();expect(detail.sourceExcerpt).toBe("先验证用户需求，再");
     await page.getByRole("button",{name:"检查并确认"}).click();
     await page.getByRole("dialog",{name:"确认知识版本"}).getByRole("button",{name:"确认此版本"}).click();
-    await expect(page.locator(".knowledge-state")).toContainText("回答使用 v1");
+    await expect(page.locator(".knowledge-state")).toContainText("当前确认 v1");
     await page.getByRole("button",{name:"修改草稿"}).click();
     editor=page.getByRole("dialog",{name:"修改知识草稿",exact:true});
     await editor.getByLabel("正文",{exact:true}).fill("先验证需求，再定义可验证的交付目标。");
@@ -87,7 +87,7 @@ test("knowledge drafts preserve source, approval, conflicts and edits across res
     await expect(editor).not.toBeVisible();
     await page.getByRole("button",{name:"检查并确认"}).click();
     await page.getByRole("button",{name:"确认此版本",exact:true}).click();
-    await expect(page.locator(".knowledge-state")).toContainText("回答使用 v4");
+    await expect(page.locator(".knowledge-state")).toContainText("当前确认 v4");
     await page.getByRole("button",{name:"版本历史",exact:true}).click();
     await page.getByLabel("查看版本",{exact:true}).selectOption("1");
     await expect(page.locator(".knowledge-detail > .knowledge-prose")).toHaveText("先验证用户需求，再拆分任务。");
@@ -119,7 +119,7 @@ test("knowledge drafts preserve source, approval, conflicts and edits across res
     await page.getByRole("navigation").getByRole("link",{name:"知识",exact:true}).click();
     await page.locator(".knowledge-row").filter({hasText:"项目推进原则"}).click();
     await expect(page.locator(".knowledge-detail > .knowledge-prose")).toHaveText("我的并发编辑保留");
-    await expect(page.locator(".knowledge-state")).toContainText("回答使用 v4");
+    await expect(page.locator(".knowledge-state")).toContainText("当前确认 v4");
     detail=await nativeInvoke<KnowledgeDetail>(page,"get_knowledge",{workspaceId:workspace,nodeId:id});
     expect(detail.versions.length).toBe(4);expect(detail.sourceExcerpt).toBe("先验证用户需求，再");
     await page.screenshot({path:testInfo.outputPath("knowledge-confirmed.png")});

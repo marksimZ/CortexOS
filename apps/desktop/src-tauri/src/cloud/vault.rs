@@ -29,11 +29,29 @@ impl WindowsVault {
         }
         Self { target }
     }
+
+    pub(super) fn for_runtime(database: &std::path::Path, workspace: &str, id: &str) -> Self {
+        use sha2::{Digest, Sha256};
+        let mut hash = Sha256::new();
+        hash.update(database.as_os_str().as_encoded_bytes());
+        hash.update(b"\0");
+        hash.update(workspace.as_bytes());
+        hash.update(b"\0");
+        hash.update(id.as_bytes());
+        let scope = if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        };
+        Self {
+            target: format!("CortexOS/ModelRuntime/v1/{scope}/{:x}", hash.finalize()),
+        }
+    }
 }
 
 #[cfg(windows)]
-impl Vault for WindowsVault {
-    fn read(&self) -> AppResult<Option<Record>> {
+impl WindowsVault {
+    pub(super) fn read_payload<T: serde::de::DeserializeOwned>(&self) -> AppResult<Option<T>> {
         use windows_sys::Win32::{Foundation::*, Security::Credentials::*};
         let target: Vec<u16> = self.target.encode_utf16().chain(Some(0)).collect();
         let mut pointer = std::ptr::null_mut();
@@ -57,21 +75,18 @@ impl Vault for WindowsVault {
                     credential.CredentialBlob,
                     credential.CredentialBlobSize as usize,
                 );
-                let result = serde_json::from_slice::<Record>(blob).map_err(|_| vault_error());
+                let result = serde_json::from_slice(blob).map_err(|_| vault_error());
                 use zeroize::Zeroize;
                 blob.zeroize();
                 result
             };
             CredFree(pointer.cast());
-            let record = result?;
-            record.validate()?;
-            Ok(Some(record))
+            result.map(Some)
         }
     }
-    fn write(&self, record: &Record) -> AppResult<()> {
+    pub(super) fn write_payload(&self, value: &impl serde::Serialize) -> AppResult<()> {
         use windows_sys::Win32::Security::Credentials::*;
-        record.validate()?;
-        let mut blob = Zeroizing::new(serde_json::to_vec(record).map_err(|_| vault_error())?);
+        let mut blob = Zeroizing::new(serde_json::to_vec(value).map_err(|_| vault_error())?);
         if blob.len() > 2560 {
             return Err(vault_error());
         }
@@ -90,7 +105,7 @@ impl Vault for WindowsVault {
             Ok(())
         }
     }
-    fn delete(&self) -> AppResult<()> {
+    pub(super) fn erase(&self) -> AppResult<()> {
         use windows_sys::Win32::{Foundation::*, Security::Credentials::*};
         let target: Vec<u16> = self.target.encode_utf16().chain(Some(0)).collect();
         if unsafe { CredDeleteW(target.as_ptr(), CRED_TYPE_GENERIC, 0) } != 0
@@ -103,15 +118,32 @@ impl Vault for WindowsVault {
     }
 }
 #[cfg(not(windows))]
+impl WindowsVault {
+    pub(super) fn read_payload<T: serde::de::DeserializeOwned>(&self) -> AppResult<Option<T>> {
+        Err(vault_error())
+    }
+    pub(super) fn write_payload(&self, _: &impl serde::Serialize) -> AppResult<()> {
+        Err(vault_error())
+    }
+    pub(super) fn erase(&self) -> AppResult<()> {
+        Err(vault_error())
+    }
+}
+
 impl Vault for WindowsVault {
     fn read(&self) -> AppResult<Option<Record>> {
-        Err(vault_error())
+        let record: Option<Record> = self.read_payload()?;
+        if let Some(record) = &record {
+            record.validate()?;
+        }
+        Ok(record)
     }
-    fn write(&self, _: &Record) -> AppResult<()> {
-        Err(vault_error())
+    fn write(&self, record: &Record) -> AppResult<()> {
+        record.validate()?;
+        self.write_payload(record)
     }
     fn delete(&self) -> AppResult<()> {
-        Err(vault_error())
+        self.erase()
     }
 }
 fn vault_error() -> String {

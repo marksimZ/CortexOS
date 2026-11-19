@@ -209,21 +209,55 @@ pub async fn official(
     input: &CompletionInput,
 ) -> Result<CompletionOutput, ConnectionState> {
     let (url, body) = wire(provider, input).map_err(|_| ConnectionState::ServiceError)?;
-    let bytes = serde_json::to_vec(&body).map_err(|_| ConnectionState::ServiceError)?;
-    let request_hash = crate::benchmark::dataset::hash(&bytes);
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(120))
-        .build()
-        .map_err(|_| ConnectionState::ServiceError)?;
+    let start = Instant::now();
+    let request_hash = crate::benchmark::dataset::hash(
+        &serde_json::to_vec(&body).map_err(|_| ConnectionState::ServiceError)?,
+    );
+    let body = post_json(
+        provider,
+        key,
+        &url,
+        &body,
+        Duration::from_secs(120),
+        2 << 20,
+    )
+    .await?;
+    let output = parse(
+        provider,
+        &body,
+        start.elapsed().as_millis() as u64,
+        request_hash,
+    )?;
+    checked_output(output, key)
+}
+
+pub(super) fn checked_output(
+    output: CompletionOutput,
+    key: &str,
+) -> Result<CompletionOutput, ConnectionState> {
+    if output.text.contains(key)
+        || serde_json::to_string(&output)
+            .map_err(|_| ConnectionState::ServiceError)?
+            .contains(key)
+    {
+        return Err(ConnectionState::ServiceError);
+    }
+    Ok(output)
+}
+
+pub(super) async fn post_json(
+    provider: Provider,
+    key: &str,
+    url: &str,
+    body: &Value,
+    timeout: Duration,
+    response_limit: usize,
+) -> Result<Value, ConnectionState> {
+    let client = super::transport::JSON_CLIENT.as_ref().map_err(|error| *error)?;
     let mut value = reqwest::header::HeaderValue::from_str(key)
         .map_err(|_| ConnectionState::InvalidCredential)?;
     value.set_sensitive(true);
-    let mut request = client
-        .post(url)
-        .header("Content-Type", "application/json")
-        .body(bytes);
+    let mut request = client.post(url).timeout(timeout).json(body);
     request = match provider {
         Provider::Openai => request.bearer_auth(key),
         Provider::Anthropic => request
@@ -231,7 +265,6 @@ pub async fn official(
             .header("anthropic-version", "2023-06-01"),
         Provider::Gemini => request.header("x-goog-api-key", value),
     };
-    let start = Instant::now();
     let mut response = request
         .send()
         .await
@@ -243,28 +276,23 @@ pub async fn official(
         .await
         .map_err(|_| ConnectionState::NetworkUnavailable)?
     {
-        if bytes.len() + chunk.len() > 2 * 1024 * 1024 {
+        if bytes.len() + chunk.len() > response_limit {
             return Err(ConnectionState::ServiceError);
         }
         bytes.extend_from_slice(&chunk);
     }
-    let body: Value = serde_json::from_slice(&bytes).map_err(|_| ConnectionState::ServiceError)?;
     if status != 200 {
+        let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
         return Err(super::provider::classify(status, &body));
     }
-    let output = parse(
-        provider,
-        &body,
-        start.elapsed().as_millis() as u64,
-        request_hash,
-    )?;
-    if serde_json::to_string(&output)
+    let body: Value = serde_json::from_slice(&bytes).map_err(|_| ConnectionState::ServiceError)?;
+    if serde_json::to_string(&body)
         .map_err(|_| ConnectionState::ServiceError)?
         .contains(key)
     {
         return Err(ConnectionState::ServiceError);
     }
-    Ok(output)
+    Ok(body)
 }
 pub fn tokens(provider: Provider, usage: &Value) -> (Option<u64>, Option<u64>) {
     match provider {

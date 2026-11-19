@@ -108,6 +108,8 @@ pub struct RunDetail {
     pub settings: ModelSettings,
     pub context_manifest: serde_json::Value,
     pub snapshot: Option<ContextSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primary_snapshot: Option<ContextSnapshot>,
     pub events: Vec<ExecutionEvent>,
 }
 
@@ -146,6 +148,14 @@ pub struct PreparedRun {
     pub run: RunSummary,
     pub request: serde_json::Value,
     pub manifest: serde_json::Value,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunPreparing {
+    pub id: String,
+    pub workspace_id: String,
+    pub conversation_id: String,
 }
 
 #[derive(Clone, Debug, Serialize)]

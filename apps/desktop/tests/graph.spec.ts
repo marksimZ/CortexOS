@@ -171,7 +171,7 @@ test("native graph persists relationships, independent views and knowledge edits
     await page.getByRole("button", { name: "确认此版本", exact: true }).click();
     await expect(
       page.locator(".graph-inspector .knowledge-state"),
-    ).toContainText("回答使用 v2");
+    ).toContainText("当前确认 v2");
     await page
       .getByRole("button", { name: "适应当前视图", exact: true })
       .click();

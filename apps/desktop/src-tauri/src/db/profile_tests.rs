@@ -217,7 +217,7 @@ fn personalized_migration_v10_backs_up_rolls_back_and_keeps_prior_checksums() {
         .unwrap(),
         0
     );
-    migrate(&mut c, &path, MIGRATIONS).unwrap();
+    migrate(&mut c, &path, &MIGRATIONS[..10]).unwrap();
     assert_eq!(
         c.query_row("SELECT MAX(version) FROM schema_migrations", [], |r| r
             .get::<_, u32>(0))

@@ -17,8 +17,8 @@ export function ModelStatus({ studio }: { studio: Studio }) {
           : studio.health
             ? studio.health.models.length
               ? "Ollama 已连接"
-              : "尚未安装模型"
-            : "模型未连接"}
+              : "Ollama 暂无模型"
+            : "Ollama 未连接"}
       </span>
       <ChevronRight size={14} aria-hidden="true" />
     </a>
