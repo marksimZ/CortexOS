@@ -21,7 +21,7 @@ export function EmptyState({
           <p>在桌面程序中开始，浏览器仅供界面预览。</p>
         ) : !studio.workspaceId ? (
           <button
-            className="button secondary"
+            className="button primary"
             disabled={!studio.data || studio.loading}
             onClick={onCreateWorkspace}
           >

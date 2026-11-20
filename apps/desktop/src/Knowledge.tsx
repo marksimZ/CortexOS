@@ -3,6 +3,7 @@ import { SelectMenu } from "./components/SelectMenu";
 import { SourceBrowser, type SourceRef } from "./SourceBrowser";
 import { knowledge } from "./api/knowledge";
 import { notify } from "./components/Toast";
+import { StatusLabel } from "./components/StatusLabel";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { BookOpen, Check, Pencil, Plus, Search, X, ListTree, History } from "lucide-react";
@@ -171,15 +172,9 @@ export function KnowledgePage({
                       <span className="knowledge-row-title">{item.title}</span>
                       <span className="knowledge-row-meta">
                         <span>{kinds[item.kind]}</span>
-                        <span
-                          className={
-                            item.latestVersion === item.effectiveVersion
-                              ? "connected"
-                              : "pending-status"
-                          }
-                        >
+                        <StatusLabel tone={item.latestVersion === item.effectiveVersion ? "success" : "warning"}>
                           {status(item)}
-                        </span>
+                        </StatusLabel>
                         <span>v{item.latestVersion}</span>
                       </span>
                     </button>
@@ -423,10 +418,9 @@ export function KnowledgeInspector({
                 </span>
                 <h2>{currentVersion.title}</h2>
                 <p className="knowledge-state">
-                  {route.page === "knowledge" && (
-                    <span>{kinds[currentVersion.kind]} v{currentVersion.version}</span>
-                  )}
-                  <span>{status(detail.node)}</span>
+                  <StatusLabel tone={detail.node.latestVersion === detail.node.effectiveVersion ? "success" : "warning"}>
+                    {status(detail.node)}
+                  </StatusLabel>
                   <span>
                     {detail.node.effectiveVersion
                       ? `当前确认 v${detail.node.effectiveVersion}`
@@ -655,7 +649,6 @@ export function KnowledgeInspector({
           !loadingDetail && (
             <div className="knowledge-empty detail-empty">
               <h2>选择一条知识</h2>
-              <p>查看内容、来源与版本。</p>
             </div>
           )
         )}

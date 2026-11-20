@@ -184,7 +184,8 @@ test("report loading keyboard and long content keep controls visible",async({pag
   expect(await content.evaluate(e=>e.scrollTop)).toBe(0);
   await page.evaluate(()=>{(window as any).holdPage=true;});
   await page.getByRole("button",{name:"下一页",exact:true}).click();
-  await expect(page.locator(".benchmark-page-count")).toHaveText("第 2 页 · 读取中…");
+  await expect(page.locator(".benchmark-page-count")).toHaveText("第 2 页");
+  await expect(page.getByRole("status").filter({ hasText: "正在读取本页…" })).toBeVisible();
   await expect(page.locator(".benchmark-page-count")).not.toContainText("/ 1 页");
   await page.evaluate(()=>{(window as any).holdPage=false;(window as any).releasePage();});
   await expect(buttons.first()).toContainText("合成题目 20");

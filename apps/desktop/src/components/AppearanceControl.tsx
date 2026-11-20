@@ -1,5 +1,5 @@
 import { SelectMenu } from "./SelectMenu";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { preference, remember } from "../studio";
 
@@ -15,6 +15,7 @@ function apply(value: Appearance) {
 apply(initial);
 
 export function AppearanceControl() {
+  const id = useId();
   const [appearance, setAppearance] = useState<Appearance>(initial);
   useEffect(() => {
     apply(appearance);
@@ -23,9 +24,9 @@ export function AppearanceControl() {
     return () => media.removeEventListener("change", update);
   }, [appearance]);
   const Icon = appearance === "system" ? Monitor : appearance === "dark" ? Moon : Sun;
-  return <label className="appearance-control" title="外观">
+  return <label className="appearance-control" title="外观" htmlFor={id}>
     <Icon size={16} aria-hidden="true" />
-    <SelectMenu aria-label="外观" value={appearance} onChange={event => {
+    <SelectMenu id={id} aria-label="外观" value={appearance} onChange={event => {
       const value = event.target.value as Appearance;
       setAppearance(value);
       remember("appearance", value);

@@ -1,7 +1,19 @@
 /* The supplied HTML is the visual source of truth. All surfaces stay local. */
 :root {
+  --text-caption: 0.75rem;
+  --text-compact: 0.8125rem;
+  --text-control: 0.875rem;
+  --text-body: 0.9375rem;
+  --text-prose: 1rem;
+  --text-section: 1.125rem;
+  --text-heading: 1.25rem;
+  --text-display: 1.75rem;
+  --control-size: 36px;
+  --control-size-compact: 30px;
+  --icon-size: 16px;
   --radius-panel: 20px;
   --radius-control: 12px;
+  --radius-inset: 10px;
   --menu-inset: 4px;
   --radius-menu-item: calc(var(--radius-control) - var(--menu-inset));
   color-scheme: light;
@@ -19,11 +31,14 @@
   --scroll-thumb: rgb(71 83 111 / 32%); --scroll-thumb-hover: rgb(71 83 111 / 56%); --scroll-thumb-active: rgb(71 83 111 / 72%);
   --shadow: 0 8px 32px rgb(40 50 90 / 8%), inset 0 1px 0 var(--glass-highlight);
   --shadow-overlay: 0 16px 56px rgb(40 50 90 / 16%), inset 0 1px 0 var(--glass-highlight);
+  --focus-ring: var(--primary);
+  --surface-sticky: linear-gradient(var(--surface), var(--surface)), var(--background);
   --font-normal: 400; --font-medium: 500; --font-strong: 600;
   --font-ui: Inter, "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
   --ease: cubic-bezier(.22, 1, .36, 1); --spring: cubic-bezier(.2, 1.4, .5, 1);
-  --motion: 180ms; --sidebar-width: 252px; --reading-width: 720px;
+  --motion: 180ms; --sidebar-width: 252px; --reading-width: 45rem;
+  --knowledge-reading-width: 76ch;
   --node-knowledge: #4fb6a8; --node-context: #8599ba; --node-hypothesis: #a899c5;
   --node-decision: #6a83d3; --node-evidence: #5baca8; --node-conflict: #c38a23;
   --node-event: #8b9bbb; --node-input: #bd9b67; --node-output: #4fb6a8; --node-error: #c5787e;

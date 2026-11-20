@@ -28,7 +28,7 @@
 | 编号 | 结论 | 证据及处理 |
 | --- | --- | --- |
 | C1 | 已确认 | `App` 持有 `useStudio`，同一个 Hook 管理导航数据、设置、网络及 `setUpdates`。流式时根和外壳重复提交。H1.2 测细粒度订阅。 [App](../../apps/desktop/src/App.tsx) · [useStudio](../../apps/desktop/src/studio.ts) |
-| C2 | 已确认 | `invoke<T>` 泛型由各调用点手工声明，命令与参数跨领域分散。已有按领域封装可作迁移起点。 [模型设置](../../apps/desktop/src/components/CloudRuntimeSettings.tsx) · [知识请求](../../apps/desktop/src/knowledge-detail.ts) |
+| C2 | 已确认 | `invoke<T>` 泛型由各调用点手工声明，命令与参数跨领域分散。原知识详情请求封装已在 H1.3 迁入按领域划分的契约。 [模型设置](../../apps/desktop/src/components/CloudRuntimeSettings.tsx) · [知识契约](../../apps/desktop/src/api/knowledge.ts) |
 | C3 | 已确认 | `studio.ts` 接受 Error.message，`personalized.ts` 通用提示推定已保存。H1.1 共用解析，结构化状态才进入提示。 [对话](../../apps/desktop/src/studio.ts) · [评测](../../apps/desktop/src/benchmark/personalized.ts) |
 | C4 | 部分成立 | 已有统一 hash 解析、深链和 `useSyncExternalStore`；部分报告筛选和返回仍有独立参数逻辑。H1.3 以既有定位测试保护。 [导航](../../apps/desktop/src/navigation.ts) · [报告导航](../../apps/desktop/src/benchmark/reportNavigation.ts) |
 | C5 | 已确认 | 消息列表全量挂载，流时 `useLayoutEffect` 与 ResizeObserver 可重复调用距离/尺寸读取。原有取消跟随行为有效。 [聊天](../../apps/desktop/src/Chat.tsx) · [滚动](../../apps/desktop/src/components/useChatScroll.ts) |

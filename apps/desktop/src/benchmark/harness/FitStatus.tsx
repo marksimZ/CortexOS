@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
+import { StatusLabel } from "../../components/StatusLabel";
 
 export function FitStatus({children,tone='neutral'}:{children:ReactNode;tone?:'neutral'|'attention'|'success'}){
- return <span className="fit-status" data-tone={tone}>{children}</span>;
+ return <StatusLabel className="fit-status" tone={tone}>{children}</StatusLabel>;
 }

@@ -260,3 +260,63 @@ test("H1 synthetic 100, 500 and 1000 message scroll baseline", async ({}, info) 
     await writeFile(info.outputPath("history.json"), JSON.stringify(results, null, 2));
   } finally { await app.stop(); }
 });
+
+test("H1.4 native theme contrast and narrow high contrast keyboard controls", async ({}, info) => {
+  test.skip(process.env.CORTEXOS_H14_CHECK !== "1", "Run against the H1.4 design system.");
+  const app = await launchNative(info, { endpoint: "http://127.0.0.1:1" });
+  try {
+    const { page } = app;
+    await page.setViewportSize({ width: 800, height: 600 });
+    await page.evaluate(() => { location.hash = "#/settings"; });
+    const settings = page.getByRole("navigation", { name: "设置分类" });
+    const appearance = page.getByLabel("外观", { exact: true });
+    await expect(settings).toBeVisible();
+    const pairs: Record<string, Record<string, number>> = {};
+    for (const theme of ["light", "dark"] as const) {
+      await appearance.selectOption(theme);
+      await expect(page.locator("html")).toHaveAttribute("data-color-scheme", theme);
+      pairs[theme] = await page.evaluate(() => {
+        const style = getComputedStyle(document.documentElement);
+        const sample = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
+        const luminance = (token: string) => {
+          const color = style.getPropertyValue(token).trim();
+          if (!CSS.supports("color", color)) throw new Error(`无效颜色 ${token}`);
+          sample.fillStyle = color;
+          sample.fillRect(0, 0, 1, 1);
+          const [r, g, b] = Array.from(sample.getImageData(0, 0, 1, 1).data.slice(0, 3), value => {
+            const channel = value / 255;
+            return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+          });
+          return r * 0.2126 + g * 0.7152 + b * 0.0722;
+        };
+        const ratio = (a: string, b: string) => {
+          const values = [luminance(a), luminance(b)].sort((a, b) => b - a);
+          return (values[0] + 0.05) / (values[1] + 0.05);
+        };
+        return {
+          text: ratio("--text", "--background"),
+          muted: ratio("--muted", "--background"),
+          primaryButton: ratio("--on-primary", "--primary"),
+          danger: ratio("--danger", "--background"),
+          success: ratio("--success-text", "--background"),
+        };
+      });
+      for (const value of Object.values(pairs[theme])) expect(value).toBeGreaterThanOrEqual(4.5);
+      expect(await settings.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    }
+    await page.emulateMedia({ forcedColors: "active" });
+    const data = settings.getByRole("button", { name: "本地数据", exact: true });
+    await page.keyboard.press("Tab");
+    await data.focus();
+    await expect(data).toBeFocused();
+    await expect(data).toHaveCSS("outline-style", "solid");
+    await data.press("Enter");
+    await expect(data).toHaveAttribute("aria-pressed", "true");
+    await expect(data).toHaveCSS("text-decoration-line", "underline");
+    await expect(page.locator("#data-section")).toBeVisible();
+    await page.screenshot({ path: info.outputPath("settings-forced-colors-800.png") });
+    await writeFile(info.outputPath("contrast.json"), JSON.stringify(pairs, null, 2));
+  } finally {
+    await app.stop();
+  }
+});

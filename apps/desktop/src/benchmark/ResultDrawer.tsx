@@ -6,7 +6,8 @@ import { AppDialog, openDialog } from "../components/AppDialog";
 import { MarkdownContent } from "../components/MarkdownContent";
 import { navigate } from "../navigation";
 import { CaseMeasurements } from "./PerformanceDetails";
-import { errorText, ruleName, stateName, type Batch, type Measurement, type ModelReport } from "./personalized";
+import { errorText, ruleName, type Batch, type Measurement, type ModelReport } from "./personalized";
+import { ResultStatus } from "./ResultStatus";
 
 export type ReportScope = "standard" | "personalized";
 export interface ResultRow { ordinal: number; caseId: string; state: string; status: string; repetition: number; question: string; error: string | null; runId: string | null; evaluator?: string; difficulty?: string }
@@ -64,7 +65,7 @@ export function ResultDrawer({ id, workspaceId, batch, report, scope, row, rows,
       <div className="benchmark-drawer-actions"><button className="icon-button" aria-label="复制定位链接" title="复制定位链接" onClick={()=>void copy()}><Link2 size={18} aria-hidden="true" /></button><button className="icon-button" aria-label="刷新本题" title="刷新本题" disabled={loading} onClick={() => setReload(n => n + 1)}><RotateCw size={18} aria-hidden="true" /></button><button className="icon-button" aria-label="关闭单题详情" title="关闭单题详情" onClick={close}><X size={20} aria-hidden="true" /></button></div>
     </header>
     <div key={identity} className="panel-body benchmark-result-content" aria-busy={loading}>
-      <div className="benchmark-result-meta"><strong>{stateName[state] ?? state}</strong><span>{row.caseId}</span><span>第 {row.repetition} 次</span>{row.evaluator && <span>{ruleName[row.evaluator] ?? row.evaluator}</span>}</div>
+      <div className="benchmark-result-meta"><strong><ResultStatus state={state} /></strong><span>{row.caseId}</span><span>第 {row.repetition} 次</span>{row.evaluator && <span>{ruleName[row.evaluator] ?? row.evaluator}</span>}</div>
       {linkError&&<p role="alert" className="cloud-error">{linkError}</p>}
       {loading && <p role="status">正在读取本题…</p>}
       {error && <div role="alert" className="cloud-error"><p>{error}</p><button className="button secondary" onClick={() => setReload(n => n + 1)}>重新读取本题</button></div>}

@@ -11,18 +11,19 @@
 .search-field:focus-within { outline: 2px solid var(--primary); outline-offset: 1px; }
 .search-field input:focus-visible { outline: none; }
 .knowledge-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.knowledge-row { width: 100%; display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px 12px; border-radius: 12px; }
+.knowledge-row { width: 100%; display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px 12px; border-radius: var(--radius-control); }
 .knowledge-row:hover { background: var(--surface-hover); }
 .knowledge-row[aria-current] { background: var(--selected); }
-.knowledge-row-title { font-weight: var(--font-strong); font-size: 13.5px; }
+.knowledge-row-title { font-weight: var(--font-strong); font-size: var(--text-control); overflow-wrap: anywhere; }
 .knowledge-row-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--muted); }
 .knowledge-detail { min-height: 0; min-width: 0; overflow: auto;  padding: 24px 28px; border-radius: max(0px,calc(var(--radius-panel) - 26px)); background: var(--surface-subtle); box-shadow: none; }
 .knowledge-detail > :not(dialog) { max-width: 860px; }
 .knowledge-detail-heading { display: flex; gap: 16px; justify-content: space-between; flex-wrap: wrap; margin-bottom: 24px; }
-.knowledge-detail-heading h2 { margin: 8px 0; font-size: 26px; letter-spacing: -.4px; }
+.knowledge-detail-heading h2 { margin: 8px 0; font-size: clamp(var(--text-heading), 2.2vw, var(--text-display)); letter-spacing: -.015em; overflow-wrap: anywhere; }
+.knowledge-detail-heading > div { min-width: 0; }
 .knowledge-kind { color: var(--muted); font-size: 12px; }
-.knowledge-state { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0; font-size: 12px; color: var(--muted); }
-.knowledge-prose { font-size: 16px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; text-wrap: pretty; margin-bottom: 22px; }
+.knowledge-state { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin: 0; font-size: var(--text-caption); color: var(--text-secondary); }
+.knowledge-prose { max-inline-size: var(--knowledge-reading-width); font-size: var(--text-prose); line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; text-wrap: pretty; margin-bottom: 22px; }
 .knowledge-review { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 14px 0; font-size: 13px; }
 .knowledge-disclosure { padding: 14px 0; box-shadow: inset 0 1px 0 var(--line); font-size: 13px; }
 .knowledge-disclosure .knowledge-prose { font-size: 14px; margin-top: 12px; }
@@ -68,7 +69,8 @@
 .source-pagination { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 .settings-content { overflow: auto; }
 .settings-navigation,.segmented-control { display: inline-flex; width: fit-content; align-items: center; gap: 2px; padding: 3px; background: var(--surface-subtle); border: 0; border-radius: 999px; margin: 0 0 18px; }
-.settings-navigation .button { color: var(--text-secondary); padding: 5px 12px; min-height: 30px; font-size: 13px; line-height: 20px; }
+.settings-navigation { flex-wrap: wrap; max-inline-size: 100%; border-radius: calc(var(--radius-control) + 3px); }
+.settings-navigation .button { color: var(--text-secondary); padding: 5px 12px; min-height: var(--control-size-compact); font-size: var(--text-compact); line-height: 20px; }
 .settings-navigation [aria-pressed=true],.segmented-control label:has(input:checked) { background: var(--surface-hover); color: var(--text); box-shadow: 0 1px 3px rgb(40 50 90 / 10%); }
 .settings-section { display: grid; grid-template-columns: 200px minmax(0,640px); gap: 18px; margin: 8px 0 30px; }
 .cloud-runtime-actions, .cloud-runtime-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; overflow-wrap: anywhere; }
@@ -91,7 +93,7 @@
 .storage-inventory dd { min-width: 0; margin-inline-start: 0; text-align: end; }
 .storage-preview h4 { margin: 16px 0 8px; }
 .storage-preview > p { margin: 0 0 10px; }
-.section-description h2 { font-size: 15px; margin: 0; display: flex; align-items: center; gap: 8px; }
+.section-description h2 { font-size: var(--text-prose); margin: 0; display: flex; align-items: center; gap: 8px; }
 .settings-fields { min-width: 0; }
 .connection-status { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; font-size: 13.5px; }
 .connection-status strong { font-weight: var(--font-medium); }
