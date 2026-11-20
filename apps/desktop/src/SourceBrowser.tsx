@@ -1,11 +1,11 @@
+import { knowledge } from "./api/knowledge";
 import { AppDialog, openDialog } from "./components/AppDialog";
 import { SelectMenu } from "./components/SelectMenu";
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { notify } from "./components/Toast";
 import { FileText, Plus, X } from "lucide-react";
 import { errorText } from "./studio";
-import type { EditKnowledge } from "./Knowledge";
+import type { EditKnowledge } from "./knowledge-types";
 import { FileName } from "./components/FileName";
 import { PaneDivider, splitStyle } from "./components/PaneDivider";
 export interface SourceRef {
@@ -21,14 +21,14 @@ export interface SourceEvidence extends SourceRef {
   contentHash: string;
   knowledgeVersion: number;
 }
-interface SourceDocument {
+export interface SourceDocument {
   id: string;
   name: string;
   latestVersion: number;
   enabled: boolean;
   revision: number;
 }
-interface Snapshot {
+export interface Snapshot {
   document: SourceDocument;
   version: number;
   content: string;
@@ -36,7 +36,7 @@ interface Snapshot {
   createdAt: string;
   structure?: { parentCount: number; childCount: number; sections: [string, number][] };
 }
-interface Preview {
+export interface Preview {
   ticket: string;
   name: string;
   content: string;
@@ -76,7 +76,7 @@ export function SourceBrowser({
     setError(null);
     setLoading(true);
     try {
-      const next = await invoke<Snapshot>("get_source", {
+      const next = await knowledge("get_source", {
         workspaceId: workspace,
         sourceId: id,
         version,
@@ -96,7 +96,7 @@ export function SourceBrowser({
     }
   };
   const refresh = async () => {
-    const list = await invoke<SourceDocument[]>("list_sources", {
+    const list = await knowledge("list_sources", {
       workspaceId: workspace,
     });
     if (live.current) setItems(list);
@@ -136,7 +136,7 @@ export function SourceBrowser({
   };
   const cancelPreview = async () => {
     if (preview)
-      await invoke("discard_source", {
+      await knowledge("discard_source", {
         workspaceId: workspace,
         ticket: preview.ticket,
       });
@@ -181,7 +181,7 @@ export function SourceBrowser({
               disabled={busy}
               onClick={() =>
                 void perform(async () => {
-                  const next = await invoke<Preview | null>("choose_source", {
+                  const next = await knowledge("choose_source", {
                     workspaceId: workspace,
                   });
                   if (live.current) setPreview(next);
@@ -462,7 +462,7 @@ export function SourceBrowser({
                 disabled={busy}
                 onClick={() =>
                   void perform(async () => {
-                    const saved = await invoke<SourceDocument>(
+                    const saved = await knowledge(
                       "commit_source",
                       { workspaceId: workspace, ticket: preview.ticket },
                     );
@@ -505,7 +505,7 @@ export function SourceBrowser({
             onClick={() =>
               void perform(async () => {
                 if (!selected) return;
-                await invoke("revoke_source", {
+                await knowledge("revoke_source", {
                   workspaceId: workspace,
                   sourceId: selected.document.id,
                   expectedRevision: selected.document.revision,

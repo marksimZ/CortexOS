@@ -1,6 +1,6 @@
+import { chat } from "./api/chat";
 import { AppDialog, openDialog } from "./components/AppDialog";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { ArrowDown, ChevronUp, PanelRight, Pencil } from "lucide-react";
 import { navigate, useNavigation } from "./navigation";
 import { ChatMessage } from "./components/ChatMessage";
@@ -12,8 +12,8 @@ import { useChatScroll } from "./components/useChatScroll";
 import { PaneDivider, splitStyle } from "./components/PaneDivider";
 import { notify } from "./components/Toast";
 import { errorText, preference, remember, type Message, type Studio } from "./studio";
-import { runtimeRoles, type ChatRuntimeRoute, type CloudDisclosure, type CloudDraft, type CloudKnowledgeGrant, type Profile,
-  type RuntimeConnection, type RuntimeRole } from "./runtime-profiles";
+import { runtimeRoles, type CloudDisclosure, type CloudDraft, type CloudKnowledgeGrant, type Profile,
+  type RuntimeRole } from "./runtime-profiles";
 
 const historyPageSize = 60;
 
@@ -56,13 +56,13 @@ export function ChatPage({
     const workspace = studio.workspaceId;
     if (!studio.desktop || !workspace) return;
     let current = true;
-    void invoke<ChatRuntimeRoute>("chat_runtime_route", { workspaceId: workspace, knowledge: knowledgeRoute }).then(async selected => {
+    void chat("chat_runtime_route", { workspaceId: workspace, knowledge: knowledgeRoute }).then(async selected => {
       if (!current) return;
       const profile = selected.profile ?? undefined;
       const disclosure: CloudDisclosure = {};
       const roles = Object.keys(runtimeRoles) as RuntimeRole[];
       if (profile && roles.some(role => profile[role].kind === "cloud")) {
-        const rows = await invoke<RuntimeConnection[]>("list_runtime_cloud_connections", { workspaceId: workspace });
+        const rows = await chat("list_runtime_cloud_connections", { workspaceId: workspace });
         const grants = new Map<string, Promise<CloudKnowledgeGrant[]>>();
         await Promise.all(roles.map(async role => {
           const target = profile[role];
@@ -72,7 +72,7 @@ export function ChatPage({
           let allowed: CloudKnowledgeGrant[] = [];
           if (role !== "embedding") {
             if (!grants.has(target.connectionId)) {
-              grants.set(target.connectionId, invoke<{ grants: CloudKnowledgeGrant[] }>(
+              grants.set(target.connectionId, chat(
                 "list_model_cloud_knowledge", { workspaceId: workspace, connectionId: target.connectionId },
               ).then(result => result.grants.filter(item => item.available)).catch(() => []));
             }

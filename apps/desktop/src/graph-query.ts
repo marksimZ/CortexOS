@@ -1,4 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
+import { knowledge } from "./api/knowledge";
+import { parseFrontendError } from "./frontend-error";
 import { demoGraph, relatedNodeIds } from "./graph-data";
 import type {
   GraphData,
@@ -71,7 +72,7 @@ export async function readGraphScope(
   try {
     return await queryGraphScope(input, prefix, signal);
   } catch (error) {
-    if (!prefix || !String(error).includes("图谱已更新")) throw error;
+    if (!prefix || signal?.aborted || !parseFrontendError(error).message.includes("图谱已更新")) throw error;
     return queryGraphScope(input, undefined, signal);
   }
 }
@@ -101,7 +102,7 @@ async function queryGraphScope(
   ): Promise<GraphNodePage> => {
     signal?.throwIfAborted();
     if (!input.demo)
-      return invoke("query_graph_nodes", {
+      return knowledge("query_graph_nodes", {
         input: {
           workspaceId: input.workspaceId,
           query: input.query,
@@ -116,7 +117,7 @@ async function queryGraphScope(
           limit,
           expectedSnapshot: first?.snapshot ?? prefix?.snapshot ?? null,
         },
-      });
+      }, signal);
     const centerIds = roots ?? (root ? [root] : null);
     const rangeIds = centerIds
       ? new Set(centerIds.flatMap((id) => relatedNodeIds(demoGraph, id)))
@@ -195,10 +196,10 @@ async function queryGraphScope(
   if (input.extraId && !nodes.has(input.extraId)) {
     const node = input.demo
       ? demoGraph.nodes.find((n) => n.id === input.extraId)
-      : await invoke<GraphNode>("load_graph_node", {
+      : await knowledge("load_graph_node", {
           workspaceId: input.workspaceId,
           nodeId: input.extraId,
-        });
+        }, signal);
     if (node) nodes.set(node.id, node);
   }
   if (nodes.size > MAX_GRAPH_NODES)
@@ -212,11 +213,11 @@ async function queryGraphScope(
           nodes.has(e.versions[0].fromNodeId) &&
           nodes.has(e.versions[0].toNodeId),
       )
-    : await invoke<GraphEdge[]>("load_graph_links", {
+    : await knowledge("load_graph_links", {
         workspaceId: input.workspaceId,
         nodeIds: list.map((n) => n.id),
         expectedSnapshot: first!.snapshot,
-      });
+      }, signal);
   return {
     graph: {
       nodes: list,

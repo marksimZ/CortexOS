@@ -1,9 +1,9 @@
+import { knowledge } from "./api/knowledge";
 import { benchmarkReturn } from "./benchmark/reportNavigation";
 import { SelectMenu } from "./components/SelectMenu";
 import { RetrievalInspection } from "./components/RetrievalInspection";
 import { GraphMotionControl } from "./GraphMotionControl";
 import { X } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
 import {
   lazy,
   Suspense,
@@ -36,7 +36,7 @@ export function ExecutionTrace({ studio }: { studio: GraphStudio }) {
     if (!studio.desktop || !studio.workspaceId) return;
     let current = true;
     setError(null);
-    void invoke<RunSummary[]>("list_runs", {
+    void knowledge("list_runs", {
       workspaceId: studio.workspaceId,
       offset,
     })
@@ -159,7 +159,7 @@ function TraceCanvas({ studio, runId }: { studio: GraphStudio; runId: string }) 
     let timer: ReturnType<typeof setTimeout>;
     const load = async () => {
       try {
-        const next = await invoke<ExecutionData>("load_execution_graph", {
+        const next = await knowledge("load_execution_graph", {
           workspaceId,
           runId,
         });
@@ -222,7 +222,7 @@ function TraceCanvas({ studio, runId }: { studio: GraphStudio; runId: string }) 
     setSaving(true);
     setError(null);
     try {
-      revision.current = await invoke<number>("save_execution_view", {
+      revision.current = await knowledge("save_execution_view", {
         input: {
           workspaceId,
           runId,
@@ -260,7 +260,7 @@ function TraceCanvas({ studio, runId }: { studio: GraphStudio; runId: string }) 
           <button
             className="button text-button"
             onClick={() => {
-              void invoke<ExecutionData>("load_execution_graph", {
+              void knowledge("load_execution_graph", {
                 workspaceId,
                 runId,
               })

@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { launchNative, createWorkspace, nativeInvoke } from "./native";
-import type { KnowledgeDetail } from "../src/Knowledge";
+import type { KnowledgeDetail } from "../src/knowledge-types";
 import type { ContextManifest, Message, RunDetail } from "../src/studio";
 test.use({ actionTimeout: 10000 });
 test("authorized snapshots preserve exact evidence and stop future use after revocation", async ({}, info) => {

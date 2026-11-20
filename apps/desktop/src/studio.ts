@@ -1,10 +1,11 @@
+import { chat } from "./api/chat";
 import { useStudioSettings } from "./studio-settings";
 import { preference, remember } from "./preferences";
 import { useChatWorkspace } from "./chat-workspace";
 import { createChatStream, type StreamUpdate } from "./chat-stream";
 import { errorText } from "./frontend-error";
 import { draftStore } from "./draft-store";
-import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
+import { Channel, isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CloudConsent, ModelRoute } from "./runtime-profiles";
 
@@ -269,7 +270,7 @@ function useStudioError() {
 
 export function useStudio() {
   const [data, setData] = useState<Bootstrap | null>(null);
-  const { settings, settingsDraft, setSettingsDraft, applySettings, saveSettings } = useStudioSettings();
+  const { settings, settingsDraft, setSettingsDraft, settingsRevision, applySettings, saveSettings } = useStudioSettings();
   const {
     workspaceId, conversationId, conversations, messages: storedMessages, loadingMessages, creatingConversation,
     view, refreshMessages, refreshConversations, openConversation, openWorkspace, newConversation, renameConversation,
@@ -308,10 +309,11 @@ export function useStudio() {
     if (!desktop) return;
     setLoading(true);
     clearError();
+    const revision = settingsRevision();
     try {
-      const result = await invoke<Bootstrap>("bootstrap");
+      const result = await chat("bootstrap");
       setData(result);
-      applySettings(result.settings);
+      applySettings(result.settings, revision);
       setActiveRun(result.activeRun);
       const saved = preference("workspace");
       const first =
@@ -323,14 +325,14 @@ export function useStudio() {
     } finally {
       setLoading(false);
     }
-  }, [openWorkspace, reportError, clearError, applySettings]);
+  }, [openWorkspace, reportError, clearError, applySettings, settingsRevision]);
 
   const checkConnection = useCallback(async () => {
     if (!desktop) return;
     setChecking(true);
     setConnectionError(null);
     try {
-      setHealth(await invoke<ModelHealth>("check_ollama"));
+      setHealth(await chat("check_ollama"));
     } catch (value) {
       setHealth(null);
       setConnectionError(errorText(value));
@@ -352,7 +354,7 @@ export function useStudio() {
     async function poll() {
       if (!current || finishedRuns.current.has(run.id)) return;
       try {
-        const status = await invoke<string>("get_chat_run_status", {
+        const status = await chat("get_chat_run_status", {
           workspaceId: run.workspaceId,
           runId: run.id,
         });
@@ -375,10 +377,10 @@ export function useStudio() {
     }
     timer = window.setTimeout(poll, 1000);
     return () => { current = false; window.clearTimeout(timer); };
-  }, [activeRun, refreshMessages, refreshConversations, reportError]);
+  }, [activeRun, refreshMessages, refreshConversations, reportError, view]);
 
   const createWorkspace = async (name: string) => {
-    const workspace = await invoke<Workspace>("create_workspace", { name });
+    const workspace = await chat("create_workspace", { name });
     setData((current) =>
       current
         ? { ...current, workspaces: [...current.workspaces, workspace] }
@@ -441,7 +443,7 @@ export function useStudio() {
         setKnowledgeScopes((previous) => ({ ...previous, [draftKey]: null, [`${workspace}:${conversation}`]: knowledgeScope }));
         setGraphLookups((previous) => ({ ...previous, [draftKey]: false, [`${workspace}:${conversation}`]: useGraph }));
       }
-      await invoke("set_conversation_retrieval", {
+      await chat("set_conversation_retrieval", {
         workspaceId: workspace,
         conversationId: conversation,
         enabled,
@@ -509,7 +511,7 @@ export function useStudio() {
       const prepareStarted = performance.now();
       const preparation = new Channel<Pick<RunSummary, "id" | "workspaceId" | "conversationId">>();
       preparation.onmessage = value => { if (receivingPreparation) setPreparingRun(value); };
-      const run = await invoke<RunSummary>("start_chat", {
+      const run = await chat("start_chat", {
         workspaceId: workspace,
         conversationId: conversation,
         content,
@@ -554,18 +556,18 @@ export function useStudio() {
   const cancel = async () => {
     const run = activeRun ?? preparingRun;
     if (!run) return;
-    await invoke("cancel_run", {
+    await chat("cancel_run", {
       workspaceId: run.workspaceId,
       runId: run.id,
     });
   };
   const getRun = useCallback(
-    (runId: string) =>
-      invoke<RunDetail>("get_run", {
-        workspaceId: view.current.workspaceId,
-        runId,
-      }),
-    [],
+    async (runId: string) => {
+      const workspaceId = view.current.workspaceId;
+      if (!workspaceId) throw new Error("请先选择工作区。");
+      return chat("get_run", { workspaceId, runId });
+    },
+    [view],
   );
 
   return {
@@ -575,6 +577,7 @@ export function useStudio() {
     settingsDraft,
     setSettingsDraft,
     workspaceId,
+    view,
     conversationId,
     conversations,
     messages: storedMessages,

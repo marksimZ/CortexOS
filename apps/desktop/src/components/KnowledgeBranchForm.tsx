@@ -1,7 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
+import { knowledge } from "../api/knowledge";
 import { useId, useState } from "react";
-import type { KnowledgeDetail } from "../Knowledge";
-import { getKnowledge } from "../knowledge-detail";
+import type { KnowledgeDetail } from "../knowledge-types";
 import { errorText, type ContextSelection } from "../studio";
 import { SelectMenu } from "./SelectMenu";
 
@@ -13,7 +12,7 @@ export interface SavedKnowledgeScope {
   baseSnapshotId?: string | null;
 }
 
-interface Member extends ContextSelection {
+export interface ScopeMember extends ContextSelection {
   title: string;
 }
 
@@ -24,12 +23,12 @@ export function KnowledgeBranchForm({ workspaceId, base, disabled, onSaved }: {
   onSaved: (scope: SavedKnowledgeScope) => void;
 }) {
   const id = useId();
-  const [members, setMembers] = useState<Member[]>();
+  const [members, setMembers] = useState<ScopeMember[]>();
   const [details, setDetails] = useState<KnowledgeDetail>();
   const [selected, setSelected] = useState("");
   const [version, setVersion] = useState("");
   const [name, setName] = useState("");
-  const [overrides, setOverrides] = useState<Member[]>([]);
+  const [overrides, setOverrides] = useState<ScopeMember[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -45,7 +44,7 @@ export function KnowledgeBranchForm({ workspaceId, base, disabled, onSaved }: {
   }
 
   const load = () => run(async () => {
-    setMembers(await invoke("list_knowledge_snapshot_members", { workspaceId, snapshotId: base.id }));
+    setMembers(await knowledge("list_knowledge_snapshot_members", { workspaceId, snapshotId: base.id }));
   });
   const member = members?.find((value) => value.nodeId === selected);
   const choices = details?.versions.filter((value) => value.version !== member?.version
@@ -66,7 +65,7 @@ export function KnowledgeBranchForm({ workspaceId, base, disabled, onSaved }: {
         setSelected(node);
         setVersion("");
         setDetails(undefined);
-        if (node) void run(async () => setDetails(await getKnowledge(workspaceId,node)));
+        if (node) void run(async () => setDetails(await knowledge("get_knowledge", { workspaceId, nodeId: node })));
       }}>
       <option value="">选择基准中的知识</option>
       {members?.map((item) => <option key={item.nodeId} value={item.nodeId}>{item.title}（基准 v{item.version}）</option>)}
@@ -99,7 +98,7 @@ export function KnowledgeBranchForm({ workspaceId, base, disabled, onSaved }: {
     <div className="knowledge-scope-actions">
       <button type="button" className="button secondary" disabled={locked || !overrides.length || !name.trim()}
         onClick={() => void run(async () => {
-          const scope = await invoke<SavedKnowledgeScope>("create_knowledge_branch", {
+          const scope = await knowledge("create_knowledge_branch", {
             workspaceId, baseSnapshotId: base.id, name,
             overrides: overrides.map(({ nodeId, version }) => ({ nodeId, version })),
           });

@@ -1,0 +1,84 @@
+import type { Channel } from "@tauri-apps/api/core";
+import type { StreamUpdate } from "../chat-stream";
+import type {
+  ChatRuntimeRoute,
+  CloudConsent,
+  CloudKnowledgeGrant,
+  RuntimeConnection,
+} from "../runtime-profiles";
+import type {
+  Bootstrap,
+  ContextManifest,
+  ContextSelection,
+  Conversation,
+  KnowledgeScope,
+  Message,
+  ModelHealth,
+  ModelSettings,
+  RunDetail,
+  RunSummary,
+  Workspace,
+} from "../studio";
+import { createClient, type Command, type WorkspaceArgs } from "./request";
+
+type ConversationArgs = WorkspaceArgs & { conversationId: string };
+type RunArgs = WorkspaceArgs & { runId: string };
+type ContextArgs = WorkspaceArgs & {
+  content: string;
+  contextSelection: ContextSelection[];
+  knowledgeScope: KnowledgeScope | null;
+  useGraph: boolean;
+};
+export type ContextCursor = { id: string; updatedAt: string };
+export type ContextOption = ContextCursor & {
+  title: string;
+  latestVersion: number;
+  effectiveVersion: number;
+};
+type ContextOptionsPage = { items: ContextOption[]; hasMore: boolean };
+type RunPreparing = Pick<RunSummary, "id" | "workspaceId" | "conversationId">;
+
+export const chat = createClient<{
+  bootstrap: Command<undefined, Bootstrap>;
+  check_ollama: Command<undefined, ModelHealth>;
+  create_workspace: Command<{ name: string }, Workspace>;
+  list_conversations: Command<WorkspaceArgs, Conversation[]>;
+  create_conversation: Command<WorkspaceArgs, Conversation>;
+  rename_conversation: Command<ConversationArgs & { title: string }, void>;
+  load_messages: Command<ConversationArgs, Message[]>;
+  save_settings: Command<{ settings: ModelSettings }, ModelSettings>;
+  set_conversation_retrieval: Command<
+    ConversationArgs & { enabled: boolean },
+    void
+  >;
+  get_chat_run_status: Command<RunArgs, string>;
+  cancel_run: Command<RunArgs, void>;
+  get_run: Command<RunArgs, RunDetail>;
+  start_chat: Command<
+    ContextArgs &
+      ConversationArgs & {
+        cloudConsent?: CloudConsent;
+        useKnowledgeRoute?: boolean;
+        onPreparing: Channel<RunPreparing>;
+        onUpdate: Channel<StreamUpdate>;
+      },
+    RunSummary
+  >;
+  list_context_options: Command<
+    WorkspaceArgs & { day: string; after: ContextCursor | null },
+    ContextOptionsPage
+  >;
+  preview_context: Command<
+    ContextArgs & { conversationId: string | null },
+    ContextManifest
+  >;
+  chat_runtime_route: Command<
+    WorkspaceArgs & { knowledge: boolean },
+    ChatRuntimeRoute
+  >;
+  list_runtime_cloud_connections: Command<WorkspaceArgs, RuntimeConnection[]>;
+  list_model_cloud_knowledge: Command<
+    WorkspaceArgs & { connectionId: string; includeCandidates?: boolean },
+    { grants: CloudKnowledgeGrant[] }
+  >;
+}>();

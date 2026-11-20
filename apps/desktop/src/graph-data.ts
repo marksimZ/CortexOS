@@ -1,4 +1,4 @@
-import type { KnowledgeNode } from "./Knowledge";
+import type { KnowledgeNode } from "./knowledge-types";
 
 export type Point = [number, number, number];
 export interface GraphNode extends KnowledgeNode {

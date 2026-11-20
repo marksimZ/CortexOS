@@ -20,12 +20,7 @@ export function WorkspaceSwitcher({
         id="current-workspace"
         value={studio.workspaceId ?? ""}
         disabled={!studio.desktop || !studio.data || studio.loading}
-        onChange={(event) => {
-          void studio
-            .openWorkspace(event.target.value)
-            .then(() => navigate(page))
-            .catch(studio.reportError);
-        }}
+        onChange={(event) => navigate(page, { workspace: event.target.value })}
       >
         {!studio.workspaceId && <option value="">尚未创建工作区</option>}
         {studio.data?.workspaces.map((workspace) => (

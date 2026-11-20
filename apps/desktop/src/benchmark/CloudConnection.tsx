@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { benchmark } from "../api/benchmark";
 import { invoke } from "@tauri-apps/api/core";
 import { KeyRound, ShieldCheck } from "lucide-react";
 import { SelectMenu } from "../components/SelectMenu";
@@ -88,7 +89,7 @@ export function CloudConnection({ desktop, onContinue }: { desktop: boolean; onC
             setKey(""); void run(async () => { const next = await invoke<Connection>("remove_cloud_connection"); if (mounted.current) { apply(next); notify("连接已解除"); } });
           }}>解除绑定</button>}
           {connection?.allowed && <button className="button secondary" disabled={busy || changed} onClick={() => { void run(async () => {
-            const next = await invoke<Connection>("personalized_access"); if (mounted.current) { apply(next); setEntered(next.allowed); if(next.allowed) onContinue?.(); }
+            const next = await benchmark("personalized_access"); if (mounted.current) { apply(next); setEntered(next.allowed); if(next.allowed) onContinue?.(); }
           }); }}>继续</button>}
         </div>
         {entered && <div className="cloud-ready" role="status"><h3>连接准备就绪</h3><p>账号连接已确认。用户画像和题目生成将在下一阶段开放；当前不会创建评测任务或产生推理费用。</p></div>}

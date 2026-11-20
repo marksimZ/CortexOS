@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { chat } from "./api/chat";
 import { useCallback, useRef, useState } from "react";
 import { preference, remember } from "./preferences";
 import type { Conversation, Message } from "./studio";
@@ -12,6 +12,7 @@ export function useChatWorkspace() {
   const [creatingConversation, setCreatingConversation] = useState(false);
   const view = useRef({ workspaceId, conversationId });
   const viewVersion = useRef(0);
+  const workspaceRequest = useRef(0);
   const messageRequest = useRef(0);
 
   const refreshMessages = useCallback(
@@ -19,7 +20,7 @@ export function useChatWorkspace() {
       if (view.current.workspaceId !== workspace || view.current.conversationId !== conversation) return;
       const version = viewVersion.current;
       const request = ++messageRequest.current;
-      const messages = await invoke<Message[]>("load_messages", {
+      const messages = await chat("load_messages", {
         workspaceId: workspace,
         conversationId: conversation,
       });
@@ -36,7 +37,7 @@ export function useChatWorkspace() {
   );
 
   const refreshConversations = useCallback(async (workspace: string) => {
-    const list = await invoke<Conversation[]>("list_conversations", {
+    const list = await chat("list_conversations", {
       workspaceId: workspace,
     });
     if (view.current.workspaceId === workspace) setConversations(list);
@@ -53,7 +54,7 @@ export function useChatWorkspace() {
       setLoadingMessages(true);
       remember(`conversation.${workspace}`, conversation);
       try {
-        const messages = await invoke<Message[]>("load_messages", {
+        const messages = await chat("load_messages", {
           workspaceId: workspace,
           conversationId: conversation,
         });
@@ -66,7 +67,8 @@ export function useChatWorkspace() {
   );
 
   const openWorkspace = useCallback(
-    async (workspace: string) => {
+    async (workspace: string, targetConversation?: string | null, signal?: AbortSignal) => {
+      const request = ++workspaceRequest.current;
       const version = ++viewVersion.current;
       view.current = { workspaceId: workspace, conversationId: null };
       setWorkspaceId(workspace);
@@ -76,9 +78,14 @@ export function useChatWorkspace() {
       remember("workspace", workspace);
       setLoadingMessages(true);
       try {
-        const list = await invoke<Conversation[]>("list_conversations", { workspaceId: workspace });
-        if (version !== viewVersion.current) return;
+        const list = await chat("list_conversations", { workspaceId: workspace });
+        if (request !== workspaceRequest.current || view.current.workspaceId !== workspace) return;
         setConversations(list);
+        if (version !== viewVersion.current) return;
+        if (targetConversation && !signal?.aborted) {
+          await openConversation(workspace, targetConversation);
+          return;
+        }
         const saved = preference(`conversation.${workspace}`);
         const first = list.find((item) => item.id === saved) ?? list[0];
         if (first) await openConversation(workspace, first.id);
@@ -94,7 +101,7 @@ export function useChatWorkspace() {
     if (!workspace) throw "请先创建工作区。";
     setCreatingConversation(true);
     try {
-      const conversation = await invoke<Conversation>("create_conversation", {
+      const conversation = await chat("create_conversation", {
         workspaceId: workspace,
       });
       await refreshConversations(workspace);
@@ -110,7 +117,7 @@ export function useChatWorkspace() {
     const { workspaceId: workspace, conversationId: conversation } =
       view.current;
     if (!workspace || !conversation) return;
-    await invoke("rename_conversation", {
+    await chat("rename_conversation", {
       workspaceId: workspace,
       conversationId: conversation,
       title,

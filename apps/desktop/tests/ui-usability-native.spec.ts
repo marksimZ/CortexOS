@@ -3,7 +3,7 @@ import { expect, test, type Locator } from "@playwright/test";
 import { createServer } from "node:http";
 import { mkdir, writeFile } from "node:fs/promises";
 import { launchNative, createWorkspace, nativeInvoke } from "./native";
-import type { KnowledgeDetail } from "../src/Knowledge";
+import type { KnowledgeDetail } from "../src/knowledge-types";
 
 async function scrollBody(panel: Locator) {
   const header = panel.locator(":scope > .panel-header, :scope > form > .panel-header");

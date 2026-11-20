@@ -1,16 +1,9 @@
-import { invoke } from "@tauri-apps/api/core";
+import { chat, type ContextCursor, type ContextOption } from "./api/chat";
 import { useEffect, useRef, useState } from "react";
 import { errorText, localDay, type ContextManifest, type Studio } from "./studio";
 import { RetrievalSummary } from "./components/RetrievalSummary";
 import { KnowledgeScopePicker } from "./components/KnowledgeScopePicker";
 import { KnowledgeGraphOptions } from "./components/KnowledgeGraphOptions";
-type ContextCursor = { id: string; updatedAt: string };
-type ContextOption = ContextCursor & {
-  title: string;
-  latestVersion: number;
-  effectiveVersion: number;
-};
-type ContextOptionsPage = { items: ContextOption[]; hasMore: boolean };
 
 export function ContextPicker({ studio, cloudAnswer = false }: { studio: Studio; cloudAnswer?: boolean }) {
   const previewGeneration = useRef(0);
@@ -30,7 +23,7 @@ export function ContextPicker({ studio, cloudAnswer = false }: { studio: Studio;
     let current = true;
     setListLoading(true);
     setListError(null);
-    void invoke<ContextOptionsPage>("list_context_options", {
+    void chat("list_context_options", {
       workspaceId: studio.workspaceId,
       day: localDay(),
       after: listRequest.after,
@@ -145,11 +138,13 @@ export function ContextPicker({ studio, cloudAnswer = false }: { studio: Studio;
         className="button secondary"
         disabled={busy || !studio.draft.trim() || studio.savingRetrieval || !studio.knowledgeScopeReady}
         onClick={() => {
+          const workspaceId = studio.workspaceId;
+          if (!workspaceId) return;
           setBusy(true);
           setError(null);
           const generation = ++previewGeneration.current;
-          void invoke<ContextManifest>("preview_context", {
-            workspaceId: studio.workspaceId,
+          void chat("preview_context", {
+            workspaceId,
             conversationId: studio.conversationId,
             content: studio.draft,
             contextSelection: studio.knowledgeScope ? [] : studio.contextSelection,

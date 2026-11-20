@@ -1,6 +1,6 @@
+import { benchmark } from "../api/benchmark";
 import { notify } from "../components/Toast";
 import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { ChevronLeft, ChevronRight, Link2, RotateCw, X } from "lucide-react";
 import { AppDialog, openDialog } from "../components/AppDialog";
 import { MarkdownContent } from "../components/MarkdownContent";
@@ -10,7 +10,7 @@ import { errorText, ruleName, stateName, type Batch, type Measurement, type Mode
 
 export type ReportScope = "standard" | "personalized";
 export interface ResultRow { ordinal: number; caseId: string; state: string; status: string; repetition: number; question: string; error: string | null; runId: string | null; evaluator?: string; difficulty?: string }
-interface ResultDetail {
+export interface ResultDetail {
   itemError?: string | null;
   case: { input: { prompt: string; response_schema?: unknown; tools?: unknown[] }; expected?: unknown; scoring?: { id: string; version: number; contract?: unknown }; fixture?: { id: string; title: string; lines: string[] }[]; content_hash?: string };
   output: string | null; performance: Measurement | null; summary?: { id: string };
@@ -42,7 +42,7 @@ export function ResultDrawer({ id, workspaceId, batch, report, scope, row, rows,
       pending = true;
       let again = ["running", "stopping"].includes(batch.status);
       try {
-        const next = await invoke<ResultDetail>("get_benchmark_result_detail", { workspaceId, batchId: batch.id, scope, ordinal: row.ordinal });
+        const next = await benchmark("get_benchmark_result_detail", { workspaceId, batchId: batch.id, scope, ordinal: row.ordinal });
         again = again && next.evaluations.length === 0;
         if (current) { setResponse({ identity, detail: next }); setRequest({ identity, loading: false, error: "" }); }
       } catch (e) { if (current) setRequest({ identity, loading: false, error: errorText(e) }); }

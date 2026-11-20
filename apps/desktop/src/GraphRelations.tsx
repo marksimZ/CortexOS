@@ -1,5 +1,5 @@
+import { knowledge } from "./api/knowledge";
 import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { Plus } from "lucide-react";
 import { errorText } from "./studio";
 import {
@@ -9,7 +9,7 @@ import {
   type GraphNode,
 } from "./graph-data";
 import type { RelationPage, HistoryPage } from "./graph-query";
-import type { EditEdge } from "./Graph";
+import type { EditEdge } from "./RelationshipEditor";
 
 export function GraphRelations({
   workspace,
@@ -50,7 +50,7 @@ export function GraphRelations({
   }, [page, loading, open]);
   useEffect(() => {
     if (!open || demo) return;
-    let current = true;
+    const request = new AbortController();
     setLoading(true);
     setError(null);
     void (async () => {
@@ -58,31 +58,31 @@ export function GraphRelations({
       const edges: GraphEdge[] = [];
       const nodes: GraphNode[] = [];
       do {
-        const next = await invoke<RelationPage>("query_graph_relations", {
+        const next = await knowledge("query_graph_relations", {
           workspaceId: workspace,
           nodeId: selected,
           offset: edges.length,
           limit: Math.min(50, limit - edges.length),
           expectedSnapshot: data?.snapshot ?? null,
-        });
+        }, request.signal);
         data ??= next;
         edges.push(...next.edges);
         nodes.push(...next.nodes);
         if (!next.edges.length || edges.length >= next.total) break;
       } while (edges.length < limit);
-      if (current) {
+      if (!request.signal.aborted) {
         setPage({ ...data!, edges, nodes });
         onNodes(nodes);
       }
     })()
       .catch((e) => {
-        if (current) setError(errorText(e));
+        if (!request.signal.aborted) setError(errorText(e));
       })
       .finally(() => {
-        if (current) setLoading(false);
+        if (!request.signal.aborted) setLoading(false);
       });
     return () => {
-      current = false;
+      request.abort();
     };
   }, [workspace, selected, revision, open, limit, retry, demo, onNodes]);
   const edges = demo
@@ -193,7 +193,7 @@ function GraphRelation({
     let valid = true;
     setLoading(true);
     setError(null);
-    void invoke<HistoryPage>("load_graph_edge_history", {
+    void knowledge("load_graph_edge_history", {
       workspaceId: workspace,
       edgeId: edge.id,
       beforeVersion: before,

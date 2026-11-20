@@ -1,7 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
-import { navigationHash, useNavigation } from "../navigation";
+import { benchmark } from "../api/benchmark";
+import { navigate, navigationHash, useNavigation } from "../navigation";
 import { BenchmarkLink } from "./BenchmarkLink";
-import { reportParams } from "./reportNavigation";
 import { useEffect, useState } from "react";
 import type { Studio } from "../studio";
 import { lazyView } from "../components/lazyView";
@@ -13,13 +12,22 @@ const CloudConnection = lazyView(() => import("./CloudConnection"), (module) => 
 const PersonalizedWorkbench = lazyView(() => import("./PersonalizedWorkbench"), (module) => module.PersonalizedWorkbench);
 const RagEvaluation = lazyView(() => import("./RagEvaluation"), (module) => module.RagEvaluation);
 
-export function BenchmarkPage({ studio, personalized }: { studio: Studio; personalized: boolean }) {
+export function BenchmarkPage({ studio }: { studio: Studio }) {
   const [profileOpen, setProfileOpen] = useState(false);
-  const route=useNavigation(),requestedBatch=reportParams(route.hash).get("batch");
-  const harness=new URLSearchParams(route.hash.split('?')[1]).get('view')==='harness';
-  const rag=reportParams(route.hash).get("view")==="rag";
-  useEffect(()=>{if(!personalized||!requestedBatch)return;let current=true;void invoke<{allowed:boolean}>("personalized_access").then(status=>{if(current&&status.allowed)setProfileOpen(true);}).catch(()=>{});return()=>{current=false;};},[personalized,requestedBatch]);
-  if(route.workspace&&route.workspace!==studio.workspaceId)return <div><p role="status">{studio.data&&!studio.data.workspaces.some(w=>w.id===route.workspace)?"链接中的工作区不存在。":"正在切换到链接中的工作区…"}</p><button className="button secondary" onClick={()=>{studio.clearError();window.location.hash=navigationHash("benchmark",{workspace:studio.workspaceId});}}>返回当前工作区</button></div>;
+  const route = useNavigation();
+  const requestedBatch = route.params.get("batch");
+  const harness = route.benchmarkView === "harness";
+  const rag = route.benchmarkView === "rag";
+  const personalized = route.benchmarkView === "personalized";
+  useEffect(() => {
+    if (!personalized || !requestedBatch) return;
+    const request = new AbortController();
+    void benchmark("personalized_access", undefined, request.signal)
+      .then(status => { if (status.allowed) setProfileOpen(true); })
+      .catch(() => {}); // The connection screen remains available when access expires.
+    return () => request.abort();
+  }, [personalized, requestedBatch]);
+  if(route.workspace&&route.workspace!==studio.workspaceId)return <div><p role="status">{studio.data&&!studio.data.workspaces.some(w=>w.id===route.workspace)?"链接中的工作区不存在。":"正在切换到链接中的工作区…"}</p><button className="button secondary" onClick={()=>{studio.clearError();navigate("benchmark",{workspace:studio.workspaceId});}}>返回当前工作区</button></div>;
   return <section className="standard-page benchmark-page" aria-labelledby="page-title">
     <h1 id="page-title" className="sr-only">评测</h1>
     <nav className="benchmark-tabs" aria-label="评测类型">

@@ -1,5 +1,10 @@
 import { useMemo, useSyncExternalStore } from "react";
 export type PageName = "chat" | "knowledge" | "graph" | "settings" | "benchmark";
+const pages: readonly PageName[] = ["chat", "knowledge", "graph", "settings", "benchmark"];
+export function navigationParams(hash: string): URLSearchParams {
+  const query = hash.indexOf("?");
+  return new URLSearchParams(query < 0 ? "" : hash.slice(query + 1));
+}
 const subscribe = (change: () => void) => {
   window.addEventListener("hashchange", change);
   window.addEventListener("popstate", change);
@@ -7,19 +12,22 @@ const subscribe = (change: () => void) => {
 };
 export function useNavigation() {
   const hash = useSyncExternalStore(subscribe, () => window.location.hash);
-  return useMemo(() => {
-    const [path, query = ""] = hash.replace(/^#\//, "").split("?");
-    const params = new URLSearchParams(query);
-    const page: PageName = ["chat", "knowledge", "graph", "settings", "benchmark"].includes(
-      path,
-    )
-      ? (path as PageName)
-      : "chat";
-    const number = Number(params.get("version"));
-    const citation = params.has("citation") ? Number(params.get("citation")) : -1;
-    return {
+  return useMemo(() => parseNavigation(hash), [hash]);
+}
+export function parseNavigation(hash: string) {
+  const [path] = hash.replace(/^#\//, "").split("?", 1);
+  const params = navigationParams(hash);
+  const page = pages.find(item => item === path) ?? "chat";
+  const view = params.get("view");
+  const benchmarkView = view === "personalized" || view === "harness" || view === "rag" ? view : "standard";
+  const number = Number(params.get("version"));
+  const citation = params.has("citation") ? Number(params.get("citation")) : -1;
+  const back = params.get("back");
+  return {
       page,
-      personalized: params.get("view") === "personalized",
+      benchmarkView,
+      personalized: benchmarkView === "personalized",
+      params,
       hash,
       workspace: params.get("workspace"),
       conversation: params.get("conversation"),
@@ -30,11 +38,8 @@ export function useNavigation() {
       citation: Number.isSafeInteger(citation) && citation >= 0 ? citation : undefined,
       version: Number.isSafeInteger(number) && number > 0 ? number : undefined,
       mode: params.get("mode") === "execution" ? "execution" : "knowledge",
-      back: /^(#\/graph\?|#\/chat\?|#\/benchmark\?)/.test(params.get("back") ?? "")
-        ? params.get("back")
-        : null,
-    };
-  }, [hash]);
+      back: back && /^(#\/graph\?|#\/chat\?|#\/benchmark\?)/.test(back) ? back : null,
+  };
 }
 export function navigationHash(
   page: PageName,

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { createServer } from "node:http";
 import { createWorkspace, launchNative, nativeInvoke } from "./native";
 import type { Bootstrap } from "../src/studio";
-import type { KnowledgeDetail, KnowledgeNode } from "../src/Knowledge";
+import type { KnowledgeDetail, KnowledgeNode } from "../src/knowledge-types";
 
 test.use({ actionTimeout: 10000 });
 

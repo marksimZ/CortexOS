@@ -1,12 +1,11 @@
+import { benchmark, type ResultPage } from "../api/benchmark";
 import { ResultDrawer, type ReportScope as Scope, type ResultRow as Row } from "./ResultDrawer";
 import type { ResultFilter } from "./ReportOptions";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { errorText, stateName, type Batch, type ModelReport } from "./personalized";
 
-interface ResultPage { batchId: string; modelIndex: number; page: number; pageSize: number; total: number; plannedTotal: number; rows: Row[]; key?: string }
 export function PagedResults({ workspaceId, batch, report, scope, filter, page, selection, onPage, onSelect, onClose }: { workspaceId: string; batch: Batch; report: ModelReport; scope: Scope; filter: ResultFilter; page: number; selection?: number; onPage: (page: number)=>void; onSelect: (ordinal: number)=>void; onClose: ()=>void }) {
-  const [data, setData] = useState<ResultPage | null>(null), [cached, setCached] = useState<Row | null>(null);
+  const [data, setData] = useState<(ResultPage & { key: string }) | null>(null), [cached, setCached] = useState<Row | null>(null);
   const [loading, setLoading] = useState(true), [error, setError] = useState(""), [reload, setReload] = useState(0);
   const drawerId = useId();
   const revealed = useRef<string | undefined>(undefined);
@@ -15,7 +14,7 @@ export function PagedResults({ workspaceId, batch, report, scope, filter, page, 
   useEffect(() => {
     let current = true;
     setLoading(true); setError("");
-    void invoke<ResultPage>("get_benchmark_result_page", { workspaceId, batchId: batch.id, scope, modelIndex: report.modelIndex, page, pageSize: 20, filter })
+    void benchmark("get_benchmark_result_page", { workspaceId, batchId: batch.id, scope, modelIndex: report.modelIndex, page, pageSize: 20, filter })
       .then(next => { if (current) { setData({...next,key}); setError(""); } })
       .catch(e => { if (current) setError(errorText(e)); })
       .finally(() => { if (current) setLoading(false); });

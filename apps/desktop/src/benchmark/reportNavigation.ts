@@ -1,12 +1,17 @@
+import { benchmark, type ResultLocation } from "../api/benchmark";
 import { useEffect, useMemo, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { navigate, useNavigation } from "../navigation";
+import { navigate, navigationHash, navigationParams, parseNavigation, useNavigation } from "../navigation";
 import { errorText, ruleName, type Batch } from "./personalized";
 import type { ReportOrder, ResultFilter } from "./ReportOptions";
 import type { ReportScope } from "./ResultDrawer";
 
 const states = ["Passed", "Failed", "Unsupported", "Not Run", "Execution Error", "Scoring Error", "Needs Review", "In Progress", "Cancelled"];
-export const reportParams = (hash: string) => new URLSearchParams(hash.split("?")[1] ?? "");
+export const reportParams = navigationParams;
+function matchesReport(hash: string, workspaceId: string, batchId: string, scope: ReportScope) {
+  const route = parseNavigation(hash);
+  return route.page === "benchmark" && route.benchmarkView === scope &&
+    (!route.workspace || route.workspace === workspaceId) && route.params.get("batch") === batchId;
+}
 const integer = (value: string | null, max = 0xffffffff) => value != null && /^(0|[1-9]\d*)$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) <= max ? Number(value) : undefined;
 export function reportLink(value: string) {
   if (!value.startsWith("#/benchmark?") || value.length > 8192) throw new Error("请粘贴 CortexOS 的评测定位链接（#/benchmark?...）。");
@@ -14,7 +19,7 @@ export function reportLink(value: string) {
   for (const key of p.keys()) if (p.getAll(key).length !== 1) throw new Error("定位链接含重复参数，请重新复制。");
   if (!p.get("workspace") || !p.get("batch") || (p.has("view") && p.get("view") !== "personalized")) throw new Error("定位链接缺少工作区、批次或评测类型不正确。");
   p.delete("back");
-  return `#/benchmark?${p}`;
+  return navigationHash("benchmark", Object.fromEntries(p));
 }
 export function benchmarkReturn(back: string | null, workspace: string | null, run: string | null) {
   if (!back || !workspace || !run) return null;
@@ -22,7 +27,7 @@ export function benchmarkReturn(back: string | null, workspace: string | null, r
     const p = reportParams(reportLink(back));
     if (p.get("workspace") !== workspace) return null;
     p.set("trace", run);
-    return `#/benchmark?${p}`;
+    return navigationHash("benchmark", Object.fromEntries(p));
   } catch { return null; }
 }
 function read(hash: string, batch: Batch) {
@@ -53,35 +58,33 @@ function read(hash: string, batch: Batch) {
   } catch (e) { result.error = e instanceof Error ? e.message : "定位链接无效。"; }
   return result;
 }
-interface Location { ordinal: number; modelIndex: number; page: number | null; matchesFilter: boolean }
 export function useReportNavigation(workspaceId: string, batch: Batch | null, scope: ReportScope) {
   const route = useNavigation();
   const state = useMemo(() => batch ? read(route.hash, batch) : null, [route.hash, batch?.id, batch?.planHash]);
   const pointer = state?.item != null || state?.trace != null;
   const query = JSON.stringify([workspaceId, scope, batch?.id, state?.item, state?.trace, state?.filter]);
-  const [located, setLocated] = useState<{ query: string; value?: Location; error?: string }>();
+  const [located, setLocated] = useState<{ query: string; value?: ResultLocation; error?: string }>();
   const [retry, setRetry] = useState(0);
   const update = (patch: Record<string, string | number | null | undefined>, options: { replace?: boolean; resetPages?: boolean; state?: unknown } = {}) => {
     if (!batch) return;
+    if (!matchesReport(window.location.hash, workspaceId, batch.id, scope)) return;
     const p = reportParams(window.location.hash);
-    if (p.get("batch") !== batch.id || (p.get("workspace") && p.get("workspace") !== workspaceId) || (p.get("view") === "personalized") !== (scope === "personalized")) return;
     p.set("workspace", workspaceId); p.delete("back");
     if (options.resetPages) for (const key of [...p.keys()]) if (/^page\d+$/.test(key)) p.delete(key);
     for (const [key, value] of Object.entries(patch)) if (value == null) p.delete(key); else p.set(key, String(value));
     navigate("benchmark", Object.fromEntries(p), { replace: options.replace, state: options.state ?? (options.replace ? window.history.state : null) });
   };
   useEffect(() => {
-    const p=reportParams(window.location.hash);
-    if (!batch || !state || state.error || !pointer || p.get("batch")!==batch.id || (p.get("workspace")&&p.get("workspace")!==workspaceId) || (p.get("view")==="personalized")!==(scope==="personalized")) return;
-    let current = true;
-    void invoke<Location>("get_benchmark_result_location", { workspaceId, batchId: batch.id, scope, ordinal: state.item ?? null, executionRunId: state.trace ?? null, pageSize: 20, filter: state.filter })
+    if (!batch || !state || state.error || !pointer || !matchesReport(route.hash, workspaceId, batch.id, scope)) return;
+    const request = new AbortController();
+    void benchmark("get_benchmark_result_location", { workspaceId, batchId: batch.id, scope, ordinal: state.item ?? null, executionRunId: state.trace ?? null, pageSize: 20, filter: state.filter }, request.signal)
       .then(value => {
-        if (!current) return;
+        if (window.location.hash !== route.hash) return;
         setLocated({ query, value });
         if (value.matchesFilter && (state.model === "all" || state.model === String(value.modelIndex)) && (state.item !== value.ordinal || (state.pages[value.modelIndex] ?? 0) !== value.page)) update({ item: value.ordinal, [`page${value.modelIndex}`]: value.page! + 1 }, { replace: true });
-      }).catch(e => { if (current) setLocated({ query, error: errorText(e) }); });
-    return () => { current = false; };
-  }, [workspaceId, batch?.id, scope, query, retry, state?.error]);
+      }).catch(e => { if (!request.signal.aborted) setLocated({ query, error: errorText(e) }); });
+    return () => request.abort();
+  }, [workspaceId, batch?.id, scope, query, retry, state?.error, route.hash]);
   const found = located?.query === query ? located : undefined;
   const mismatch = found?.value && (!found.value.matchesFilter || (state?.model !== "all" && state?.model !== String(found.value.modelIndex)));
   const locationError = state?.error || found?.error || (mismatch ? "这道题不符合当前模型或筛选条件。可以清除条件后定位。" : "");

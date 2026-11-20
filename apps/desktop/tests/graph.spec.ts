@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createWorkspace, launchNative, nativeInvoke } from "./native";
 import type { Bootstrap } from "../src/studio";
 import type { GraphData } from "../src/graph-data";
-import type { KnowledgeDetail } from "../src/Knowledge";
+import type { KnowledgeDetail } from "../src/knowledge-types";
 
 test.use({ actionTimeout: 10000 });
 async function uncoveredCanvasPoint(page: Page) {

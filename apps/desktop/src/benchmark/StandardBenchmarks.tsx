@@ -1,5 +1,5 @@
+import { benchmark } from "../api/benchmark";
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { navigate, useNavigation } from "../navigation";
 import { StandardSetup } from "./StandardSetup";
 import { PersonalizedReport } from "./PersonalizedReport";
@@ -17,7 +17,7 @@ function WorkspaceBenchmarks({ workspaceId }: { workspaceId: string }) {
   const params = reportParams(route.hash), showSetup = !overview.id && params.get("tab") !== "history";
   useEffect(() => {
     let current = true;
-    void invoke<History[]>("list_standard_benchmarks", { workspaceId }).then(items => {
+    void benchmark("list_standard_benchmarks", { workspaceId }).then(items => {
       if (!current) return;
       setHistory(items); setError("");
       const p = reportParams(window.location.hash);

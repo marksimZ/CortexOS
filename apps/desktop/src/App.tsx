@@ -6,9 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { AppShell, pages } from "./components/AppShell";
 import { lazyView } from "./components/lazyView";
-import type { EditKnowledge } from "./Knowledge";
+import type { EditKnowledge } from "./knowledge-types";
 import { ChatPage } from "./Chat";
-import type { EditEdge } from "./Graph";
+import type { EditEdge } from "./RelationshipEditor";
 import { errorText, useStudio, type Message } from "./studio";
 import { notify } from "./components/Toast";
 import "./styles/tokens.css";
@@ -20,15 +20,15 @@ import "./markdown.css";
 import { useNavigation, navigate } from "./navigation";
 
 const KnowledgePage = lazyView(() => import("./Knowledge"), (module) => module.KnowledgePage);
-const KnowledgeEditor = lazyView(() => import("./Knowledge"), (module) => module.KnowledgeEditor);
+const KnowledgeEditor = lazyView(() => import("./KnowledgeEditor"), (module) => module.KnowledgeEditor);
 const GraphPage = lazyView(() => import("./Graph"), (module) => module.GraphPage);
-const RelationshipEditor = lazyView(() => import("./Graph"), (module) => module.RelationshipEditor);
+const RelationshipEditor = lazyView(() => import("./RelationshipEditor"), (module) => module.RelationshipEditor);
 const SettingsPage = lazyView(() => import("./Settings"), (module) => module.SettingsPage);
 const BenchmarkPage = lazyView(() => import("./benchmark/BenchmarkPage"), (module) => module.BenchmarkPage);
 
 export default function App() {
   const studio = useStudio();
-  const { desktop, workspaceId, openConversation, reportError } = studio;
+  const { desktop, workspaceId, openWorkspace, openConversation, reportError, view, loading } = studio;
   const graphStudio = useMemo(
     () => ({ desktop, workspaceId, openConversation, reportError }),
     [desktop, workspaceId, openConversation, reportError],
@@ -48,27 +48,25 @@ export default function App() {
   const route = useNavigation();
   const page = route.page;
   const returnTarget=route.back?.startsWith("#/benchmark?")?benchmarkReturn(route.back,route.workspace,route.run):route.back;
+  const { conversation: routeConversation, workspace: routeWorkspace } = route;
+  const knownWorkspace = studio.data?.workspaces.some(item => item.id === routeWorkspace);
   useEffect(() => {
-    if (studio.loading || !studio.data || !route.workspace) return;
-    if (!studio.data.workspaces.some((item) => item.id === route.workspace)) {
-      studio.reportError("目标工作区不存在。请选择可用工作区。");
+    if (loading || knownWorkspace === undefined || !routeWorkspace) return;
+    if (!knownWorkspace) {
+      reportError("目标工作区不存在。请选择可用工作区。");
       return;
     }
-    let current = true;
-    void (async () => {
-      if (studio.workspaceId !== route.workspace)
-        await studio.openWorkspace(route.workspace!);
-      if (
-        current &&
-        route.conversation &&
-        studio.conversationId !== route.conversation
-      )
-        await studio.openConversation(route.workspace!, route.conversation);
-    })().catch(studio.reportError);
-    return () => {
-      current = false;
+    const request = new AbortController();
+    const apply = async () => {
+      if (view.current.workspaceId !== routeWorkspace) {
+        await openWorkspace(routeWorkspace, routeConversation, request.signal);
+      } else if (routeConversation && view.current.conversationId !== routeConversation) {
+        await openConversation(routeWorkspace, routeConversation);
+      }
     };
-  }, [route.workspace, route.conversation, studio.loading, !!studio.data]);
+    void apply().catch(error => { if (!request.signal.aborted) reportError(error); });
+    return () => request.abort();
+  }, [routeWorkspace, routeConversation, loading, knownWorkspace, view, openWorkspace, openConversation, reportError]);
   const mainRef = useRef<HTMLElement>(null);
   const previousPage = useRef(page);
   const workspaceDialog = useRef<HTMLDialogElement>(null);
@@ -87,7 +85,7 @@ export default function App() {
     if (previousPage.current !== page && !(page === "chat" && route.message))
       mainRef.current?.focus();
     previousPage.current = page;
-  }, [page]);
+  }, [page, route.message]);
   return (
     <AppShell
       studio={studio}
@@ -178,7 +176,7 @@ export default function App() {
           />
         )}
         {page === "settings" && <SettingsPage studio={studio} />}
-        {page === "benchmark" && <BenchmarkPage studio={studio} personalized={route.personalized} />}
+        {page === "benchmark" && <BenchmarkPage studio={studio} />}
         </ErrorBoundary>
       </main>
       {edgeEdit && (
