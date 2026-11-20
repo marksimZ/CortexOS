@@ -21,6 +21,7 @@ export default defineConfig({
     timeout: 30_000,
   },
   projects: [
+    ...(process.env.CORTEXOS_H1_BASELINE === "1" ? [{ name: "h1-baseline", testMatch: "h1-baseline.spec.ts" }] : []),
     ...(process.env.CORTEXOS_HARNESS_EXPERIMENT === "1" ? [{name:"harness-experiment",testMatch:"harness-experiment.spec.ts"}] : []),
     ...(process.env.CORTEXOS_HARNESS_AIDER_SESSION === "1" ? [{name:"harness-aider-session",testMatch:"harness-aider-session.spec.ts"}] : []),
     ...(process.env.CORTEXOS_HARNESS_AIDER_RUNTIME === "1" ? [{name:"harness-aider-runtime",testMatch:"harness-aider-runtime.spec.ts"}] : []),

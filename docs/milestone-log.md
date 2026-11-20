@@ -1,5 +1,11 @@
 # 里程碑记录
 
+## 2026-11-20 Phase H1.0 前端审计与基线
+
+- 核查 30 项范围，C1–C16 按附件索引，V1–V14 根据可用范围及代码重建。现行规范为 HTML 原型。
+- 执行 `playwright test --project=h1-baseline`，使用 H0 隔离调试包和测试库。两条通过，共 25.1 秒；采得五页的两主题四尺寸共 40 张截图、3000 字符流性能和 100/500/1000 条长历史数据。
+- 详见 [审计](frontend/h1-audit-verification.md)、[性能](frontend/h1-performance-baseline.md)、[截图](frontend/h1-ui-baseline.md) 和 [后续切片](frontend/h1-implementation-plan.md)。
+
 ## 2026-11-19 Phase G5 发布候选版验收
 
 复跑三工具共享队列，修复工具间错误取消。业务代码只变更 `tasks.rs` 和 `benchmark/harness/session.rs` 的等待取消归属。新增原生三工具与隔离安装场景，复跑标准评测、过期草案、凭据、网络与迁移定向检查。实际执行 `cargo build --manifest-path src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`、`npm.cmd run tauri -- build --bundles nsis`、三个定向 `cargo test --offline --locked --lib <name>` 和六组非活动桌面专项。队列结果未发现测试标签残留容器。
