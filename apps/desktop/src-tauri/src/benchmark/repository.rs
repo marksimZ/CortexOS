@@ -24,6 +24,8 @@ pub struct StartInput {
     pub python_image: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub personalized_dataset: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_keep_alive_seconds: Option<u16>,
 }
 fn legacy_version() -> u32 {
     1
@@ -125,6 +127,9 @@ impl Database {
     pub fn benchmark_intent(&self, workspace: &str, input: StartInput) -> AppResult<Intent> {
         input.model.validate()?;
         let personal = input.personalized_dataset.is_some();
+        if input.local_keep_alive_seconds.is_some_and(|seconds| seconds > 300 || personal || input.dataset_version != 2) {
+            return Err("仅本地 Core 60 v2 支持设置本次评测模型保留时间（0 至 300 秒）。".into());
+        }
         if !personal
             && (!input.development_only
                 || ![1, 2].contains(&input.dataset_version)
@@ -281,6 +286,9 @@ impl Database {
             },
         ];
         let mut request = crate::ollama::chat_request(&settings, &messages);
+        if let Some(seconds) = intent.input.local_keep_alive_seconds {
+            request["keep_alive"] = json!(seconds);
+        }
         if modern {
             if intent.case.scoring.id == "schema_semantic" {
                 request["format"] = intent
@@ -296,6 +304,9 @@ impl Database {
         }
         let mut manifest = json!({"schemaVersion":1,"purpose":"benchmark","mode":intent.config["mode"],"datasetId":dataset_id,"datasetVersion":version,"datasetHash":intent.input.dataset_hash,"caseId":intent.case.case_id,"caseHash":intent.case.content_hash,"reviewStatus":intent.manifest["review_status"],"modelDigest":intent.input.model.expected_digest,"knowledgeRefs":[],"messageRefs":[],"historyUsed":false,"retrievalUsed":false,"systemHash":dataset::hash(system.as_bytes()),"promptTemplateVersion":version,"parameterStatus":"requested_not_verified_as_effective"});
         manifest["benchmarkRunId"] = json!(id);
+        if let Some(seconds) = intent.input.local_keep_alive_seconds {
+            manifest["localModelRetention"] = json!({"source":"approved_benchmark_input","keepAliveSeconds":seconds});
+        }
         if intent.input.personalized_dataset.is_some() {
             manifest["batchId"] = json!(intent.input.launch_key.split(':').next());
         }

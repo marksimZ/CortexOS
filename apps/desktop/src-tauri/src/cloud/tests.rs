@@ -278,6 +278,7 @@ async fn personalized_mock_generation_publication_cloud_batch_scoring_and_guard_
             &connection,
             BatchInput {
                 case_ids: vec![],
+                local_keep_alive_seconds: None,
                 release_models: vec![],
                 repetitions: 1,
                 dataset_id: ds.id,

@@ -5,11 +5,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { errorText, ruleName, type Batch, type Dataset, type ModelRequest } from "./personalized";
 
 interface CaseSummary { id:string; prompt:string; evaluator:string; difficulty:string; requirements:string[] }
-interface Draft { chosen:string[]; cases:string[]; ctx:number|null; max:number|null; timeout:number|null; repetitions:number|null; image:string; release:boolean }
+interface Draft { chosen:string[]; cases:string[]; ctx:number|null; max:number|null; timeout:number|null; repetitions:number|null; image:string; release:boolean; releaseAfterRequest?:boolean }
 const drafts=draftStore<Draft>("standard-benchmark", value => !!value && typeof value === "object" && Array.isArray((value as Draft).chosen) && Array.isArray((value as Draft).cases));
 const quick=["zh-006","math-001"];
 export function StandardSetup({workspaceId,onPlan}:{workspaceId:string;onPlan:(batch:Batch)=>void}){
-  const [draft,setDraft]=useState<Draft>(()=>drafts.get(workspaceId)??{chosen:[],cases:quick,ctx:4096,max:1024,timeout:180,repetitions:1,image:"",release:false});
+  const [draft,setDraft]=useState<Draft>(()=>drafts.get(workspaceId)??{chosen:[],cases:quick,ctx:4096,max:1024,timeout:180,repetitions:1,image:"",release:false,releaseAfterRequest:false});
   const [datasets,setDatasets]=useState<Dataset[]>([]),[models,setModels]=useState<{name:string;digest:string|null}[]>([]),[cases,setCases]=useState<CaseSummary[]>([]);
   const [capacityInvalid,setCapacityInvalid]=useState(false);
   const [search,setSearch]=useState(""),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState("");
@@ -47,7 +47,7 @@ export function StandardSetup({workspaceId,onPlan}:{workspaceId:string;onPlan:(b
     try{
       if(!dataset)throw "固定题库尚未就绪，请重新读取。";
       const requests:ModelRequest[]=draft.chosen.map(name=>({model:name,expectedDigest:models.find(m=>m.name===name)?.digest??null,parameters:{numCtx:ctx,numPredict:max,temperature:0,timeoutSeconds:timeout},requirements:["completion"]}));
-      onPlan(await invoke<Batch>("plan_standard_benchmark",{workspaceId,input:{datasetId:dataset.id,datasetVersion:2,datasetHash:dataset.contentHash,models:requests.map(local=>({kind:"local",local})),caseIds:draft.cases,repetitions,maxOutputTokens:max,price:null,pythonImage:draft.image.trim()||null,releaseModels:draft.release?draft.chosen:[]}}));
+      onPlan(await invoke<Batch>("plan_standard_benchmark",{workspaceId,input:{datasetId:dataset.id,datasetVersion:2,datasetHash:dataset.contentHash,models:requests.map(local=>({kind:"local",local})),caseIds:draft.cases,repetitions,maxOutputTokens:max,price:null,pythonImage:draft.image.trim()||null,releaseModels:draft.release?draft.chosen:[],localKeepAliveSeconds:draft.releaseAfterRequest?0:undefined}}));
     }catch(e){setError(errorText(e));}finally{setBusy(false);}
   };
   const toggle=(list:string[],id:string)=>list.includes(id)?list.filter(v=>v!==id):[...list,id];
@@ -65,7 +65,7 @@ export function StandardSetup({workspaceId,onPlan}:{workspaceId:string;onPlan:(b
       <label className="profile-field">查找题目<input type="search" value={search} onChange={e=>setSearch(e.target.value)}/></label>
       <div className="standard-case-list" role="group" aria-label="标准题目选择">{visible.map(item=><label key={item.id}><input type="checkbox" checked={draft.cases.includes(item.id)} onChange={()=>update({cases:toggle(draft.cases,item.id)})}/><span><strong>{item.id} · {ruleName[item.evaluator]}</strong><span>{item.prompt}</span>{item.requirements.includes("python_sandbox")&&<span>需要 Docker 隔离环境</span>}</span></label>)}</div>
       <div className="personal-row"><NumberField label="每题重复次数" min={1} max={5} value={draft.repetitions} onChange={repetitions=>update({repetitions})}/><NumberField label="回答 Token 上限" min={64} max={2048} value={draft.max} onChange={max=>{setCapacityInvalid(false);update({max});}}/></div>
-      <details className="personal-details"><summary>模型参数与运行环境</summary><div className="personal-row"><div className="standard-context"><NumberField label="上下文容量" min={1024} max={16384} value={draft.ctx} error={capacityInvalid?capacityError:undefined} onChange={ctx=>{setCapacityInvalid(false);update({ctx});}}/></div><NumberField label="单题超时（秒）" min={30} max={600} value={draft.timeout} onChange={timeout=>update({timeout})}/></div><label className="profile-field">Python 3.13 Docker 镜像内容 ID<input value={draft.image} placeholder="sha256:…" onChange={e=>update({image:e.target.value})}/></label><p>缺少 Docker 时，Python 题会记录为运行环境出错，不在宿主机执行代码，也不计入答题正确率。</p><label className="personal-consent"><input type="checkbox" checked={draft.release} onChange={e=>update({release:e.target.checked})}/>切换模型时，允许释放上一个已选评测模型</label><p>只释放计划中明确授权的模型，发送前核对实际指纹；不会释放其他模型。默认保留现有加载状态。</p></details>
+      <details className="personal-details"><summary>模型参数与运行环境</summary><div className="personal-row"><div className="standard-context"><NumberField label="上下文容量" min={1024} max={16384} value={draft.ctx} error={capacityInvalid?capacityError:undefined} onChange={ctx=>{setCapacityInvalid(false);update({ctx});}}/></div><NumberField label="单题超时（秒）" min={30} max={600} value={draft.timeout} onChange={timeout=>update({timeout})}/></div><label className="profile-field">Python 3.13 Docker 镜像内容 ID<input value={draft.image} placeholder="sha256:…" onChange={e=>update({image:e.target.value})}/></label><p>缺少 Docker 时，Python 题会记录为运行环境出错，不在宿主机执行代码，也不计入答题正确率。</p><label className="personal-consent"><input type="checkbox" checked={draft.release} onChange={e=>update({release:e.target.checked})}/>切换模型时，允许释放上一个已选评测模型</label><p>只释放计划中明确授权的模型，发送前核对实际指纹；不会释放其他模型。默认保留现有加载状态。</p><label className="personal-consent"><input type="checkbox" checked={draft.releaseAfterRequest??false} onChange={e=>update({releaseAfterRequest:e.target.checked})}/>每题回答结束后释放本次模型</label><p>只适用于本次评测计划。未勾选时，发送请求后保留模型 5 分钟。</p></details>
       <p>计划上限：{draft.chosen.length} 个模型 × {draft.cases.length} 题 × {draft.repetitions ?? "—"} 次 = {draft.repetitions===null?"—":draft.chosen.length*draft.cases.length*draft.repetitions} 次答题请求。</p>
       <button className="button primary" disabled={!dataset||!draft.cases.length||!draft.chosen.length||draft.chosen.length>6||busy}>预览标准评测计划</button>
     </fieldset></form>

@@ -99,6 +99,7 @@ fn telemetry_samples_are_scoped_append_only_and_survive_restart_without_rewritin
                 },
                 dataset_version: 2,
                 python_image: None,
+                local_keep_alive_seconds: None,
                 personalized_dataset: None,
             },
         )

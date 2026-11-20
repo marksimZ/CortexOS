@@ -18,6 +18,7 @@ fn database() -> (Database, String, std::path::PathBuf) {
 fn prepare(db: &Database, ws: &str, case_id: &str) -> Prepared {
     let c = db.benchmark_case(ws, "cortex-core-60", 2, case_id).unwrap();
     let input = StartInput {
+        local_keep_alive_seconds: None,
         personalized_dataset: None,
         launch_key: new_id(),
         development_only: true,

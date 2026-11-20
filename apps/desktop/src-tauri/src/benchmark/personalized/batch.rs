@@ -43,6 +43,8 @@ pub struct BatchInput {
     pub repetitions: u32,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub release_models: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_keep_alive_seconds: Option<u16>,
 }
 fn one() -> u32 {
     1
@@ -91,6 +93,9 @@ impl Database {
         input: BatchInput,
     ) -> AppResult<Value> {
         let standard = input.dataset_id == "cortex-core-60";
+        if input.local_keep_alive_seconds.is_some_and(|seconds| !standard || seconds > 300) {
+            return Err("仅本地标准评测支持设置本次模型保留时间（0 至 300 秒）。".into());
+        }
         let dataset = if standard {
             self.benchmark_datasets(workspace)?
                 .into_iter()
@@ -499,6 +504,7 @@ pub async fn execute(
             python_image: plan.input.python_image.clone(),
             personalized_dataset: (plan.input.dataset_id != "cortex-core-60")
                 .then(|| plan.input.dataset_id.clone()),
+            local_keep_alive_seconds: plan.input.local_keep_alive_seconds,
         };
         db.set_batch_item(&id, ordinal, "running", None, None)?;
         let result = if choice.kind == "local" {

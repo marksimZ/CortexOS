@@ -42,6 +42,11 @@ for (const queueOnly of [false, true]) test(queueOnly ? "standard batch can canc
     const {page}=app;page.setDefaultTimeout(10_000);await createWorkspace(page,"标准批量隔离验收");
     const bootstrap=await nativeInvoke<{workspaces:{id:string;name:string}[]}>(page,"bootstrap");const workspace=bootstrap.workspaces.find(w=>w.name==="标准批量隔离验收")!.id;
     const conversations=await nativeInvoke(page,"list_conversations",{workspaceId:workspace});
+    await page.evaluate(id => {
+      localStorage.setItem(`cortexos.draft.v1.standard-benchmark.${encodeURIComponent(id)}`, JSON.stringify({
+        chosen: [], cases: ["zh-006", "math-001"], ctx: 4096, max: 1024, timeout: 180, repetitions: 1, image: "", release: false,
+      }));
+    }, workspace);
     expect(await nativeInvoke<{allowed:boolean}>(page,"cloud_connection")).toMatchObject({allowed:false});
     await page.getByRole("navigation",{name:"主导航",exact:true}).getByRole("link",{name:"评测",exact:true}).click();
     await expect(page.getByRole("heading",{name:"本地标准评测",exact:true})).toBeVisible();
@@ -49,13 +54,19 @@ for (const queueOnly of [false, true]) test(queueOnly ? "standard batch can canc
     await page.getByLabel("每题重复次数",{exact:true}).fill("2");
     await page.getByText("模型参数与运行环境",{exact:true}).click();
     await page.getByRole("checkbox",{name:"切换模型时，允许释放上一个已选评测模型",exact:true}).check();
+    const releaseAfterRequest = page.getByRole("checkbox",{name:"每题回答结束后释放本次模型",exact:true});
+    await expect(releaseAfterRequest).not.toBeChecked();
+    if(queueOnly) await releaseAfterRequest.check();
     await page.getByRole("button",{name:"预览标准评测计划",exact:true}).click();
     await expect(page.getByRole("heading",{name:"标准评测进度与结果",exact:true})).toBeVisible();
     const batchId=await page.evaluate(()=>new URLSearchParams(location.hash.split("?")[1]).get("batch")!);
     const plan=await nativeInvoke<Batch>(page,"get_standard_benchmark",{workspaceId:workspace,batchId});
     expect(plan.plan.maxRequests).toBe(8);expect(plan.plan.binding).toBeUndefined();expect(plan.plan.profile).toBeNull();expect(plan.plan.input.repetitions).toBe(2);expect(wire).toHaveLength(0);
+    expect(plan.plan.input.localKeepAliveSeconds).toBe(queueOnly?0:undefined);
     if(queueOnly){
-      const holder=await nativeInvoke<Batch>(page,"plan_standard_benchmark",{workspaceId:workspace,input:{...plan.plan.input,models:[plan.plan.input.models[0]],caseIds:["math-001"],repetitions:1,releaseModels:[]}});
+      await expect(page.getByText("每题回答结束后释放本次模型",{exact:true})).toBeVisible();
+      const holder=await nativeInvoke<Batch>(page,"plan_standard_benchmark",{workspaceId:workspace,input:{...plan.plan.input,models:[plan.plan.input.models[0]],caseIds:["math-001"],repetitions:1,releaseModels:[],localKeepAliveSeconds:undefined}});
+      expect(holder.plan.input.localKeepAliveSeconds).toBeUndefined();
       slow=true;await nativeInvoke(page,"start_standard_benchmark",{workspaceId:workspace,batchId:holder.id,approvedPlanHash:holder.planHash});
       await expect.poll(()=>wire.length).toBe(1);
       await page.getByRole("checkbox",{name:/我已检查题库、模型和发送范围/}).check();
@@ -70,6 +81,13 @@ for (const queueOnly of [false, true]) test(queueOnly ? "standard batch can canc
       slow=false;await nativeInvoke(page,"stop_standard_benchmark",{workspaceId:workspace,batchId:holder.id});
       await expect.poll(async()=>(await nativeInvoke<Batch>(page,"get_standard_benchmark",{workspaceId:workspace,batchId})).status,{timeout:35_000}).toBe("completed");
       expect(wire).toHaveLength(1+plan.plan.maxRequests);
+      expect(wire.map(row=>row.body.keep_alive)).toEqual(["5m",...Array(plan.plan.maxRequests).fill(0)]);
+      const complete=await nativeInvoke<Batch>(page,"get_standard_benchmark",{workspaceId:workspace,batchId});
+      const result=complete.reports![0].results[0];
+      const detail=await nativeInvoke<{execution:{snapshot:{request:{keep_alive:number};requestHash:string};contextManifest:Record<string,unknown>}}>(page,"get_benchmark_run",{workspaceId:workspace,experimentId:result.runId});
+      expect(detail.execution.snapshot.request.keep_alive).toBe(0);
+      expect(detail.execution.snapshot.requestHash).toBe(createHash("sha256").update(wire[1].raw).digest("hex"));
+      expect(detail.execution.contextManifest).toMatchObject({localModelRetention:{source:"approved_benchmark_input",keepAliveSeconds:0}});
       return;
     }
     const changed=await nativeInvoke(page,"start_standard_benchmark",{workspaceId:workspace,batchId,approvedPlanHash:"tampered"}).then(()=>false,()=>true);expect(changed).toBe(true);expect(wire).toHaveLength(0);

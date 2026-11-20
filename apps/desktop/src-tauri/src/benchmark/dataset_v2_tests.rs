@@ -334,6 +334,7 @@ fn benchmark_v2_upgrade_rolls_back_without_changing_v1_history() {
     );
     drop(c);
     let input = crate::benchmark::repository::StartInput {
+        local_keep_alive_seconds: None,
         personalized_dataset: None,
         dataset_version: 1,
         python_image: None,

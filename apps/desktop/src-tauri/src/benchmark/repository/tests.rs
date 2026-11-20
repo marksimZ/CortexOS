@@ -13,6 +13,7 @@ fn intent(db: &Database, workspace: &str, case: &str) -> Intent {
     db.benchmark_intent(
         workspace,
         StartInput {
+            local_keep_alive_seconds: None,
             personalized_dataset: None,
             dataset_version: 1,
             python_image: None,

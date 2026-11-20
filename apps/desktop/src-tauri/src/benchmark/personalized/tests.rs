@@ -305,6 +305,7 @@ fn personalized_publication_revisions_are_immutable_and_reuse_existing_scoring_a
     let baseline = serde_json::to_value(db.bootstrap().unwrap()).unwrap();
     for case in &cases {
         let input = StartInput {
+            local_keep_alive_seconds: None,
             personalized_dataset: Some(ds.id.clone()),
             dataset_version: 1,
             python_image: None,
@@ -524,6 +525,7 @@ fn personalized_batch_restart_only_allows_explicit_resume_of_unsent_items() {
         .unwrap();
     let input = batch::BatchInput {
         case_ids: vec![],
+        local_keep_alive_seconds: None,
         release_models: vec![],
         repetitions: 1,
         dataset_id: ds.id,

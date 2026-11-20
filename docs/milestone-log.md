@@ -24,6 +24,18 @@
 - 执行 `playwright test --project=h1-baseline`，使用 H0 隔离调试包和测试库。两条通过，共 25.1 秒；采得五页的两主题四尺寸共 40 张截图、3000 字符流性能和 100/500/1000 条长历史数据。
 - 详见 [审计](frontend/h1-audit-verification.md)、[性能](frontend/h1-performance-baseline.md)、[截图](frontend/h1-ui-baseline.md) 和 [后续切片](frontend/h1-implementation-plan.md)。
 
+## 2026-11-20 Phase H0 发布阻断项收尾
+
+- 2026-11-21 添加旧标准评测草稿兼容校验。最终 H1 调试构建的标准评测原生固定回复两项通过，覆盖默认保留、即时释放、快照及等待取消。另从当前前端生产源映射识别 85 个实际打包的第三方 npm 包，详见 [H0 发布决定](release/h0-release-decision.md)。
+
+- Core 60 v2 本地批计划支持每题结束即释放。计划哈希、实际请求和上下文清单绑定该设置，旧快照照原值保留。未迁移数据库。
+- 根目录执行 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop` 通过。`apps/desktop` 执行 `npm.cmd run build` 通过，含 `tsc --noEmit`。用非活动桌面跑 `playwright test --project=desktop --grep "cancel resource wait" standard-benchmark.spec.ts --workers=1`，固定回环原生专项 1 条通过，20.3 秒。未运行全套或 Rust 单元测试。
+- 非活动桌面以同一测试库交替运行 G0、G5 和 H0 的启动、空闲与 RAG 计时。另用临时诊断可执行文件拆分 Rust、IPC 与 DOM 响应。诊断源文件恢复后未进入交付构建。用 Python 只读 SQLite `EXPLAIN QUERY PLAN` 核对索引。复核两代留档正式包的 SHA-256 和 Authenticode，重新提取 Windows 目标 Cargo 许可树和已装 npm 非开发依赖信息。
+- 已授权的两次真实本地 GPU 请求在非活动桌面顺序执行。Core 60 v2 `math-001` 得到 `Passed`，实际请求与快照 `keep_alive:0`；24 节点图谱短窗口单独及并行 P95 均为 7.1ms。两次均确认模型释放，未发云端请求。
+- `CARGO_NET_OFFLINE=true` 下 `npm.cmd run tauri -- build --bundles nsis` 成功。H0 候选包 6,306,612 字节，SHA-256 `2A260774422FA69197413B81FC5B89EC3C993FBA1B7981F9D436D2AD59C3325B`，Authenticode `NotSigned`。正式身份 GUI、签名和第三方分发声明仍待验收。没有发布或推送。
+- 原始证据位于 `artifacts/phase-h0/`。状态、已知限制和发布影响见 [阻断项](release/h0-blockers.md)、[性能](release/h0-performance-review.md)、[正式安装](release/h0-windows-validation.md)、[发布决定](release/h0-release-decision.md)。
+
+
 ## 2026-11-19 Phase G5 发布候选版验收
 
 复跑三工具共享队列，修复工具间错误取消。业务代码只变更 `tasks.rs` 和 `benchmark/harness/session.rs` 的等待取消归属。新增原生三工具与隔离安装场景，复跑标准评测、过期草案、凭据、网络与迁移定向检查。实际执行 `cargo build --manifest-path src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`、`npm.cmd run tauri -- build --bundles nsis`、三个定向 `cargo test --offline --locked --lib <name>` 和六组非活动桌面专项。队列结果未发现测试标签残留容器。

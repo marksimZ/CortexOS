@@ -47,6 +47,7 @@ fn input(db: &Database, w: &str) -> BatchInput {
         python_image: None,
         case_ids: vec!["math-001".into(), "zh-006".into()],
         repetitions: 2,
+        local_keep_alive_seconds: None,
         release_models: vec![],
     }
 }
@@ -75,6 +76,7 @@ fn report_paging_is_scoped_bounded_lazy_and_matches_full_statistics() {
                 model: options.models[0].local.clone().unwrap(),
                 dataset_version: 2,
                 python_image: None,
+                local_keep_alive_seconds: None,
                 personalized_dataset: None,
             },
         )
@@ -402,6 +404,7 @@ async fn standard_restart_recovers_saved_output_score_without_new_model_request(
         model: options.models[0].local.clone().unwrap(),
         dataset_version: 2,
         python_image: None,
+        local_keep_alive_seconds: None,
         personalized_dataset: None,
     };
     let intent = db.benchmark_intent(&w, request).unwrap();
@@ -631,6 +634,7 @@ fn report_transfer_fixture() -> (Database, String, String, String) {
                 model: options.models[0].local.clone().unwrap(),
                 dataset_version: 2,
                 python_image: None,
+                local_keep_alive_seconds: None,
                 personalized_dataset: None,
             },
         )
