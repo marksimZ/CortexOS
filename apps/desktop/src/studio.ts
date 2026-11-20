@@ -1,3 +1,7 @@
+import { useStudioSettings } from "./studio-settings";
+import { preference, remember } from "./preferences";
+import { useChatWorkspace } from "./chat-workspace";
+import { createChatStream, type StreamUpdate } from "./chat-stream";
 import { errorText } from "./frontend-error";
 import { draftStore } from "./draft-store";
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
@@ -249,52 +253,28 @@ export interface ModelHealth {
     quantization: string | null;
   }[];
 }
-interface StreamUpdate {
-  workspaceId: string;
-  conversationId: string;
-  runId: string;
-  messageId: string;
-  seq: number;
-  content: string;
-  status: string;
-  errorMessage: string | null;
-}
-
-export const defaultSettings: ModelSettings = {
-  model: "qwen3:4b-instruct",
-  numCtx: 4096,
-  temperature: 0.3,
-  numPredict: 512,
-  timeoutSeconds: 180,
-};
 export const desktop = isTauri();
 export { errorText };
-export function preference(key: string): string | null {
-  try {
-    return localStorage.getItem(`cortexos.${key}`);
-  } catch {
-    return null;
-  }
-}
-export function remember(key: string, value: string) {
-  try {
-    localStorage.setItem(`cortexos.${key}`, value);
-  } catch {
-    /* Optional view preference; domain data stays in SQLite. */
-  }
-}
+export { preference, remember };
+export { defaultSettings } from "./studio-settings";
 
 const chatDrafts = draftStore<string>("chat", value => typeof value === "string");
 const emptyContext: ContextSelection[] = [];
+function useStudioError() {
+  const [error, setError] = useState<string | null>(null);
+  const reportError = useCallback((value: unknown) => setError(errorText(value)), []);
+  const clearError = useCallback(() => setError(null), []);
+  return { error, reportError, clearError };
+}
+
 export function useStudio() {
   const [data, setData] = useState<Bootstrap | null>(null);
-  const [settings, setSettings] = useState(defaultSettings);
-  const [settingsDraft, setSettingsDraft] = useState(defaultSettings);
-  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [storedMessages, setMessages] = useState<Message[]>([]);
-  const [updates, setUpdates] = useState<Record<string, StreamUpdate>>({});
+  const { settings, settingsDraft, setSettingsDraft, applySettings, saveSettings } = useStudioSettings();
+  const {
+    workspaceId, conversationId, conversations, messages: storedMessages, loadingMessages, creatingConversation,
+    view, refreshMessages, refreshConversations, openConversation, openWorkspace, newConversation, renameConversation,
+  } = useChatWorkspace();
+  const [chatStream] = useState(createChatStream);
   const [activeRun, setActiveRun] = useState<RunSummary | null>(null);
   const [preparingRun, setPreparingRun] = useState<Pick<RunSummary, "id" | "workspaceId" | "conversationId"> | null>(null);
   const [contexts, setContexts] = useState<Record<string, ContextSelection[]>>(
@@ -306,9 +286,8 @@ export function useStudio() {
   const [health, setHealth] = useState<ModelHealth | null>(null);
   const [checking, setChecking] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { error, reportError, clearError } = useStudioError();
   const [loading, setLoading] = useState(desktop);
-  const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [savingRetrieval, setSavingRetrieval] = useState(false);
   const [retrievalChange, setRetrievalChange] = useState<{
@@ -316,111 +295,23 @@ export function useStudio() {
     conversationId: string | null;
     value: boolean;
   } | null>(null);
-  const [creatingConversation, setCreatingConversation] = useState(false);
-  const view = useRef({ workspaceId, conversationId });
-  view.current = { workspaceId, conversationId };
-  const viewVersion = useRef(0);
-  const messageRequest = useRef(0);
   const pendingSend = useRef(false);
   const finishedRuns = useRef(new Set<string>());
   const streamedRun = useRef<string | null>(null);
   const channel = useRef<Channel<StreamUpdate> | null>(null);
-  const reportError = useCallback(
-    (value: unknown) => setError(errorText(value)),
-    [],
-  );
-
-  const refreshMessages = useCallback(
-    async (workspace: string, conversation: string) => {
-      if (view.current.workspaceId !== workspace || view.current.conversationId !== conversation) return;
-      const version = viewVersion.current;
-      const request = ++messageRequest.current;
-      const messages = await invoke<Message[]>("load_messages", {
-        workspaceId: workspace,
-        conversationId: conversation,
-      });
-      if (
-        version === viewVersion.current &&
-        request === messageRequest.current &&
-        view.current.workspaceId === workspace &&
-        view.current.conversationId === conversation
-      ) {
-        setMessages(messages);
-        setUpdates((previous) => {
-          const next = { ...previous };
-          for (const message of messages)
-            if (
-              message.status !== "streaming" &&
-              next[message.id]?.content === message.content
-            )
-              delete next[message.id];
-          return next;
-        });
-      }
-    },
-    [],
-  );
-
-  const refreshConversations = useCallback(async (workspace: string) => {
-    const list = await invoke<Conversation[]>("list_conversations", {
-      workspaceId: workspace,
-    });
-    if (view.current.workspaceId === workspace) setConversations(list);
-    return list;
-  }, []);
-
-  const openConversation = useCallback(
-    async (workspace: string, conversation: string) => {
-      const version = ++viewVersion.current;
-      const request = ++messageRequest.current;
-      view.current = { workspaceId: workspace, conversationId: conversation };
-      setConversationId(conversation);
-      setMessages([]);
-      setLoadingMessages(true);
-      remember(`conversation.${workspace}`, conversation);
-      try {
-        const messages = await invoke<Message[]>("load_messages", {
-          workspaceId: workspace,
-          conversationId: conversation,
-        });
-        if (version === viewVersion.current && request === messageRequest.current) setMessages(messages);
-      } finally {
-        if (version === viewVersion.current) setLoadingMessages(false);
-      }
-    },
-    [],
-  );
-
-  const openWorkspace = useCallback(
-    async (workspace: string) => {
-      const version = ++viewVersion.current;
-      view.current = { workspaceId: workspace, conversationId: null };
-      setWorkspaceId(workspace);
-      setConversationId(null);
-      setConversations([]);
-      setMessages([]);
-      remember("workspace", workspace);
-      const list = await invoke<Conversation[]>("list_conversations", {
-        workspaceId: workspace,
-      });
-      if (version !== viewVersion.current) return;
-      setConversations(list);
-      const saved = preference(`conversation.${workspace}`);
-      const first = list.find((item) => item.id === saved) ?? list[0];
-      if (first) await openConversation(workspace, first.id);
-    },
-    [openConversation],
-  );
-
+  useEffect(() => () => {
+    channel.current = null;
+    chatStream.cancelPending();
+  }, [chatStream]);
+  useEffect(() => chatStream.reconcile(storedMessages), [chatStream, storedMessages]);
   const reload = useCallback(async () => {
     if (!desktop) return;
     setLoading(true);
-    setError(null);
+    clearError();
     try {
       const result = await invoke<Bootstrap>("bootstrap");
       setData(result);
-      setSettings(result.settings);
-      setSettingsDraft(result.settings);
+      applySettings(result.settings);
       setActiveRun(result.activeRun);
       const saved = preference("workspace");
       const first =
@@ -432,7 +323,7 @@ export function useStudio() {
     } finally {
       setLoading(false);
     }
-  }, [openWorkspace, reportError]);
+  }, [openWorkspace, reportError, clearError, applySettings]);
 
   const checkConnection = useCallback(async () => {
     if (!desktop) return;
@@ -494,35 +385,6 @@ export function useStudio() {
         : current,
     );
     await openWorkspace(workspace.id);
-  };
-
-  const newConversation = async () => {
-    const workspace = view.current.workspaceId;
-    if (!workspace) throw "请先创建工作区。";
-    setCreatingConversation(true);
-    try {
-      const conversation = await invoke<Conversation>("create_conversation", {
-        workspaceId: workspace,
-      });
-      await refreshConversations(workspace);
-      if (view.current.workspaceId === workspace)
-        await openConversation(workspace, conversation.id);
-      return conversation;
-    } finally {
-      setCreatingConversation(false);
-    }
-  };
-
-  const renameConversation = async (title: string) => {
-    const { workspaceId: workspace, conversationId: conversation } =
-      view.current;
-    if (!workspace || !conversation) return;
-    await invoke("rename_conversation", {
-      workspaceId: workspace,
-      conversationId: conversation,
-      title,
-    });
-    await refreshConversations(workspace);
   };
 
   const draftKey = `${workspaceId}:${conversationId ?? "new"}`;
@@ -608,7 +470,7 @@ export function useStudio() {
       return;
     pendingSend.current = true;
     setSending(true);
-    setError(null);
+    clearError();
     let conversation = view.current.conversationId;
     let receivingPreparation = true;
     try {
@@ -624,13 +486,14 @@ export function useStudio() {
       }
       const stream = new Channel<StreamUpdate>();
       channel.current = stream;
+      let receivedTerminal = false;
       stream.onmessage = (update) => {
-        setUpdates((previous) => {
-          if ((previous[update.messageId]?.seq ?? 0) >= update.seq)
-            return previous;
-          return { ...previous, [update.messageId]: update };
-        });
+        if (channel.current !== stream || receivedTerminal ||
+            update.workspaceId !== workspace || update.conversationId !== conversation || !chatStream.push(update)) return;
         if (update.status !== "running") {
+          receivedTerminal = true;
+          const visible = view.current.workspaceId === update.workspaceId && view.current.conversationId === update.conversationId;
+          if (!visible) chatStream.forget(update.messageId);
           const alreadyRefreshed = finishedRuns.current.has(update.runId);
           finishedRuns.current.add(update.runId);
           setActiveRun((current) =>
@@ -696,23 +559,6 @@ export function useStudio() {
       runId: run.id,
     });
   };
-  const saveSettings = async (next: ModelSettings) => {
-    const saved = await invoke<ModelSettings>("save_settings", {
-      settings: next,
-    });
-    setSettings(saved);
-    setSettingsDraft(saved);
-  };
-  const messages = useMemo(() => storedMessages.map((message) => {
-    const update = updates[message.id];
-    return update
-      ? {
-          ...message,
-          content: update.content,
-          status: update.status === "running" ? "streaming" : update.status,
-        }
-      : message;
-  }), [storedMessages, updates]);
   const getRun = useCallback(
     (runId: string) =>
       invoke<RunDetail>("get_run", {
@@ -731,7 +577,8 @@ export function useStudio() {
     workspaceId,
     conversationId,
     conversations,
-    messages,
+    messages: storedMessages,
+    chatStream,
     activeRun,
     preparingRun,
     draft,
@@ -766,7 +613,7 @@ export function useStudio() {
     cancel,
     saveSettings,
     reportError,
-    clearError: () => setError(null),
+    clearError,
     getRun,
   };
 }

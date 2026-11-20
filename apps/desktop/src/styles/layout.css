@@ -77,6 +77,7 @@ p,li,dd { text-wrap: pretty; overflow-wrap: anywhere; }
 .chat-main > .page-heading .heading-actions { gap: 2px; }
 .message-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; padding: 0 8px; }
 .messages { max-width: var(--reading-width); margin: 0 auto; padding: 24px 8px; display: flex; flex-direction: column; gap: 28px; }
+.chat-history-older { align-self: center; }
 .message { min-width: 0; outline: 0; }
 .message[data-located=true] { outline: 2px solid var(--primary); outline-offset: 8px; border-radius: 12px; }
 .message.user { align-self: flex-end; max-width: 78%; padding: 12px 16px; background: var(--selected); border-radius: 18px 18px 6px 18px; }
@@ -126,7 +127,7 @@ p,li,dd { text-wrap: pretty; overflow-wrap: anywhere; }
 .knowledge-graph-paths > li > div:first-child { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .knowledge-graph-steps p { margin: 4px 0; }
 .context-content { white-space: pre-wrap; overflow-wrap: anywhere; }
-.jump-latest { position: absolute; z-index: 4; bottom: 190px; left: 50%; transform: translateX(-50%); box-shadow: var(--shadow); }
+.jump-latest { position: absolute; z-index: 4; bottom: 190px; left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: max-content; max-width: 100%; }
 .chat-main:has(.context-picker[open]) .jump-latest { display: none; }
 .chat-evidence { margin-top: 0; padding: 18px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; min-height: 0;  }
 .main-content:has(> .error-banner) .chat-evidence { margin-top: 0; }
@@ -184,5 +185,5 @@ p,li,dd { text-wrap: pretty; overflow-wrap: anywhere; }
 .file-name-stem { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .file-name-extension { flex: 0 0 auto; }
 .workspace-picker select,.appearance-control select { box-shadow: none; }
-.jump-latest { background: var(--surface); }
+.jump-latest > .button { background: var(--surface); box-shadow: var(--shadow); }
 @media(max-width:1100px) { .chat-layout > .pane-divider { display: none; } }

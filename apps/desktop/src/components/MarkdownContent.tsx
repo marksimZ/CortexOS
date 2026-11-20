@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { decodeString } from "micromark-util-decode-string";
 import type { Parent, Root, RootContent } from "mdast";
 import type { CitationOccurrence } from "../studio";
+const noCitations: CitationOccurrence[] = [];
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 // Keep this component identity stable so already visible spans are not remounted per chunk.
@@ -17,7 +18,7 @@ const StreamSpan: Components["span"] = ({ node, children, ...props }) => {
 // Position checks use original UTF-16 offsets, never the rendered text as evidence.
 export const MarkdownContent = memo(function MarkdownContent({
   content,
-  occurrences = [],
+  occurrences = noCitations,
   onCitation,
   streaming = false,
 }: {
@@ -97,7 +98,7 @@ export const MarkdownContent = memo(function MarkdownContent({
   };
   return (
     <Markdown
-      remarkPlugins={[remarkGfm, citations, reveal]}
+      remarkPlugins={[remarkGfm, ...(occurrences.length ? [citations] : []), ...(streaming ? [reveal] : [])]}
       urlTransform={(url) => (/^(https?:\/\/|mailto:)/i.test(url) ? url : "")}
       components={{
         span: StreamSpan,

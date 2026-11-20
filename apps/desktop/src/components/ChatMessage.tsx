@@ -1,5 +1,6 @@
 import { BookOpen, Check, Code2, Copy, GitBranch } from "lucide-react";
-import { memo, useState } from "react";
+import { memo, useCallback, useState, useSyncExternalStore } from "react";
+import type { ChatStream } from "../chat-stream";
 import { navigate } from "../navigation";
 import type { Message } from "../studio";
 import { AnswerContent } from "./AnswerContent";
@@ -11,7 +12,8 @@ const statusNames: Record<string, string> = {
   interrupted: "生成中断",
 };
 export const ChatMessage = memo(function ChatMessage({
-  message,
+  message: stored,
+  stream,
   located,
   copied,
   copy,
@@ -22,6 +24,7 @@ export const ChatMessage = memo(function ChatMessage({
   retry,
 }: {
   message: Message;
+  stream: ChatStream;
   located: boolean;
   copied: boolean;
   copy: (id: string, text: string) => Promise<void>;
@@ -31,6 +34,17 @@ export const ChatMessage = memo(function ChatMessage({
   reportError: (value: unknown) => void;
   retry: (runId: string | null) => void;
 }) {
+  const id = stored.id;
+  const streaming = stored.status === "streaming";
+  const subscribe = useCallback((notify: () => void) => streaming ? stream.subscribe(id, notify) : () => {}, [id, stream, streaming]);
+  const snapshot = useCallback(() => streaming ? stream.snapshot(id) : undefined, [id, stream, streaming]);
+  const update = useSyncExternalStore(subscribe, snapshot);
+  const message = update && update.runId === stored.modelRunId ? {
+    ...stored,
+    content: update.status === "running" && stored.content.startsWith(update.content)
+      ? stored.content : update.content,
+    status: update.status === "running" ? "streaming" : update.status,
+  } : stored;
   const [raw, setRaw] = useState(false);
   return (
     <article

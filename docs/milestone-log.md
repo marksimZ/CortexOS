@@ -1,5 +1,11 @@
 # 里程碑记录
 
+## 2026-11-20 Phase H1.2 流式渲染与长会话
+
+- 对话流改为按消息订阅，90 毫秒合并中间更新。首段和终态即时显示。工作区、会话、设置草稿和界面错误按职责管理。长会话首批渲染 60 条，支持加载更早消息、旧消息定位及回到最新内容。
+- 在 `apps/desktop` 执行 `npm.cmd run build` 和 `cargo build --manifest-path src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop` 通过。独立 Windows 桌面运行 `playwright test --project=h1-baseline`，H1.1 留档及最终版各 2 条通过。最终版原生滚动专项 1 条通过，其余原生回归 8 条通过。命令及测试边界见 [H1.2 验收](frontend/h1-2-acceptance.md)。
+- 同一 3,000 字符固定回复，React 根树提交 119→20、Markdown 流式入口 60→18。1,000 条合成会话打开至最新消息挂载 P50 307.65→54.36 毫秒。两版各留 40 张原生截图。到达 H1.2 验收点。
+
 ## 2026-11-20 Phase H1.1 前端正确性与基础交互
 
 - 统一错误、草稿与窗口关闭处理，补充键盘、表单校验和渲染恢复。以浏览器原生选项保留系统语义，并沿用现有颜色和圆角。

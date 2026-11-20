@@ -38,9 +38,10 @@ test("H1 native screenshots, route timings and controlled 3000 character stream"
     await page.addInitScript(() => {
       const profile = { roots: 0, shells: 0, sidebars: 0, chat: 0, other: 0 };
       type Fiber = {
-        child?: Fiber; sibling?: Fiber; return?: Fiber; alternate?: Fiber; memoizedProps?: unknown;
-        stateNode?: Element; tag: number; flags: number;
+        child?: Fiber; sibling?: Fiber; memoizedProps?: unknown;
+        stateNode?: Element; tag: number;
       };
+      const committedProps = new WeakMap<Element, unknown>();
       const hooks = {
         supportsFiber: true,
         inject: () => 1,
@@ -49,13 +50,13 @@ test("H1 native screenshots, route timings and controlled 3000 character stream"
           const visit = (node?: Fiber) => {
             for (; node; node = node.sibling) {
               const classes = node.tag === 5 && node.stateNode?.getAttribute("class");
-              const owner = node.return;
-              if (classes && owner && (owner.flags & 1) !== 0 && owner.memoizedProps !== owner.alternate?.memoizedProps) {
+              if (classes && node.stateNode && committedProps.get(node.stateNode) !== node.memoizedProps) {
                 const matches = (value: string) => classes.split(" ").includes(value);
                 if (matches("prototype-shell")) profile.shells++;
                 if (matches("conversation-list")) profile.sidebars++;
                 if (matches("chat-main")) profile.chat++;
                 if (matches("settings-content")) profile.other++;
+                committedProps.set(node.stateNode, node.memoizedProps);
               }
               if (node.child) visit(node.child);
             }
@@ -136,6 +137,9 @@ test("H1 native screenshots, route timings and controlled 3000 character stream"
     }
     await writeFile(info.outputPath("stream.cpuprofile"), JSON.stringify(cpu.profile));
     expect(during.roots).toBeGreaterThan(first.roots);
+    const conversation = (await nativeInvoke<{id: string}[]>(page, "list_conversations", {workspaceId}))[0];
+    const persisted = await nativeInvoke<{role: string; content: string}[]>(page, "load_messages", {workspaceId, conversationId: conversation.id});
+    expect(persisted.find(message => message.role === "assistant")?.content).toBe(answer);
     const appearance = page.getByRole("combobox", { name: "外观", exact: true });
     const routes = {
       chat: ".composer-area",
@@ -193,13 +197,15 @@ test("H1 synthetic 100, 500 and 1000 message scroll baseline", async ({}, info) 
   const app = await launchNative(info, { endpoint: "http://127.0.0.1:1", executable: process.env.CORTEXOS_H1_EXECUTABLE });
   try {
     const { page } = app;
+    page.setDefaultTimeout(7_000);
     await page.setViewportSize({ width: 1600, height: 900 });
     await createWorkspace(page, "H1 合成长历史");
     const workspaceId = await page.getByLabel("当前工作区").inputValue();
     execFileSync("py", ["-3.13", "tests/h1-history-fixture.py", info.outputPath("data", "cortexos.sqlite3"), workspaceId], {windowsHide:true});
     const open = async (count: number) => {
       await page.evaluate(({ workspaceId, count }) => { location.hash = `#/chat?workspace=${workspaceId}&conversation=h1-fixture-${count}`; }, { workspaceId, count });
-      await expect(page.locator(".message-scroll article")).toHaveCount(count);
+      const lastId = `message-h1-fixture-${count}-run-${count / 2 - 1}-answer`;
+      await expect(page.locator(`#${lastId}`)).toBeAttached();
     };
     const results = [];
     for (const count of [100, 500, 1000]) {
@@ -211,6 +217,7 @@ test("H1 synthetic 100, 500 and 1000 message scroll baseline", async ({}, info) 
         const start = performance.now();
         await open(count);
         const initialMs = performance.now() - start;
+        const mounted = await page.locator(".message-scroll article").count();
         const scroll = await page.locator(".message-scroll").evaluate(element => new Promise<{ frames: number[]; distance: number }>((resolve) => {
           const frames: number[] = [];
           const start = performance.now();
@@ -224,9 +231,31 @@ test("H1 synthetic 100, 500 and 1000 message scroll baseline", async ({}, info) 
           requestAnimationFrame(tick);
         }));
         expect(scroll.distance).toBeGreaterThan(0);
-        trials.push({ initialMs, ...scroll });
+        trials.push({ initialMs, mounted, ...scroll });
       }
       results.push({ count, trials });
+    }
+    const older = page.getByRole("button", {name: /^加载更早的消息/});
+    if (await older.count()) {
+      const list = page.locator(".message-scroll article");
+      await expect(list).toHaveCount(60);
+      const first = page.locator("#message-h1-fixture-1000-run-470-question");
+      await older.scrollIntoViewIfNeeded();
+      const beforeTop = await first.evaluate(element => element.getBoundingClientRect().top);
+      await older.click();
+      await expect(list).toHaveCount(120);
+      await expect.poll(async () => Math.abs((await first.evaluate(element => element.getBoundingClientRect().top)) - beforeTop)).toBeLessThan(4);
+      const message = "h1-fixture-1000-run-0-answer";
+      await page.evaluate(({workspaceId,message}) => {
+        location.hash = `#/chat?workspace=${workspaceId}&conversation=h1-fixture-1000&message=${message}`;
+      }, {workspaceId,message});
+      await expect(page.locator(`#message-${message}`)).toBeFocused();
+      await expect(list).toHaveCount(60);
+      await page.getByRole("button", {name: /^加载更新的消息/}).click();
+      await expect(list).toHaveCount(120);
+      await page.getByRole("button", {name: "回到最新内容", exact: true}).click();
+      await expect(page.locator("#message-h1-fixture-1000-run-499-answer")).toBeAttached();
+      await expect(list).toHaveCount(60);
     }
     await writeFile(info.outputPath("history.json"), JSON.stringify(results, null, 2));
   } finally { await app.stop(); }

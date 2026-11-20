@@ -1,7 +1,7 @@
 import { AppDialog, openDialog } from "./components/AppDialog";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowDown, PanelRight, Pencil } from "lucide-react";
+import { ArrowDown, ChevronUp, PanelRight, Pencil } from "lucide-react";
 import { navigate, useNavigation } from "./navigation";
 import { ChatMessage } from "./components/ChatMessage";
 import { ChatComposer } from "./components/ChatComposer";
@@ -14,6 +14,8 @@ import { notify } from "./components/Toast";
 import { errorText, preference, remember, type Message, type Studio } from "./studio";
 import { runtimeRoles, type ChatRuntimeRoute, type CloudDisclosure, type CloudDraft, type CloudKnowledgeGrant, type Profile,
   type RuntimeConnection, type RuntimeRole } from "./runtime-profiles";
+
+const historyPageSize = 60;
 
 const cloudNames: Record<string, string> = {
   openai: "OpenAI", anthropic: "Anthropic", gemini: "Google Gemini", compatible: "OpenAI 兼容服务",
@@ -29,13 +31,6 @@ export function ChatPage({
   onSaveKnowledge: (message: Message, excerpt: string) => void;
 }) {
   const route = useNavigation();
-  useEffect(() => {
-    if (!route.message || studio.loadingMessages) return;
-    const message = document.getElementById(`message-${route.message}`);
-    const element = (route.citation === undefined ? null : message?.querySelector<HTMLElement>(`[data-answer-citation="${route.citation}"]`)) ?? message;
-    element?.scrollIntoView({ block: "center" });
-    element?.focus({ preventScroll: true });
-  }, [route.message, route.citation, studio.messages.length, studio.loadingMessages]);
   const conversation = studio.conversations.find(
     (item) => item.id === studio.conversationId,
   );
@@ -105,7 +100,63 @@ export function ChatPage({
     !studio.sending &&
     !studio.savingRetrieval &&
     !studio.loadingMessages;
-  const scroll = useChatScroll(studio.conversationId, studio.messages.length, studio.messages, !!route.message);
+  const { messages } = studio;
+  const conversationKey = `${studio.workspaceId}:${studio.conversationId}`;
+  const scroll = useChatScroll(conversationKey, messages, !!route.message);
+  const historyKey = `${conversationKey}:${route.message ?? "latest"}`;
+  const [historyPage, setHistoryPage] = useState({ historyKey, limit: historyPageSize, newer: 0, initialCount: null as number | null });
+  const currentPage = historyPage.historyKey === historyKey
+    ? historyPage : { historyKey, limit: historyPageSize, newer: 0, initialCount: null };
+  const { limit, newer, initialCount } = currentPage;
+  useLayoutEffect(() => {
+    if (initialCount === null && messages.length && !studio.loadingMessages) {
+      setHistoryPage({ historyKey, limit: historyPageSize, newer: 0, initialCount: messages.length });
+    }
+  }, [historyKey, initialCount, messages.length, studio.loadingMessages]);
+  const targetIndex = useMemo(() => route.message ? messages.findIndex(item => item.id === route.message) : -1, [messages, route.message]);
+  const aroundTarget = targetIndex >= 0 && targetIndex < messages.length - historyPageSize;
+  const baseEnd = aroundTarget ? Math.max(historyPageSize, targetIndex + historyPageSize / 2) : messages.length;
+  const end = Math.min(messages.length, baseEnd + newer);
+  // Keep rows already being read in place if a new turn arrives in this visit.
+  const appended = aroundTarget || initialCount === null ? 0 : Math.max(0, messages.length - initialCount);
+  const start = Math.max(0, baseEnd - limit - appended);
+  const focusNewer = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (!focusNewer.current) return;
+    const target = document.getElementById(focusNewer.current);
+    focusNewer.current = null;
+    target?.scrollIntoView({ block: "start" });
+    target?.focus({ preventScroll: true });
+  }, [end]);
+  const restoreAnchor = useRef<{ id: string; top: number; focus: boolean } | null>(null);
+  const loadEarlier = () => {
+    const id = `message-${messages[start].id}`;
+    const anchor = document.getElementById(id);
+    if (anchor) restoreAnchor.current = {
+      id, top: anchor.getBoundingClientRect().top,
+      focus: document.activeElement?.classList.contains("chat-history-older") ?? false,
+    };
+    scroll.pause();
+    setHistoryPage({ ...currentPage, limit: limit + historyPageSize });
+  };
+  useLayoutEffect(() => {
+    const anchor = restoreAnchor.current;
+    if (!anchor) return;
+    restoreAnchor.current = null;
+    const element = document.getElementById(anchor.id);
+    if (element && scroll.scroller.current) {
+      scroll.scroller.current.scrollTop += element.getBoundingClientRect().top - anchor.top;
+      if (anchor.focus) element.focus({ preventScroll: true });
+    }
+  }, [start, scroll.scroller]);
+  useEffect(() => {
+    if (!route.message || studio.loadingMessages) return;
+    const message = document.getElementById(`message-${route.message}`);
+    const element = (route.citation === undefined ? null : message?.querySelector<HTMLElement>(`[data-answer-citation="${route.citation}"]`)) ?? message;
+    element?.scrollIntoView({ block: "center" });
+    element?.focus({ preventScroll: true });
+  }, [route.message, route.citation, studio.messages.length, studio.loadingMessages]);
+
   const splitRoot = useRef<HTMLDivElement>(null);
   const [splitRatio, setSplitRatio] = useState<number | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -134,7 +185,13 @@ export function ChatPage({
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
-  const latestRun = useMemo(() => [...studio.messages].reverse().find(message => message.role === "assistant" && message.modelRunId)?.modelRunId ?? null, [studio.messages]);
+  const latestRun = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message.role === "assistant" && message.modelRunId) return message.modelRunId;
+    }
+    return null;
+  }, [messages]);
   const evidenceRun = studio.messages.find(message => message.role === "assistant" && message.id === route.message)?.modelRunId ?? latestRun;
 
   useEffect(() => {
@@ -262,10 +319,15 @@ export function ChatPage({
             </p>
           ) : studio.messages.length ? (
             <div className="messages">
-              {studio.messages.map((message) => (
+              {start > 0 && <button type="button" className="button secondary chat-history-older" onClick={loadEarlier}>
+                <ChevronUp size={16} aria-hidden="true" />
+                加载更早的消息（还有 {start} 条）
+              </button>}
+              {messages.slice(start, end).map((message) => (
                 <ChatMessage
                   key={message.id}
                   message={message}
+                  stream={studio.chatStream}
                   located={route.message === message.id}
                   copied={copied === message.id}
                   copy={copy}
@@ -276,6 +338,7 @@ export function ChatPage({
                   retry={retry}
                 />
               ))}
+
             </div>
           ) : (
             <EmptyState
@@ -285,14 +348,22 @@ export function ChatPage({
             />
           )}
         </div>
-        {studio.messages.length > 0 && scroll.showJump && (
-          <button
-            className="jump-latest button secondary"
-            onClick={scroll.jump}
-          >
-            <ArrowDown size={15} aria-hidden="true" />
-            回到最新内容
-          </button>
+        {messages.length > 0 && (scroll.showJump || end < messages.length) && (
+          <div className="jump-latest" role="group" aria-label="历史消息导航">
+            {end < messages.length && <button type="button" className="button secondary" onClick={() => {
+              focusNewer.current = `message-${messages[end].id}`;
+              setHistoryPage({ ...currentPage, newer: newer + historyPageSize });
+            }}>
+              加载更新的消息（还有 {messages.length - end} 条）
+            </button>}
+            <button type="button" className="button secondary" onClick={() => {
+              if (route.message) navigate("chat", { workspace: studio.workspaceId, conversation: studio.conversationId, back: route.back }, { replace: true });
+              scroll.jump();
+            }}>
+              <ArrowDown size={15} aria-hidden="true" />
+              回到最新内容
+            </button>
+          </div>
         )}
         <ChatComposer
           studio={studio}
