@@ -62,10 +62,11 @@ export default defineConfig({
     ...(process.env.CORTEXOS_DELIVERY_CHECK === "1"
       ? [{ name: "delivery", testMatch: "windows-delivery.spec.ts" }]
       : []),
-    { name: "edge", testMatch: ["app.spec.ts", "graph-preview.spec.ts", "ui-usability.spec.ts", "cloud-connection.spec.ts", "personalized.spec.ts", "benchmark-result-drawer.spec.ts", "knowledge-scope.spec.ts", "rag-evaluation.spec.ts", "local-runtime.spec.ts", "runtime-cloud.spec.ts", "runtime-profiles.spec.ts"] },
+    { name: "edge", testMatch: ["h1-correctness.spec.ts", "app.spec.ts", "graph-preview.spec.ts", "ui-usability.spec.ts", "cloud-connection.spec.ts", "personalized.spec.ts", "benchmark-result-drawer.spec.ts", "knowledge-scope.spec.ts", "rag-evaluation.spec.ts", "local-runtime.spec.ts", "runtime-cloud.spec.ts", "runtime-profiles.spec.ts"] },
     {
       name: "desktop",
       testMatch: [
+        "h1-correctness.spec.ts",
         "harness-fit.spec.ts",
         "harness-programming.spec.ts",
         "harness-tasks.spec.ts",

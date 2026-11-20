@@ -1,3 +1,4 @@
+import { draftStore } from "../../draft-store";
 import { useEffect,useRef,useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { X } from 'lucide-react';
@@ -13,27 +14,27 @@ import type { ProgrammingJob,ProgrammingOrigin,ProgrammingPayload,ProgrammingRev
 
 interface Row {label:string;role:'target'|'boundary'|'regression';args:string;output:string}
 interface Editor {jobId:string|null;revision:number;origin:ProgrammingOrigin;spec:Omit<ProgrammingSpec,'examples'>;rows:Row[];dirty:boolean}
-const cached=new Map<string,Editor>();
-const warn=(e:BeforeUnloadEvent)=>{if(cached.size){e.preventDefault();e.returnValue='';}};
+const cached=draftStore<Editor>("programming", value => !!(value as Editor | null)?.origin && Array.isArray((value as Editor).rows));
 const types:Record<string,string>={integer:'整数',string:'文本',boolean:'布尔值',integer_list:'整数列表',string_list:'文本列表',boolean_list:'布尔值列表'};
 const projectKinds={multi_file:'跨文件修改',regression:'仓库回归验证',add_tests:'补写测试',database_compatibility:'数据库兼容性'};
 const blank=(version:number):Editor=>({jobId:null,revision:0,origin:{assessmentVersion:version,repositoryId:'',path:'',start:1,end:1},spec:{basis:'confirmed_requirement',rationale:'',prompt:'',function:'',parameters:[{name:'',kind:'integer'}],returnType:'integer',referenceCode:'',wrongCode:''},rows:[],dirty:false});
 const from=(job:ProgrammingJob,r:ProgrammingRevision):Editor=>({jobId:job.id,revision:r.revision,origin:r.body.origin,spec:r.body.spec,rows:r.body.spec.examples.map(e=>({...e,args:JSON.stringify(e.args),output:JSON.stringify(e.output)})),dirty:false});
 export function ProgrammingDrafts({workspaceId,assessmentVersion,snapshots,disabled,onSource}:{workspaceId:string;assessmentVersion:number;snapshots:Snapshot[];disabled:boolean;onSource:(e:Evidence)=>void}){
- const [s,setS]=useState<Editor>(()=>cached.get(workspaceId)??blank(assessmentVersion)),[data,setData]=useState<ProgrammingPayload|null>(null),[project,setProject]=useState<Project|null>(null),[projects,setProjects]=useState(snapshots);
+ const draftKey=`${workspaceId}:${assessmentVersion}`;
+ const [s,setS]=useState<Editor>(()=>cached.get(draftKey)??blank(assessmentVersion)),[data,setData]=useState<ProgrammingPayload|null>(null),[project,setProject]=useState<Project|null>(null),[projects,setProjects]=useState(snapshots);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[confirmText,setConfirmText]=useState(''),[validationRunning,setValidationRunning]=useState(false);
  const active=useRef(true),epoch=useRef(0),errorRef=useRef<HTMLDivElement>(null),confirmDialog=useRef<HTMLDialogElement>(null),pending=useRef<()=>void>(()=>{});
- const change=(patch:Partial<Editor>)=>setS(old=>{const next={...old,...patch,dirty:true};cached.set(workspaceId,next);return next;});
+ const change=(patch:Partial<Editor>)=>setS(old=>{const next={...old,...patch,dirty:true};cached.set(draftKey,next);return next;});
  const spec=(patch:Partial<Editor['spec']>)=>change({spec:{...s.spec,...patch}});
  const act=async(fn:()=>Promise<void>)=>{setBusy(true);setError('');try{await fn();}catch(e){if(active.current){setError(errorText(e));setTimeout(()=>errorRef.current?.focus(),0);}}finally{if(active.current)setBusy(false);}};
  const getProject=async(id:string)=>invoke<Project>('get_harness_task_project',{workspaceId,snapshotId:id});
  const read=async(id:string|null=null,restore=false)=>{
-  const ticket=++epoch.current,next=await invoke<ProgrammingPayload>('get_harness_programming_drafts',{workspaceId,jobId:restore?(cached.get(workspaceId)?.jobId??id):id});
-  const editor=restore&&cached.has(workspaceId)?cached.get(workspaceId)!:next.selected?from(next.selected,next.selected.revisions[0]):blank(assessmentVersion);
+  const ticket=++epoch.current,next=await invoke<ProgrammingPayload>('get_harness_programming_drafts',{workspaceId,jobId:restore?(cached.get(draftKey)?.jobId??id):id});
+  const editor=restore&&cached.has(draftKey)?cached.get(draftKey)!:next.selected?from(next.selected,next.selected.revisions[0]):blank(assessmentVersion);
   const p=editor.origin.repositoryId?await getProject(editor.origin.repositoryId):null;
-  if(active.current&&ticket===epoch.current){if(!restore)cached.delete(workspaceId);setData(next);setS(editor);setProject(p);}
+  if(active.current&&ticket===epoch.current){if(!restore)cached.delete(draftKey);setData(next);setS(editor);setProject(p);}
  };
- useEffect(()=>{active.current=true;void act(()=>read(null,true));window.addEventListener('beforeunload',warn);return()=>{active.current=false;epoch.current++;if(!cached.size)window.removeEventListener('beforeunload',warn);};},[workspaceId]);
+ useEffect(()=>{active.current=true;void act(()=>read(null,true));return()=>{active.current=false;epoch.current++;};},[draftKey]);
  const confirm=(action:()=>void)=>{if(!s.dirty){action();return;}pending.current=action;setConfirmText('放弃尚未保存的编程草案修改？已保存的修订会保留。');openDialog(confirmDialog.current);};
  const selectSnapshot=(p:Project)=>{
   const path=p.files.find(f=>f.path.endsWith('.py'))?.path??'';
@@ -46,7 +47,7 @@ export function ProgrammingDrafts({workspaceId,assessmentVersion,snapshots,disab
  const save=()=>act(async()=>{
   const examples=s.rows.map((r,i)=>{try{const args:unknown=JSON.parse(r.args),output:unknown=JSON.parse(r.output);if(!Array.isArray(args))throw '';return {...r,args,output};}catch{throw `第 ${i+1} 组用例需要合法JSON：参数填数组，输出填对应类型的值。`;}});
   const result=await invoke<ProgrammingJob>('save_harness_programming_draft',{workspaceId,input:{jobId:s.jobId,expectedRevision:s.revision,origin:s.origin,spec:{...s.spec,examples}}});
-  if(!active.current)return;cached.delete(workspaceId);setS(from(result,result.revisions[0]));await read(result.id);notify('编程草案已保存，等待容器验证');
+  if(!active.current)return;cached.delete(draftKey);setS(from(result,result.revisions[0]));await read(result.id);notify('编程草案已保存，等待容器验证');
  });
  const latest=data?.selected?.id===s.jobId?data.selected.revisions[0].revision:0,historical=s.revision>0&&s.revision!==latest;
  const savedRevision=data?.selected?.id===s.jobId?data.selected.revisions.find(r=>r.revision===s.revision):undefined;
@@ -65,8 +66,8 @@ export function ProgrammingDrafts({workspaceId,assessmentVersion,snapshots,disab
  return <details className="programming-drafts task-setup"><summary>编程任务草案</summary>
   <div className="fit-meta-line">{!savedRevision&&<FitStatus tone="attention">尚未保存</FitStatus>}<span>分析版本 {s.origin.assessmentVersion}</span>{s.revision>0&&<span>修订 {s.revision}</span>}</div>
   {error&&<div className="cloud-error" role="alert" tabIndex={-1} ref={errorRef}><p>{error}</p><button className="button secondary" disabled={disabled||busy} onClick={()=>void act(()=>read(s.jobId,true))}>重新读取（保留草稿）</button></div>}
-  <div className="task-history"><label>编程草案<SelectMenu aria-label="编程草案历史" value={s.jobId??''} disabled={disabled||busy} onChange={e=>{const id=e.target.value;if(id)confirm(()=>void act(()=>read(id)));}}><option value="">新草案</option>{data?.history.map(h=><option key={h.id} value={h.id}>{new Date(h.createdAt).toLocaleString()} · {h.id.slice(0,8)}</option>)}</SelectMenu></label><button className="button secondary" disabled={disabled||busy} onClick={()=>confirm(()=>{cached.delete(workspaceId);setS(blank(assessmentVersion));setProject(null);})}>另建草案</button>
-  {s.jobId&&data?.selected?.id===s.jobId&&<label>修订记录<SelectMenu aria-label="编程草案修订记录" value={s.revision} disabled={disabled||busy} onChange={e=>{const r=data.selected!.revisions.find(r=>r.revision===Number(e.target.value));if(r)confirm(()=>{cached.delete(workspaceId);setS(from(data.selected!,r));});}}>{data.selected.revisions.map(r=><option key={r.revision} value={r.revision}>修订 {r.revision} · {new Date(r.createdAt).toLocaleString()}</option>)}</SelectMenu></label>}</div>
+  <div className="task-history"><label>编程草案<SelectMenu aria-label="编程草案历史" value={s.jobId??''} disabled={disabled||busy} onChange={e=>{const id=e.target.value;if(id)confirm(()=>void act(()=>read(id)));}}><option value="">新草案</option>{data?.history.map(h=><option key={h.id} value={h.id}>{new Date(h.createdAt).toLocaleString()} · {h.id.slice(0,8)}</option>)}</SelectMenu></label><button className="button secondary" disabled={disabled||busy} onClick={()=>confirm(()=>{cached.delete(draftKey);setS(blank(assessmentVersion));setProject(null);})}>另建草案</button>
+  {s.jobId&&data?.selected?.id===s.jobId&&<label>修订记录<SelectMenu aria-label="编程草案修订记录" value={s.revision} disabled={disabled||busy} onChange={e=>{const r=data.selected!.revisions.find(r=>r.revision===Number(e.target.value));if(r)confirm(()=>{cached.delete(draftKey);setS(from(data.selected!,r));});}}>{data.selected.revisions.map(r=><option key={r.revision} value={r.revision}>修订 {r.revision} · {new Date(r.createdAt).toLocaleString()}</option>)}</SelectMenu></label>}</div>
   {historical&&<p>正在查看历史修订。选择最新修订后可继续编辑。</p>}
   <fieldset disabled={locked} className="programming-form">
    <legend>固定项目与评分入口</legend>

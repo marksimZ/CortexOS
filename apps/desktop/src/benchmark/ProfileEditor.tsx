@@ -1,6 +1,8 @@
+import { draftStore } from "../draft-store";
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { SelectMenu } from "../components/SelectMenu";
+import { errorText } from "../frontend-error";
 import { notify } from "../components/Toast";
 
 const domains = { software:"软件开发", education:"学习与教育", finance:"金融与经济研究", data:"数据分析", science:"科学研究", writing:"内容创作", product:"产品与商业工作" };
@@ -10,8 +12,7 @@ const levels:Record<string,string> = {beginner:"入门",intermediate:"中级",ad
 export interface Profile { domains:string[]; otherDomain:string; level:string|null; tasks:string[]; taskNotes:string; tools:string[]; weights:Record<string,number> }
 interface Version {workspaceId:string;version:number;action:string;profile:Profile;contentHash:string;createdAt:string}
 const defaults = ():Profile => ({domains:[],otherDomain:"",level:null,tasks:[],taskNotes:"",tools:[],weights:Object.fromEntries(Object.keys(weights).map(k=>[k,3]))});
-// Unsaved answers survive page/workspace switches within this process; never contain credentials.
-const drafts = new Map<string,{profile:Profile;version:number;step:number}>();
+const drafts = draftStore<{profile:Profile;version:number;step:number}>("benchmark-profile", value => Array.isArray((value as {profile?: Profile} | null)?.profile?.tools));
 export function ProfileEditor({workspaceId,onConnection}:{workspaceId:string|null;onConnection:()=>void}) {
   if (!workspaceId) return <section className="profile-page"><h2>使用偏好</h2><p>请先选择工作区，再填写使用偏好。</p><button className="button secondary" onClick={onConnection}>返回连接设置</button></section>;
   return <WorkspaceProfile key={workspaceId} workspaceId={workspaceId} onConnection={onConnection} />;
@@ -24,7 +25,7 @@ function WorkspaceProfile({workspaceId,onConnection}:{workspaceId:string;onConne
   const [editing,setEditing]=useState(true);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
-  const [dirty,setDirty]=useState(drafts.has(workspaceId));
+  const [dirty,setDirty]=useState(false);
   const [error,setError]=useState<string|null>(null);
   const [loadFailed,setLoadFailed]=useState(false);
   const [toolText,setToolText]=useState("");
@@ -35,26 +36,25 @@ function WorkspaceProfile({workspaceId,onConnection}:{workspaceId:string;onConne
     try {
       const next=await invoke<Version|null>("get_benchmark_profile",{workspaceId});
       if (!active.current) return;
-      const draft=drafts.get(workspaceId);
+      const draft=drafts.get(`${workspaceId}:${next?.version??0}`);
       setSaved(next);setVersion(draft?.version??next?.version??0);setProfile(draft?.profile??next?.profile??defaults());setStep(draft?.step??0);
       setDirty(!!draft);setEditing(!!draft||!next||next.action==="reset");
       setToolText((draft?.profile??next?.profile??defaults()).tools.join(", "));
-    } catch (e) {if(active.current){setLoadFailed(true);setError(typeof e==="string"?e:"无法读取使用偏好，请重试。");}}
+    } catch (e) {if(active.current){setLoadFailed(true);setError(errorText(e));}}
     finally {if(active.current)setLoading(false);}
   };
   useEffect(()=>{ active.current=true;void load();return()=>{active.current=false;}; },[workspaceId]);
-  useEffect(()=>{const warn=(event:BeforeUnloadEvent)=>{if(drafts.size){event.preventDefault();event.returnValue="";}};window.addEventListener("beforeunload",warn);return()=>window.removeEventListener("beforeunload",warn);},[]);
-  const change=(next:Profile)=>{setProfile(next);setDirty(true);drafts.set(workspaceId,{profile:next,version,step});};
-  const move=(next:number)=>{setStep(next);const draft=drafts.get(workspaceId);if(draft)draft.step=next;heading.current?.focus();};
+  const change=(next:Profile)=>{setProfile(next);setDirty(true);drafts.set(`${workspaceId}:${version}`,{profile:next,version,step});};
+  const move=(next:number)=>{setStep(next);const draft=drafts.get(`${workspaceId}:${version}`);if(draft)drafts.set(`${workspaceId}:${version}`,{...draft,step:next});heading.current?.focus();};
   const save=async(action:"save"|"skip"|"reset")=>{
     if(action!=="save" && !window.confirm(action==="reset"?"重置本工作区的使用偏好？旧版本会保留，新版本将恢复为未填写状态。":"跳过问卷并使用默认偏好？当前未保存的填写内容将清空，之后可以修改。"))return;
     setBusy(true);setError(null);
     try {
       const next=await invoke<Version>("save_benchmark_profile",{workspaceId,input:{expectedVersion:version,action,profile}});
       if(!active.current)return;
-      setSaved(next);setVersion(next.version);setProfile(next.profile);setEditing(action==="reset");setStep(0);setDirty(false);drafts.delete(workspaceId);notify(action==="reset"?"使用偏好已重置":"使用偏好已保存");
+      setSaved(next);setVersion(next.version);setProfile(next.profile);setEditing(action==="reset");setStep(0);setDirty(false);drafts.delete(`${workspaceId}:${version}`);notify(action==="reset"?"使用偏好已重置":"使用偏好已保存");
       setToolText(next.profile.tools.join(", "));
-    }catch(e){if(active.current)setError(typeof e==="string"?e:"保存未完成，填写内容已保留。请重试。");}
+    }catch(e){if(active.current)setError(errorText(e));}
     finally{if(active.current)setBusy(false);}
   };
   const selected=(items:string[],key:string)=>items.includes(key)?items.filter(v=>v!==key):[...items,key];
@@ -64,7 +64,7 @@ function WorkspaceProfile({workspaceId,onConnection}:{workspaceId:string;onConne
   return <section className="profile-page" aria-labelledby="profile-title">
     <header className="profile-header"><div><h2 id="profile-title" ref={heading} tabIndex={-1}>使用偏好</h2>{saved&&<span>版本 {saved.version} · {new Date(saved.createdAt).toLocaleString("zh-CN")}</span>}</div><button className="button text-button" disabled={busy} onClick={onConnection}>连接设置</button></header>
     {loading?<p role="status">正在读取使用偏好…</p>:<>
-      {error&&<div role="alert" className="cloud-error"><p>{error}</p><div className="cloud-actions"><button className="button secondary" disabled={busy} onClick={()=>void load()}>重新读取（保留草稿）</button><button className="button secondary" disabled={busy} onClick={onConnection}>检查云端连接</button>{dirty&&<button className="button secondary" disabled={busy} onClick={()=>{if(window.confirm("放弃当前未保存的修改并读取最新版本？")){drafts.delete(workspaceId);void load();}}}>放弃草稿并读取最新版本</button>}</div></div>}
+      {error&&<div role="alert" className="cloud-error"><p>{error}</p><div className="cloud-actions"><button className="button secondary" disabled={busy} onClick={()=>void load()}>重新读取（保留草稿）</button><button className="button secondary" disabled={busy} onClick={onConnection}>检查云端连接</button>{dirty&&<button className="button secondary" disabled={busy} onClick={()=>{if(window.confirm("放弃当前未保存的修改并读取最新版本？")){drafts.delete(`${workspaceId}:${version}`);void load();}}}>放弃草稿并读取最新版本</button>}</div></div>}
       {editing?<form onSubmit={e=>{e.preventDefault();if(step<2)move(step+1);else void save("save");}}>
         <nav className="profile-steps" aria-label="使用偏好步骤">{["工作与水平","任务与工具","选择模型的偏好"].map((label,i)=><button type="button" key={label} aria-current={step===i?"step":undefined} className="button secondary" disabled={busy} onClick={()=>move(i)}>{i+1}. {label}</button>)}</nav>
         <fieldset disabled={busy||loadFailed}><legend className="sr-only">{["工作与水平","任务与工具","选择模型的偏好"][step]}</legend>

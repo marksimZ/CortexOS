@@ -1,3 +1,4 @@
+import { expectPicker } from "./select-picker";
 import { expect, test, type Locator } from "@playwright/test";
 import { createServer } from "node:http";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -78,13 +79,11 @@ test("native long records, history, editors and source menus keep all controls a
     const editor = page.getByRole("dialog", { name: "修改知识草稿", exact: true });
     const kind = editor.getByLabel("类型", { exact: true });
     await kind.click();
-    const menu = page.getByRole("listbox");
-    await expect(menu).toBeVisible();
+    await expectPicker(kind, true);
     await page.keyboard.press("Escape");
-    await expect(menu).not.toBeVisible();
+    await expectPicker(kind, false);
     await expect(editor).toBeVisible();
-    await kind.click();
-    await page.getByRole("listbox").getByRole("option", { name: "假设", exact: true }).click();
+    await kind.selectOption("hypothesis");
     await expect(kind).toHaveValue("hypothesis");
     await editor.getByLabel("正文", { exact: true }).evaluate(element => element.style.height = "600px");
     const footer = editor.locator(".panel-footer"), footerBefore = await footer.boundingBox();
@@ -112,7 +111,7 @@ test("native long records, history, editors and source menus keep all controls a
     await sources.getByRole("button", { name: "确认导入", exact: true }).click();
     await expect(sources.getByLabel("文件版本", { exact: true })).toHaveValue("1");
     await sources.getByLabel("文件版本", { exact: true }).click();
-    await expect(page.getByRole("listbox", { name: "文件版本选项", exact: true })).toBeVisible();
+    await expectPicker(sources.getByLabel("文件版本", { exact: true }), true);
     await page.keyboard.press("Escape");
     await expect(sources).toBeVisible();
     await sources.getByRole("button", { name: "关闭资料文件", exact: true }).click();
@@ -124,7 +123,7 @@ test("native long records, history, editors and source menus keep all controls a
       for (const [width, height] of [[1366, 768], [1600, 900], [1920, 1080]]) {
         await page.setViewportSize({ width, height });
         await appearance.click();
-        await expect(page.getByRole("listbox", { name: "外观选项", exact: true })).toBeVisible();
+        await expectPicker(appearance, true);
         await page.screenshot({ path: info.outputPath(`native-menu-${theme}-${width}.png`) });
         await page.keyboard.press("Escape");
         await page.getByRole("button", { name: "查看完整处理记录", exact: false }).click();

@@ -1,3 +1,4 @@
+import { expectPicker } from "./select-picker";
 import { expect,test } from "@playwright/test";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -39,7 +40,7 @@ test("native page titles and empty title bars move the real window without steal
   const title=page.locator(".topbar-title strong");
   await title.dblclick();await expect.poll(()=>nativeInvoke<boolean>(page,"plugin:window|is_maximized",{label:"main"})).toBe(true);
   await page.getByRole("button",{name:"还原窗口",exact:true}).click();await expect.poll(()=>nativeInvoke<boolean>(page,"plugin:window|is_maximized",{label:"main"})).toBe(false);
-  await page.getByRole("combobox",{name:"外观",exact:true}).click();await expect(page.getByRole("listbox",{name:"外观选项",exact:true})).toBeVisible();await page.keyboard.press("Escape");
+  await page.getByRole("combobox",{name:"外观",exact:true}).click();await expectPicker(page.getByRole("combobox",{name:"外观",exact:true}), true);await page.keyboard.press("Escape");
   await page.getByRole("button",{name:"最小化窗口",exact:true}).click();await expect.poll(async()=>(await nativeWindow(app.processId!,"inspect")).Minimized).toBe(true);await nativeWindow(app.processId!,"restore");
   await page.screenshot({path:info.outputPath("window-titlebar.png")});
   await info.attach("actual-window-movement",{body:JSON.stringify(measurements,null,2),contentType:"application/json"});

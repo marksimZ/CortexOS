@@ -1,3 +1,4 @@
+import { requestDraftWindowClose } from "../draft-store";
 import { useEffect, useState, type MouseEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Copy, Minus, Square, X } from "lucide-react";
@@ -50,7 +51,7 @@ export function WindowControls({ onError }: { onError: (error: unknown) => void 
         {maximized ? <Copy size={14} aria-hidden="true" /> : <Square size={14} aria-hidden="true" />}
       </button>
       <button className="window-control window-close" aria-label="关闭窗口" title="关闭"
-        onClick={() => { void getCurrentWindow().close().catch(onError); }}>
+        onClick={() => { void requestDraftWindowClose().catch(onError); }}>
         <X size={17} aria-hidden="true" />
       </button>
     </div>

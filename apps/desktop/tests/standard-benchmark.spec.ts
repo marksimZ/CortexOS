@@ -102,10 +102,10 @@ for (const queueOnly of [false, true]) test(queueOnly ? "standard batch can canc
     const metricsPanel=page.locator(".personal-model-report").first().locator(".benchmark-measurements").first();await metricsPanel.locator("summary").first().click();
     for(const [width,height] of [[1366,768],[1600,900],[1920,1080]]){await page.setViewportSize({width,height});await page.evaluate(()=>document.querySelector(".benchmark-measurements")?.scrollIntoView());expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath(`measurements-${width}.png`)});}
     await metricsPanel.locator("dl").scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath("resources-1920.png")});
-    await page.getByRole("combobox",{name:"外观",exact:true}).click();await page.getByRole("listbox",{name:"外观选项",exact:true}).getByRole("option",{name:"深色",exact:true}).click();await page.keyboard.press("Escape");
+    await page.getByRole("combobox",{name:"外观",exact:true}).selectOption("dark");
     for(const [width,height] of [[1366,768],[1600,900],[1920,1080]]){await page.setViewportSize({width,height});await metricsPanel.scrollIntoViewIfNeeded();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath(`measurements-dark-${width}.png`)});}
     const launcher=page.locator(".personal-model-report").first().locator(".benchmark-result-button").first();await launcher.click();const casePanel=page.getByRole("dialog",{name:"单题详情",exact:true});await expect(casePanel.locator(".benchmark-result-meta strong")).toHaveText("通过");await casePanel.locator(".benchmark-measurements > summary").click();await casePanel.getByRole("button",{name:"查看原始采样记录",exact:true}).click();await expect(casePanel.locator(".benchmark-measurements pre").last()).toContainText('"samples"');
-    await page.getByRole("combobox",{name:"外观",exact:true}).click();await page.getByRole("listbox",{name:"外观选项",exact:true}).getByRole("option",{name:"浅色",exact:true}).click();await page.keyboard.press("Escape");
+    await page.getByRole("combobox",{name:"外观",exact:true}).selectOption("light");
     await casePanel.getByRole("button",{name:"关闭单题详情",exact:true}).click();await expect(launcher).toBeFocused();
     await test.step("actual execution graph returns to the same filtered result",async()=>{
       await filters.getByLabel("查看模型",{exact:true}).selectOption("1");

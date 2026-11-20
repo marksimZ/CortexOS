@@ -1,3 +1,5 @@
+import { closeDraftWindow, useDraftWindow } from "./draft-store";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { benchmarkReturn } from "./benchmark/reportNavigation";
 import { AppDialog, openDialog } from "./components/AppDialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -70,6 +72,8 @@ export default function App() {
   const mainRef = useRef<HTMLElement>(null);
   const previousPage = useRef(page);
   const workspaceDialog = useRef<HTMLDialogElement>(null);
+  const volatileDialog = useRef<HTMLDialogElement>(null);
+  useDraftWindow(() => openDialog(volatileDialog.current), reportError);
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -131,6 +135,7 @@ export default function App() {
             {returnTarget.startsWith("#/benchmark?")?"返回评测结果":returnTarget.startsWith("#/chat?") ? "返回回答" : "返回执行轨迹"}
           </a>
         )}
+        <ErrorBoundary key={page} scope="page">
         {page === "chat" && (
           <ChatPage
             studio={studio}
@@ -174,6 +179,7 @@ export default function App() {
         )}
         {page === "settings" && <SettingsPage studio={studio} />}
         {page === "benchmark" && <BenchmarkPage studio={studio} personalized={route.personalized} />}
+        </ErrorBoundary>
       </main>
       {edgeEdit && (
         <RelationshipEditor
@@ -207,6 +213,14 @@ export default function App() {
           }}
         />
       )}
+      <AppDialog ref={volatileDialog} aria-labelledby="volatile-title" aria-describedby="volatile-detail" className="form-dialog">
+        <h2 id="volatile-title">仍有临时草稿</h2>
+        <p id="volatile-detail">有修改只保留在当前窗口。关闭窗口后无法恢复这些内容。</p>
+        <div className="dialog-actions">
+          <button type="button" className="button secondary" data-initial-focus onClick={() => volatileDialog.current?.close()}>继续编辑</button>
+          <button type="button" className="button primary" onClick={() => void closeDraftWindow().catch(reportError)}>仍然关闭窗口</button>
+        </div>
+      </AppDialog>
       <AppDialog
         ref={workspaceDialog}
         className="form-dialog"

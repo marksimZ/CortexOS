@@ -23,6 +23,7 @@ export function ChatComposer({
   cancelling,
   setCancelling,
   canSend,
+  draftTooLong,
   send,
 }: {
   studio: Studio;
@@ -35,6 +36,7 @@ export function ChatComposer({
   cancelling: boolean;
   setCancelling: (value: boolean) => void;
   canSend: boolean;
+  draftTooLong: boolean;
   send: (content?: string) => Promise<void>;
 }) {
   const [previewKey, setPreviewKey] = useState<string | null>(null);
@@ -62,6 +64,8 @@ export function ChatComposer({
           hidden={preview}
           id="message"
           rows={1}
+          aria-invalid={draftTooLong || undefined}
+          aria-describedby={draftTooLong ? "message-length-error" : undefined}
           value={studio.draft}
           onChange={(event) => studio.setDraft(event.target.value)}
           onCompositionStart={() => { composing.current = true; }}
@@ -72,13 +76,8 @@ export function ChatComposer({
           placeholder={
             studio.workspaceId ? "输入问题…" : "创建工作区后，在这里输入问题…"
           }
-          disabled={
-            !studio.desktop ||
-            !studio.workspaceId ||
-            studio.sending ||
-            studio.creatingConversation ||
-            studio.loadingMessages
-          }
+          disabled={!studio.desktop || !studio.workspaceId}
+          readOnly={studio.sending || studio.creatingConversation || studio.loadingMessages}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               // Let the IME consume its own Enter; suppress only the subsequent send.
@@ -154,7 +153,9 @@ export function ChatComposer({
                 className="send-button"
                 disabled={!canSend}
                 onClick={() => {
+                  if (!canSend) return;
                   setPreviewKey(null);
+                  if (!preview) textarea.current?.focus({ preventScroll: true });
                   void send();
                 }}
                 aria-label={studio.sending ? "正在发送" : "发送消息"}
@@ -192,6 +193,8 @@ export function ChatComposer({
           cloudAnswer={cloudAnswer}
         />
       </div>
+      {draftTooLong && <small className="form-error" id="message-length-error">问题超过输入上限。请缩短后再发送。</small>}
+      {!!studio.draftPersistence && <small className="inline-help">{studio.draftPersistence === "local" ? "草稿保存在本机" : "草稿只保留在当前窗口"}</small>}
       <details className="composer-help">
         <summary>对话说明与快捷键</summary>
         <p>

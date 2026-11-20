@@ -34,7 +34,20 @@ for(const [width,height] of [[1366,768],[1600,900],[1920,1080]])test(`personaliz
  await page.screenshot({path:info.outputPath(`project-${width}.png`)});
  await page.getByRole("button",{name:"下一步",exact:true}).click();await page.getByLabel("每百万输入 Token 单价",{exact:true}).fill("1");await page.getByLabel("每百万输出 Token 单价",{exact:true}).fill("2");await page.getByLabel("价格依据（服务商页面或账单日期）",{exact:true}).fill("Synthetic UI fixture prices");await page.getByRole("button",{name:"预览发送计划",exact:true}).click();
  await expect(page.getByRole("button",{name:"确认并生成",exact:true})).toBeDisabled();expect(await page.evaluate(()=>(window as any).sent)).toBe(0);await page.getByRole("checkbox",{name:"我已检查资料与价格",exact:false}).check();await page.screenshot({path:info.outputPath(`consent-${width}.png`)});await page.getByRole("button",{name:"确认并生成",exact:true}).click();expect(await page.evaluate(()=>(window as any).sent)).toBe(1);
- await page.getByRole("button",{name:"查看审核",exact:true}).click();await expect(page.getByRole("button",{name:"发布已批准的 0 题",exact:true})).toBeDisabled();await page.getByRole("checkbox",{name:"我已核对本题",exact:false}).check();await page.getByLabel("审核人",{exact:true}).fill("UI fixture reviewer");await page.screenshot({path:info.outputPath(`review-${width}.png`)});await page.getByRole("button",{name:"发布已批准的 1 题",exact:true}).click();
+ await page.getByRole("button",{name:"查看审核",exact:true}).click();
+ if(width===1366){
+   await page.getByRole("button",{name:"修订题目",exact:true}).click();
+   const json=page.getByLabel("修改候选 JSON",{exact:true});
+   for(const invalid of ["{", "[]", '{"case":{}}']){
+     await json.fill(invalid);
+     await page.getByRole("button",{name:"保存新修订",exact:true}).click();
+     await expect(json).toHaveAttribute("aria-invalid","true");
+     await expect(page.getByText(/包含 case 对象/)).toBeVisible();
+     await expect(json).toHaveValue(invalid);
+   }
+   await page.getByRole("button",{name:"取消编辑",exact:true}).click();
+ }
+ await expect(page.getByRole("button",{name:"发布已批准的 0 题",exact:true})).toBeDisabled();await page.getByRole("checkbox",{name:"我已核对本题",exact:false}).check();await page.getByLabel("审核人",{exact:true}).fill("UI fixture reviewer");await page.screenshot({path:info.outputPath(`review-${width}.png`)});await page.getByRole("button",{name:"发布已批准的 1 题",exact:true}).click();
  await page.getByRole("checkbox",{name:"fixture-local",exact:true}).check();await page.getByRole("button",{name:"预览评测计划",exact:true}).click();await expect(page.getByRole("button",{name:"确认并运行未发送题目",exact:true})).toBeDisabled();await page.getByRole("checkbox",{name:"我已检查题库、模型和发送范围",exact:false}).check();await page.getByRole("button",{name:"确认并运行未发送题目",exact:true}).click();await expect(page.getByRole("table")).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath(`report-${width}.png`)});
 });

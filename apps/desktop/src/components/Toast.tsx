@@ -17,7 +17,7 @@ export function Toast() {
     const timer = window.setTimeout(() => setNotice(null), 2500);
     return () => window.clearTimeout(timer);
   }, [notice]);
-  return <div className="notice-region" role="status" aria-live="polite" aria-atomic="true">
+  return <div className="notice-region" role="status" aria-atomic="true">
     {notice && <div key={notice.id} className="toast"><Check size={16} aria-hidden="true" /><span>{notice.text}</span><button className="toast-close" aria-label="关闭操作提示" onClick={() => setNotice(null)}><X size={14} /></button></div>}
   </div>;
 }

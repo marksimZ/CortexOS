@@ -44,6 +44,7 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
   const [pending, setPending] = useState<Capability | "remove">();
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
+  const [limitError, setLimitError] = useState<Partial<Record<LimitKey, string>>>({});
   const [notice, setNotice] = useState("");
   const connection = connections.find(item => item.id === selected);
   const modelId = model === manual ? manualModel.trim() : model;
@@ -64,6 +65,7 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
     setModel("");
     setManualModel("");
     setPending(undefined);
+    setLimitError({});
     setNotice("");
     setError("");
   }
@@ -106,11 +108,27 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
 
   function saveLimits(event: FormEvent<HTMLFormElement>, connectionId: string) {
     event.preventDefault();
-    const fields = new FormData(event.currentTarget);
-    const limits = Object.fromEntries(Object.keys(limitFields).map(field => {
-      const value = fields.get(field);
-      return [field, value === "" ? null : Math.round(Number(value) * (field.endsWith("Tokens") ? 1 : 1_000_000))];
-    }));
+    const form = event.currentTarget;
+    const keys = Object.keys(limitFields) as LimitKey[];
+    const errors: Partial<Record<LimitKey, string>> = {};
+    const limits = Object.fromEntries(keys.map(field => {
+      const input = form.elements.namedItem(field);
+      const value = input instanceof HTMLInputElement && input.value !== "" ? input.valueAsNumber : null;
+      if (value !== null && !Number.isFinite(value)) errors[field] = "请输入有效数字。";
+      return [field, value === null ? null : Math.round(value * (field.endsWith("Tokens") ? 1 : 1_000_000))];
+    })) as Record<LimitKey, number | null>;
+    const context = limits.contextTokens;
+    for (const field of ["maxInputTokens", "maxOutputTokens"] as const) {
+      const value = limits[field];
+      if (context !== null && value !== null && value > context) errors[field] = "此上限不能高于总上下文上限。";
+    }
+    setLimitError(errors);
+    const first = keys.find(field => errors[field]);
+    if (first) {
+      const input = form.elements.namedItem(first);
+      if (input instanceof HTMLInputElement) input.focus();
+      return;
+    }
     void run(async () => {
       update(await invoke<Connection>("set_runtime_cloud_model_limits", { workspaceId, connectionId, input: { model: modelId, ...limits } }));
       setNotice("已保存模型上限和费率。");
@@ -179,7 +197,7 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
         </div>
         <div className="field">
           <label htmlFor="runtime-cloud-model">模型</label>
-          <SelectMenu id="runtime-cloud-model" value={model} disabled={busy} onChange={event => { setModel(event.target.value); setPending(undefined); }}>
+          <SelectMenu id="runtime-cloud-model" value={model} disabled={busy} onChange={event => { setModel(event.target.value); setPending(undefined); setLimitError({}); }}>
             <option value="">选择模型</option>
             {connection.models.map(item => <option value={item.id} key={item.id}>{item.id}</option>)}
             <option value={manual}>手动输入模型标识</option>
@@ -187,7 +205,7 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
         </div>
         {model === manual && <div className="field"><label htmlFor="runtime-cloud-manual-model">模型标识</label>
           <input id="runtime-cloud-manual-model" value={manualModel} maxLength={200} disabled={busy}
-            onChange={event => { setManualModel(event.target.value); setPending(undefined); }} /></div>}
+            onChange={event => { setManualModel(event.target.value); setPending(undefined); setLimitError({}); }} /></div>}
         {modelId && <>
           {connection.probes.some(probe => probe.model === modelId && probe.capability === "embedding" && probe.state === "verified")
             && <CloudIndexSettings key={JSON.stringify(["index", connection.id, modelId])} workspaceId={workspaceId} connectionId={connection.id} model={modelId} />}
@@ -226,7 +244,10 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
                   const value = saved?.[key];
                   return <div className="field" key={key}><label htmlFor={key}>{limitFields[key]}</label>
                     <input id={key} name={key} type="number" min={tokens ? 1 : 0} max={tokens ? 10_000_000 : 1_000_000}
-                      step={tokens ? 1 : 0.000001} disabled={busy} placeholder="未知" defaultValue={value == null ? "" : value / (tokens ? 1 : 1_000_000)} />
+                      step={tokens ? 1 : 0.000001} disabled={busy} placeholder="未知" defaultValue={value == null ? "" : value / (tokens ? 1 : 1_000_000)}
+                      aria-invalid={!!limitError[key] || undefined} aria-describedby={limitError[key] ? `${key}-error` : undefined}
+                      onInput={() => setLimitError({})} onInvalid={() => setLimitError(current => ({ ...current, [key]: tokens ? "请输入 1 至 10000000 之间的整数，或留空。" : "请输入 0 至 1000000 之间的金额，最多六位小数，或留空。" }))} />
+                    {limitError[key] && <small id={`${key}-error`} className="form-error">{limitError[key]}</small>}
                   </div>;
                 })}
               </div>

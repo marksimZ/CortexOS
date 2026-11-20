@@ -93,11 +93,13 @@ export function ChatPage({
   useEffect(() => {
     if (cloudDraft) openDialog(cloudDialog.current);
   }, [cloudDraft]);
+  const draftTooLong = useMemo(() => new TextEncoder().encode(studio.draft.trim()).length > 16_384, [studio.draft]);
   const canSend =
     studio.desktop &&
     !!studio.workspaceId &&
     !!modelReady &&
     !!studio.draft.trim() &&
+    !draftTooLong &&
     (cloudAnswer || studio.knowledgeScopeReady) &&
     !studio.activeRun &&
     !studio.sending &&
@@ -206,6 +208,8 @@ export function ChatPage({
               <button
                 className="icon-button"
                 aria-label="重命名会话"
+                aria-haspopup="dialog"
+                aria-controls="rename-conversation"
                 onClick={() => {
                   setRenameTitle(conversation.title);
                   setRenameError(null);
@@ -241,6 +245,9 @@ export function ChatPage({
         )}
         <div
           className="message-scroll"
+          role="region"
+          aria-label="对话消息"
+          tabIndex={0}
           ref={scroll.scroller}
           onScroll={scroll.onScroll}
           onWheel={scroll.onWheel}
@@ -298,6 +305,7 @@ export function ChatPage({
           cancelling={cancelling}
           setCancelling={setCancelling}
           canSend={canSend}
+          draftTooLong={draftTooLong}
           send={send}
         />
         <p className="sr-only" role="status">
@@ -373,6 +381,7 @@ export function ChatPage({
       <AppDialog
         className="form-dialog"
         ref={renameDialog}
+        id="rename-conversation"
         aria-labelledby="rename-title"
       >
         <form

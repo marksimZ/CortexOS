@@ -35,13 +35,31 @@ input:disabled,select:disabled { opacity: .6; }
 .workspace-picker .select-field { flex: 1; width: 0; }
 .workspace-picker .select-field select { width: 100%; padding-right: 24px; }
 .workspace-picker .select-chevron { right: 3px; }
-.select-popup { position: fixed; inset: auto; margin: 0; padding: var(--menu-inset); overflow: auto; overscroll-behavior: contain; border: 0; border-radius: var(--radius-control); background: var(--surface); backdrop-filter: blur(24px); color: var(--text); box-shadow: var(--shadow-overlay); font: var(--font-normal) 13px/1.5 var(--font-ui); }
-.select-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; padding: 7px 10px; border-radius: var(--radius-menu-item); cursor: pointer; }
-.select-option > span { min-width: 0; overflow-wrap: anywhere; }
-.select-option[aria-selected=true] { color: var(--primary); }
-.select-option.is-active:not([aria-disabled=true]) { background: var(--selected); }
-.select-option[aria-disabled=true] { color: var(--muted); opacity: .55; cursor: default; }
-@media(forced-colors:active) { .select-popup { border: 1px solid CanvasText; background: Canvas; } .select-option.is-active { outline: 1px solid Highlight; } }
+@supports (appearance: base-select) and selector(select::picker(select)) {
+  .select-field > .select-control,
+  .select-field > .select-control::picker(select) { appearance: base-select; }
+  .select-field > .select-control { display: flex; align-items: center; }
+  .select-field > .select-control::picker-icon { display: none; }
+  .select-field > .select-control::picker(select) {
+    max-block-size: min(320px, 70vh); max-inline-size: calc(100vw - 24px);
+    margin-block: 4px; padding: var(--menu-inset); overflow: auto;
+    border: 0; border-radius: var(--radius-control); background: var(--surface);
+    color: var(--text); box-shadow: var(--shadow-overlay);
+  }
+  .select-field > .select-control option {
+    min-block-size: 34px; padding: 7px 10px; border-radius: var(--radius-menu-item);
+    overflow-wrap: anywhere; white-space: normal;
+  }
+  .select-field > .select-control option:checked { color: var(--primary); }
+  .select-field > .select-control option:is(:focus-visible, :hover) { background: var(--selected); }
+  .select-field > .select-control option:disabled { color: var(--muted); }
+  @media (forced-colors: active) {
+    .select-field > .select-control::picker(select) { border: 1px solid CanvasText; }
+    .select-field > .select-control option:focus-visible { outline: 1px solid Highlight; }
+  }
+}
+.render-error { margin: 2rem auto; max-width: 35rem; padding: 1.25rem; }
+
 textarea { width: 100%; min-height: 160px; line-height: 1.65; resize: vertical; }
 textarea,pre,code { overflow-wrap: anywhere; }
 code,pre { font-family: var(--font-mono); font-size: 12px; }

@@ -83,6 +83,7 @@ test("native chat preserves real SQLite data through cancellation, errors and re
   let application = await launchNative(testInfo, { endpoint });
   try {
     let { page } = application;
+    page.setDefaultTimeout(12_000);
     await expect(
       page.getByText("Ollama 已连接", { exact: true }),
     ).toBeVisible();

@@ -102,8 +102,7 @@ test("native report pages keep all-plan statistics and load only the opened item
     await drawer.locator(".benchmark-case-sources > summary").click();
     await expect(drawer.locator(".benchmark-case-sources ol li").first()).toBeVisible();
     for (const theme of ["light", "dark"]) {
-      await page.getByRole("combobox", { name: "外观", exact: true }).click();
-      await page.getByRole("listbox", { name: "外观选项", exact: true }).getByRole("option", { name: theme === "dark" ? "深色" : "浅色", exact: true }).click(); await page.keyboard.press("Escape");
+      await page.getByRole("combobox", { name: "外观", exact: true }).selectOption(theme);
       for (const [width, height] of [[1366, 768], [1600, 900], [1920, 1080]]) {
         await page.setViewportSize({ width, height });
         await expect(drawer.getByText("尚未发送，没有模型输出。",{exact:true})).toBeVisible();

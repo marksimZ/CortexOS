@@ -2,13 +2,14 @@ import { AppDialog, openDialog } from "./components/AppDialog";
 import { SelectMenu } from "./components/SelectMenu";
 import { invoke } from "@tauri-apps/api/core";
 import { notify } from "./components/Toast";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { closeDraftWindow, draftStore, registerDraftEditor } from "./draft-store";
 import {
   lazy,
   memo,
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -1128,6 +1129,13 @@ function PositionForm({
   );
 }
 
+type RelationDraft = { from: string; to: string; relation: string; active: boolean; reason: string };
+const relationDrafts = draftStore<RelationDraft>("relation", value => {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.active === "boolean" && ["from", "to", "relation", "reason"].every(key => typeof row[key] === "string");
+});
+
 export function RelationshipEditor({
   request,
   onClose,
@@ -1144,26 +1152,28 @@ export function RelationshipEditor({
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [optionsRetry, setOptionsRetry] = useState(0);
-  const [from, setFrom] = useState(original?.fromNodeId ?? request.selected);
+  const draftKey = JSON.stringify([request.workspaceId, request.edge?.id ?? request.selected, original?.version ?? null]);
+  const [cached] = useState(() => relationDrafts.get(draftKey));
+  const [from, setFrom] = useState(cached?.from ?? original?.fromNodeId ?? request.selected);
   const [to, setTo] = useState(
-    original?.toNodeId ??
+    cached?.to ?? original?.toNodeId ??
       request.graph.nodes.find((node) => node.id !== request.selected)?.id ??
       "",
   );
-  const [relation, setRelation] = useState(original?.relation ?? "supports");
-  const [active, setActive] = useState(original?.active ?? true);
-  const [reason, setReason] = useState("");
+  const [relation, setRelation] = useState(cached?.relation ?? original?.relation ?? "supports");
+  const [active, setActive] = useState(cached?.active ?? original?.active ?? true);
+  const [reason, setReason] = useState(cached?.reason ?? "");
   const [expected, setExpected] = useState(original?.version ?? null);
   const [latest, setLatest] = useState<GraphEdge | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const leaving = useRef<HTMLDialogElement>(null);
+  const lastEditorFocus = useRef<HTMLElement | null>(null);
   const form = useRef<HTMLFormElement>(null);
   const busy = useRef(false);
   const dirty = useRef(false);
   const exitWindow = useRef(false);
-  const listener = useRef<Promise<() => void> | null>(null);
   dirty.current =
     reason !== "" ||
     from !== (original?.fromNodeId ?? request.selected) ||
@@ -1173,17 +1183,19 @@ export function RelationshipEditor({
         "") ||
     relation !== (original?.relation ?? "supports") ||
     active !== (original?.active ?? true);
+  const [durable, setDurable] = useState(() => relationDrafts.persisted(draftKey));
+  useLayoutEffect(() => {
+    if (dirty.current) setDurable(relationDrafts.set(draftKey, { from, to, relation, active, reason }));
+    else if (relationDrafts.has(draftKey)) relationDrafts.delete(draftKey);
+  }, [draftKey, from, to, relation, active, reason]);
   const finishClose = async () => {
-    if (exitWindow.current) {
-      (await listener.current)?.();
-      await getCurrentWindow().close();
-    }
-    onClose();
+    if (exitWindow.current) await closeDraftWindow();
+    else onClose();
   };
   const askClose = (window = false) => {
     if (busy.current) return;
     exitWindow.current = window;
-    if (dirty.current) openDialog(leaving.current);
+    if (dirty.current) openDialog(leaving.current, () => lastEditorFocus.current ?? dialog.current);
     else void finishClose().catch((e) => setError(errorText(e)));
   };
   useEffect(() => {
@@ -1208,21 +1220,12 @@ export function RelationshipEditor({
   }, [request.workspaceId, optionsRetry]);
   useEffect(() => {
     openDialog(dialog.current);
-    listener.current = getCurrentWindow().onCloseRequested((event) => {
-      event.preventDefault();
+    return registerDraftEditor(() => {
+      if (busy.current) return true;
+      if (!dirty.current) return false;
       askClose(true);
+      return true;
     });
-    const unload = (event: BeforeUnloadEvent) => {
-      if (dirty.current) {
-        event.preventDefault();
-        event.returnValue = "";
-      }
-    };
-    window.addEventListener("beforeunload", unload);
-    return () => {
-      void listener.current?.then((unlisten) => unlisten());
-      window.removeEventListener("beforeunload", unload);
-    };
   }, []);
   const save = async (closing = false) => {
     if (
@@ -1248,6 +1251,7 @@ export function RelationshipEditor({
           changeReason: reason,
         },
       });
+      relationDrafts.delete(draftKey);
       dirty.current = false;
       if (closing && exitWindow.current) await finishClose();
       else onSaved();
@@ -1262,6 +1266,7 @@ export function RelationshipEditor({
     <>
       <AppDialog
         ref={dialog}
+        onFocusCapture={event => { if (event.target instanceof HTMLElement) lastEditorFocus.current = event.target; }}
         className="form-dialog relation-editor panel-dialog"
         aria-labelledby="edge-edit-title"
         onCancel={(event) => {
@@ -1307,6 +1312,7 @@ export function RelationshipEditor({
             )}
             <SelectMenu
               id="edge-from"
+              data-initial-focus
               value={from}
               disabled={saving || loadingOptions}
               onChange={(e) => setFrom(e.target.value)}
@@ -1472,13 +1478,17 @@ export function RelationshipEditor({
           <button
             className="button text-button"
             onClick={() => {
+              relationDrafts.delete(draftKey);
               dirty.current = false;
               void finishClose().catch((e) => setError(errorText(e)));
             }}
           >
             放弃修改
           </button>
-          <button
+          {durable && <button type="button" className="button secondary" onClick={() => void finishClose().catch(e => setError(errorText(e)))}>
+            保留本机草稿
+          </button>}
+          <button data-initial-focus
             className="button secondary"
             onClick={() => {
               exitWindow.current = false;

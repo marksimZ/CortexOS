@@ -8,8 +8,8 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { getKnowledge } from "./knowledge-detail";
 import { notify } from "./components/Toast";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEffect, useRef, useState } from "react";
+import { closeDraftWindow, draftStore, registerDraftEditor } from "./draft-store";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   BookOpen,
@@ -724,6 +724,13 @@ export function KnowledgeInspector({
   );
 }
 
+type KnowledgeDraft = { title: string; kind: string; content: string; validFrom: string; validTo: string; reason: string; excerpt: string };
+const knowledgeDrafts = draftStore<KnowledgeDraft>("knowledge", value => {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Record<string, unknown>;
+  return ["title", "kind", "content", "validFrom", "validTo", "reason", "excerpt"].every(key => typeof row[key] === "string");
+});
+
 export function KnowledgeEditor({
   request,
   onClose,
@@ -734,27 +741,23 @@ export function KnowledgeEditor({
   onSaved: (workspaceId: string, nodeId: string) => void;
 }) {
   const original = request.detail?.versions[0];
+  const draftKey = JSON.stringify([request.workspaceId, request.detail?.node.id ?? null,
+    request.detail?.node.revision ?? null, request.source?.id ?? null, request.sourceDocument ?? null]);
+  const [cached] = useState(() => knowledgeDrafts.get(draftKey));
   const [title, setTitle] = useState(
-    original?.title ??
+    cached?.title ?? original?.title ??
       request.sourceName?.replace(/\.(md|txt)$/i, "").slice(0, 80) ??
       "",
   );
-  const [kind, setKind] = useState(original?.kind ?? "knowledge");
+  const [kind, setKind] = useState(cached?.kind ?? original?.kind ?? "knowledge");
   const [content, setContent] = useState(
-    original?.content ?? request.excerpt ?? "",
+    cached?.content ?? original?.content ?? request.excerpt ?? "",
   );
-  const [validFrom, setValidFrom] = useState(original?.validity?.validFrom ?? "");
-  const [validTo, setValidTo] = useState(original?.validity?.validTo ?? "");
-  const [reason, setReason] = useState(
-    original
-      ? ""
-      : request.source
-        ? "从回答保存草稿"
-        : request.sourceDocument
-          ? "根据文件文字整理"
-          : "手动记录",
-  );
-  const [excerpt, setExcerpt] = useState(request.excerpt ?? "");
+  const [validFrom, setValidFrom] = useState(cached?.validFrom ?? original?.validity?.validFrom ?? "");
+  const [validTo, setValidTo] = useState(cached?.validTo ?? original?.validity?.validTo ?? "");
+  const initialReason = original ? "" : request.source ? "从回答保存草稿" : request.sourceDocument ? "根据文件文字整理" : "手动记录";
+  const [reason, setReason] = useState(cached?.reason ?? initialReason);
+  const [excerpt, setExcerpt] = useState(cached?.excerpt ?? request.excerpt ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [latest, setLatest] = useState<KnowledgeDetail | null>(null);
@@ -763,58 +766,43 @@ export function KnowledgeEditor({
   );
   const dialog = useRef<HTMLDialogElement>(null);
   const leaving = useRef<HTMLDialogElement>(null);
+  const lastEditorFocus = useRef<HTMLElement | null>(null);
   const form = useRef<HTMLFormElement>(null);
   const exitWindow = useRef(false);
   const busy = useRef(false);
   const changed =
     excerpt !== (request.excerpt ?? "") ||
-    title !== (original?.title ?? "") ||
+    title !== (original?.title ?? request.sourceName?.replace(/\.(md|txt)$/i, "").slice(0, 80) ?? "") ||
     kind !== (original?.kind ?? "knowledge") ||
-    content !== (original?.content ?? "") ||
+    content !== (original?.content ?? request.excerpt ?? "") ||
     validFrom !== (original?.validity?.validFrom ?? "") ||
     validTo !== (original?.validity?.validTo ?? "") ||
-    reason !==
-      (original
-        ? ""
-        : request.source
-          ? "从回答保存草稿"
-          : request.sourceDocument
-            ? "根据文件文字整理"
-            : "手动记录");
+    reason !== initialReason;
   const dirty = useRef(changed);
   dirty.current = changed;
-  const listener = useRef<Promise<() => void> | null>(null);
+  const [durable, setDurable] = useState(() => knowledgeDrafts.persisted(draftKey));
+  useLayoutEffect(() => {
+    if (changed) setDurable(knowledgeDrafts.set(draftKey, { title, kind, content, validFrom, validTo, reason, excerpt }));
+    else if (knowledgeDrafts.has(draftKey)) knowledgeDrafts.delete(draftKey);
+  }, [changed, draftKey, title, kind, content, validFrom, validTo, reason, excerpt]);
   const finishClose = async () => {
-    if (exitWindow.current) {
-      (await listener.current)?.();
-      await getCurrentWindow().close();
-    }
-    onClose();
+    if (exitWindow.current) await closeDraftWindow();
+    else onClose();
   };
   const askClose = (window = false) => {
     if (busy.current) return;
     exitWindow.current = window;
-    if (dirty.current) openDialog(leaving.current);
+    if (dirty.current) openDialog(leaving.current, () => lastEditorFocus.current ?? dialog.current);
     else void finishClose().catch((e) => setError(errorText(e)));
   };
   useEffect(() => {
     openDialog(dialog.current);
-    listener.current = getCurrentWindow().onCloseRequested((event) => {
-      event.preventDefault();
+    return registerDraftEditor(() => {
+      if (busy.current) return true;
+      if (!dirty.current) return false;
       askClose(true);
+      return true;
     });
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (dirty.current) {
-        event.preventDefault();
-        event.returnValue = "";
-      }
-    };
-    window.addEventListener("beforeunload", beforeUnload);
-    return () => {
-      void listener.current?.then((unlisten) => unlisten());
-      window.removeEventListener("beforeunload", beforeUnload);
-    };
-    // This editor is mounted once per request; mutable guards keep its close handler current.
   }, []);
   const save = async (closeAfter = false) => {
     if (!form.current?.reportValidity() || busy.current) return;
@@ -840,6 +828,7 @@ export function KnowledgeEditor({
           },
         },
       );
+      knowledgeDrafts.delete(draftKey);
       dirty.current = false;
       if (closeAfter && exitWindow.current) await finishClose();
       else onSaved(request.workspaceId, id);
@@ -854,6 +843,7 @@ export function KnowledgeEditor({
     <>
       <AppDialog
         ref={dialog}
+        onFocusCapture={event => { if (event.target instanceof HTMLElement) lastEditorFocus.current = event.target; }}
         className="knowledge-editor form-dialog panel-dialog"
         aria-labelledby="knowledge-edit-title"
         onCancel={(e) => {
@@ -889,6 +879,7 @@ export function KnowledgeEditor({
               <label htmlFor="knowledge-title">标题</label>
               <input
                 id="knowledge-title"
+                data-initial-focus
                 value={title}
                 maxLength={80}
                 required
@@ -1056,13 +1047,17 @@ export function KnowledgeEditor({
           <button
             className="button text-button"
             onClick={() => {
+              knowledgeDrafts.delete(draftKey);
               dirty.current = false;
               void finishClose().catch((e) => setError(errorText(e)));
             }}
           >
             放弃修改
           </button>
-          <button
+          {durable && <button type="button" className="button secondary" onClick={() => void finishClose().catch(e => setError(errorText(e)))}>
+            保留本机草稿
+          </button>}
+          <button data-initial-focus
             className="button secondary"
             onClick={() => {
               exitWindow.current = false;

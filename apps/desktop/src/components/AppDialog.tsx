@@ -8,25 +8,27 @@ const previousInert = new Map<HTMLElement, boolean>();
 let backdrop: HTMLDivElement | null = null;
 const top = () => dialogs.at(-1)?.element;
 const focusable = (root: Element) => Array.from(root.querySelectorAll<HTMLElement>('button,a[href],input,select,textarea,summary,[tabindex]:not([tabindex="-1"])'))
-  .filter(e => !e.matches(":disabled") && !e.closest("[inert]") && e.getClientRects().length > 0);
+  .filter(e => e.tabIndex >= 0 && !e.matches(":disabled") && !e.closest('[inert], [aria-hidden="true"]') && e.getClientRects().length > 0);
 function cancel(dialog: HTMLDialogElement) {
   if (dialog.dispatchEvent(new Event("cancel", { cancelable: true }))) dialog.close();
 }
 function focusDialog() {
   const dialog = top();
-  if (dialog) (dialog.querySelector<HTMLElement>("[autofocus]") ?? focusable(dialog)[0] ?? dialog).focus({ preventScroll: true });
+  if (dialog) (dialog.querySelector<HTMLElement>("[data-initial-focus],[autofocus]") ?? focusable(dialog).find(element => !element.classList.contains("app-dialog-close")) ?? focusable(dialog)[0] ?? dialog).focus({ preventScroll: true });
 }
 function keyboard(event: KeyboardEvent) {
   const dialog = top();
   if (!dialog || event.defaultPrevented) return;
+  if (CSS.supports("selector(select:open)") && document.querySelector("select:open")) return;
   if (event.key === "Escape") {
-    if (document.querySelector(":popover-open")) return;
+    if (CSS.supports("selector(:popover-open)") && document.querySelector(":popover-open")) return;
     event.preventDefault(); cancel(dialog);
   } else if (event.key === "Tab") {
     const header = document.querySelector(".prototype-topbar");
     const targets = [...focusable(dialog), ...(header ? focusable(header) : [])];
     if (!targets.length) { event.preventDefault(); dialog.focus(); return; }
     const index = targets.indexOf(document.activeElement as HTMLElement);
+    if (index < 0) { event.preventDefault(); (event.shiftKey ? targets.at(-1) : targets[0])?.focus(); return; }
     event.preventDefault();
     targets[(index + (event.shiftKey ? -1 : 1) + targets.length) % targets.length].focus();
   }
@@ -72,7 +74,8 @@ function remove(dialog: HTMLDialogElement) {
   if (wasTop) {
     const target = typeof returnTo === "function" ? returnTo() : returnTo;
     if (target instanceof HTMLElement && target.isConnected && !target.closest("[inert]")) target.focus({ preventScroll: true });
-    else focusDialog();
+    else if (top()) focusDialog();
+    else document.getElementById("main-content")?.focus({ preventScroll: true });
   }
 }
 export function openDialog(dialog: HTMLDialogElement | null, focusReturn?: () => Element | null) {

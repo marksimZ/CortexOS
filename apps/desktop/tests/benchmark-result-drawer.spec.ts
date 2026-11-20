@@ -1,3 +1,4 @@
+import { expectPicker } from "./select-picker";
 import { expect, test } from "@playwright/test";
 
 test.beforeEach(async({page})=>{
@@ -208,8 +209,8 @@ test("report loading keyboard and long content keep controls visible",async({pag
       const body=drawer.locator(".panel-body");await body.evaluate(e=>e.scrollTop=e.scrollHeight);
       expect(await body.evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);
       await page.screenshot({path:info.outputPath(`long-content-${theme}-${width}.png`)});
-      await appearance.focus();await appearance.press("Enter");await expect(page.getByRole("listbox",{name:"外观选项",exact:true})).toBeVisible();
-      await appearance.press("Escape");await expect(drawer).toBeVisible();await expect(appearance).toBeFocused();
+      await appearance.focus();await appearance.press("Space");await expectPicker(appearance, true);
+      await page.keyboard.press("Escape");await expect(drawer).toBeVisible();await expect(appearance).toBeFocused();
       await page.keyboard.press("Escape");await expect(drawer).toHaveCount(0);await expect(buttons.nth(1)).toBeFocused();
     }
   }

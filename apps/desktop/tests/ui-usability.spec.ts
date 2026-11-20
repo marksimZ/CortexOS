@@ -1,3 +1,4 @@
+import { expectPicker } from "./select-picker";
 import { expect, test } from "@playwright/test";
 
 test("browser panel headers, evidence controls and keyboard dismissal remain reachable", async ({ page }, info) => {
@@ -48,33 +49,34 @@ test("browser themed menus support selection, keyboard, dismissal and viewport b
     for (const [width, height] of [[1366, 768], [1600, 900], [1920, 1080], [375, 812]]) {
       await page.setViewportSize({ width, height });
       await appearance.click();
-      const menu = page.getByRole("listbox", { name: "外观选项", exact: true });
-      await expect(menu).toBeVisible();
-      await expect.poll(async () => { const box = await menu.boundingBox(); return box ? box.x + box.width : Infinity; }).toBeLessThanOrEqual(width);
-      const box = await menu.boundingBox();
-      expect(box!.x).toBeGreaterThanOrEqual(0);
-      expect(box!.x + box!.width).toBeLessThanOrEqual(width);
-      expect(box!.y + box!.height).toBeLessThanOrEqual(height);
+      await expectPicker(appearance, true);
+      const options = await appearance.locator("option").evaluateAll(rows => rows.map(option => {
+        const { left, right, top, bottom } = option.getBoundingClientRect();
+        return { left, right, top, bottom };
+      }));
+      expect(options.every(rect => rect.left >= 0 && rect.right <= width + 1 && rect.top >= 0 && rect.bottom <= height + 1)).toBe(true);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: info.outputPath(`menu-${scheme}-${width}.png`) });
       await page.keyboard.press("Escape");
-      await expect(menu).not.toBeVisible();
+      await expectPicker(appearance, false);
       await expect(appearance).toBeFocused();
     }
   }
   await page.setViewportSize({ width: 1366, height: 768 });
   await appearance.click();
-  await page.getByRole("listbox", { name: "外观选项", exact: true }).getByRole("option", { name: "浅色", exact: true }).click();
+  await appearance.selectOption("light");
+  await page.keyboard.press("Escape");
   await expect(appearance).toHaveValue("light");
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
-  await appearance.press("ArrowDown");
-  await appearance.press("End");
-  await appearance.press("Enter");
+  await appearance.press("Space");
+  await expectPicker(appearance, true);
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
   await expect(appearance).toHaveValue("dark");
   await page.reload();
   await expect(appearance).toHaveValue("dark");
   await appearance.click();
   await page.getByRole("heading", { name: "欢迎使用 CortexOS" }).click();
-  await expect(page.getByRole("listbox", { name: "外观选项", exact: true })).not.toBeVisible();
+  await expectPicker(appearance, false);
   expect(errors).toEqual([]);
 });

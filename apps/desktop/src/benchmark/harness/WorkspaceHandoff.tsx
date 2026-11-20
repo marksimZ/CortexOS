@@ -1,3 +1,4 @@
+import { draftStore } from "../../draft-store";
 import { useEffect,useRef,useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { X } from 'lucide-react';
@@ -16,7 +17,7 @@ const names:Record<string,string>={opening:'正在准备副本',ready:'副本已
 const grades:Record<string,string>={Passed:'通过',Failed:'未通过',Cancelled:'已停止','Execution Error':'执行出错','Scoring Error':'评分出错','Not Run':'未运行'};
 const errors:Record<string,string>={workspace_expired:'临时副本已停止或过期，请清理后新建。',docker_unavailable:'Docker不可用，请启动Docker Desktop后重试。',docker_environment_error:'无法连接本地Docker引擎。',workspace_unexpected_file:'副本中出现了不允许的文件，已拒绝交接。',workspace_unexpected_directory:'副本中出现了不允许的目录，已拒绝交接。',workspace_task_changed:'副本题目发生变化，已拒绝交接。',container_cleanup_failed:'容器清理未完成，请重试清理。',cancelled:'操作已停止。'};
 const problem=(text:string)=>errors[text]??(/(?:wall_timeout|output_limit)$/.test(text)?'准备或文件传输超出限制，未继续测试；请确认清理状态后重试。':/^[a-z_]+$/.test(text)?'本次副本操作未完成，请查看下方完整记录中的具体原因。':text);
-const drafts=new Map<string,string>();
+const drafts=draftStore<string>("workspace-handoff", value => typeof value === "string");
 export function WorkspaceHandoff({workspaceId,assessmentVersion,checkId,checkHash,disabled}:{workspaceId:string;assessmentVersion:number;checkId:string;checkHash:string;disabled:boolean}){
  const [submitting,setSubmitting]=useState(false);
  const [data,setData]=useState<Payload|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[code,setCode]=useState(''),[action,setAction]=useState<'prepare'|'submit'|'close'|null>(null),[expired,setExpired]=useState(false),[stopping,setStopping]=useState(false);
@@ -30,7 +31,6 @@ export function WorkspaceHandoff({workspaceId,assessmentVersion,checkId,checkHas
  useEffect(()=>{if(!record)return;const saved=record.events.find(e=>e.kind==='submission')?.data.code;setCode(drafts.get(`${workspaceId}:${record.id}`)??saved??record.plan.bundle.originalCode);},[record?.id]);
  useEffect(()=>{if(!working&&!waiting){setStopping(false);return;}let cancelled=false,timer:number;const tick=async()=>{try{await read(waiting?null:selected.current);}catch(e){if(alive.current)setError(errorText(e));}if(!cancelled)timer=window.setTimeout(()=>void tick(),1000);};timer=window.setTimeout(()=>void tick(),750);return()=>{cancelled=true;window.clearTimeout(timer);};},[working,waiting,record?.id]);
  useEffect(()=>{setExpired(false);if(record?.status!=='ready')return;const timer=window.setTimeout(()=>setExpired(true),Math.max(0,Date.parse(record.plan.expiresAt)-Date.now()));return()=>window.clearTimeout(timer);},[record?.id,record?.status]);
- useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(drafts.size){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
  const ask=(next:typeof action,target:string|null=record?.id??null)=>{setAction(next);setCloseTarget(target);openDialog(dialog.current);};
  const confirm=()=>act(async()=>{dialog.current?.close();setSubmitting(action!=='close');try{if(action==='prepare'){const next=await invoke<{id:string}>('prepare_harness_workspace',{workspaceId,waitForResources:true,input:{assessmentVersion,checkId,checkHash}});if(alive.current){selected.current=next.id;await read(next.id);}}else if(action==='submit'&&record){await invoke('submit_harness_workspace',{workspaceId,waitForResources:true,input:{jobId:record.id,planHash:record.planHash,code,confirmed:true}});drafts.delete(key);if(alive.current)await read();}else if(action==='close'&&closeTarget){await invoke('close_harness_workspace',{workspaceId,jobId:closeTarget});drafts.delete(`${workspaceId}:${closeTarget}`);if(alive.current)await read();}}finally{if(alive.current)setSubmitting(false);}});
  const patch=record?.events.find(e=>e.kind==='candidate')?.data.patch,score=record?.events.find(e=>e.kind==='score')?.data.score;

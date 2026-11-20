@@ -1,3 +1,4 @@
+import { capacityError, NumberField, validModelCapacity } from "./components/NumberField";
 import { SelectMenu } from "./components/SelectMenu";
 import { useState } from "react";
 import {
@@ -21,6 +22,7 @@ export function SettingsPage({ studio }: { studio: Studio }) {
   const setDraft = studio.setSettingsDraft;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [capacityInvalid, setCapacityInvalid] = useState(false);
   const [section, setSection] = useState("model");
   const installed = studio.health?.models.some(
     (model) => model.name === draft.model,
@@ -28,9 +30,10 @@ export function SettingsPage({ studio }: { studio: Studio }) {
   const changed = JSON.stringify(draft) !== JSON.stringify(studio.settings);
   const field = (
     name: "numCtx" | "numPredict" | "temperature" | "timeoutSeconds",
-    value: string,
+    value: number | null,
   ) => {
-    setDraft((current) => ({ ...current, [name]: Number(value) }));
+    setCapacityInvalid(false);
+    setDraft((current) => ({ ...current, [name]: value ?? NaN }));
   };
   return (
     <section className="standard-page" aria-labelledby="page-title">
@@ -73,6 +76,12 @@ export function SettingsPage({ studio }: { studio: Studio }) {
             className="settings-fields"
             onSubmit={(event) => {
               event.preventDefault();
+              if (!validModelCapacity(draft.numCtx, draft.numPredict)) {
+                setCapacityInvalid(true);
+                const parameters = event.currentTarget.querySelector<HTMLDetailsElement>(".advanced-settings");
+                if (parameters) { parameters.open = true; parameters.querySelector("input")?.focus(); }
+                return;
+              }
               setSaving(true);
               setError(null);
               void studio
@@ -170,68 +179,10 @@ export function SettingsPage({ studio }: { studio: Studio }) {
             <details className="advanced-settings">
               <summary>生成参数</summary>
               <div className="parameter-fields">
-                <div className="field">
-                  <label htmlFor="num-ctx">输入与回答总容量（Token）</label>
-                  <input
-                    id="num-ctx"
-                    type="number"
-                    min={1024}
-                    max={16384}
-                    step={1}
-                    required
-                    value={draft.numCtx}
-                    readOnly={!studio.desktop}
-                    onChange={(event) => field("numCtx", event.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="num-predict">回答长度上限（Token）</label>
-                  <input
-                    id="num-predict"
-                    type="number"
-                    min={32}
-                    max={2048}
-                    step={1}
-                    required
-                    value={draft.numPredict}
-                    readOnly={!studio.desktop}
-                    onChange={(event) =>
-                      field("numPredict", event.target.value)
-                    }
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="temperature">回答变化程度（温度）</label>
-                  <input
-                    id="temperature"
-                    type="number"
-                    min={0}
-                    max={2}
-                    step={0.1}
-                    required
-                    value={draft.temperature}
-                    readOnly={!studio.desktop}
-                    onChange={(event) =>
-                      field("temperature", event.target.value)
-                    }
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="timeout">生成超时（秒）</label>
-                  <input
-                    id="timeout"
-                    type="number"
-                    min={30}
-                    max={600}
-                    step={1}
-                    required
-                    value={draft.timeoutSeconds}
-                    readOnly={!studio.desktop}
-                    onChange={(event) =>
-                      field("timeoutSeconds", event.target.value)
-                    }
-                  />
-                </div>
+                <NumberField label="输入与回答总容量（Token）" min={1024} max={16384} value={draft.numCtx} readOnly={!studio.desktop} error={capacityInvalid ? capacityError : undefined} onChange={value => field("numCtx", value)} />
+                <NumberField label="回答长度上限（Token）" min={32} max={2048} value={draft.numPredict} readOnly={!studio.desktop} onChange={value => field("numPredict", value)} />
+                <NumberField label="回答变化程度（温度）" min={0} max={2} step="any" value={draft.temperature} readOnly={!studio.desktop} onChange={value => field("temperature", value)} />
+                <NumberField label="生成超时（秒）" min={30} max={600} value={draft.timeoutSeconds} readOnly={!studio.desktop} onChange={value => field("timeoutSeconds", value)} />
               </div>
               <p>
                 一次只生成一个回答。Token

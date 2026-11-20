@@ -1,3 +1,5 @@
+import { errorText } from "./frontend-error";
+import { draftStore } from "./draft-store";
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CloudConsent, ModelRoute } from "./runtime-profiles";
@@ -266,13 +268,7 @@ export const defaultSettings: ModelSettings = {
   timeoutSeconds: 180,
 };
 export const desktop = isTauri();
-export function errorText(value: unknown): string {
-  return typeof value === "string"
-    ? value
-    : value instanceof Error
-      ? value.message
-      : "操作未完成，请重试。";
-}
+export { errorText };
 export function preference(key: string): string | null {
   try {
     return localStorage.getItem(`cortexos.${key}`);
@@ -288,6 +284,7 @@ export function remember(key: string, value: string) {
   }
 }
 
+const chatDrafts = draftStore<string>("chat", value => typeof value === "string");
 const emptyContext: ContextSelection[] = [];
 export function useStudio() {
   const [data, setData] = useState<Bootstrap | null>(null);
@@ -539,9 +536,14 @@ export function useStudio() {
     setKnowledgeScopes((previous) => ({ ...previous, [draftKey]: value }));
   const setContextSelection = (items: ContextSelection[]) =>
     setContexts((previous) => ({ ...previous, [draftKey]: items }));
-  const draft = drafts[draftKey] ?? "";
-  const setDraft = (text: string) =>
-    setDrafts((current) => ({ ...current, [draftKey]: text }));
+  const cachedDraft = useMemo(() => chatDrafts.get(draftKey), [draftKey]);
+  const draft = drafts[draftKey] ?? cachedDraft ?? "";
+  const writeDraft = (key: string, text: string) => {
+    const persisted = text ? chatDrafts.set(key, text) : (chatDrafts.delete(key), true);
+    setDrafts(current => ({ ...current, [key]: text }));
+    return persisted;
+  };
+  const setDraft = (text: string) => writeDraft(draftKey, text);
 
   const autoRetrieval =
     retrievalChange?.workspaceId === workspaceId &&
@@ -569,11 +571,7 @@ export function useStudio() {
           conversationId: conversation,
           value: enabled,
         });
-        setDrafts((previous) => ({
-          ...previous,
-          [`${workspace}:${conversation}`]: savedDraft,
-          [draftKey]: "",
-        }));
+        if (writeDraft(`${workspace}:${conversation}`, savedDraft) && draftKey !== `${workspace}:${conversation}`) writeDraft(draftKey, "");
         setContexts((previous) => ({
           ...previous,
           [`${workspace}:${conversation}`]: savedSelection,
@@ -621,11 +619,9 @@ export function useStudio() {
       }));
       setKnowledgeScopes((previous) => ({ ...previous, [`${workspace}:${conversation}`]: knowledgeScope }));
       setGraphLookups((previous) => ({ ...previous, [`${workspace}:${conversation}`]: useGraph }));
-      if (override === undefined)
-        setDrafts((current) => ({
-          ...current,
-          [`${workspace}:${conversation}`]: content,
-        }));
+      if (override === undefined && draftKey !== `${workspace}:${conversation}`) {
+        if (writeDraft(`${workspace}:${conversation}`, draft)) writeDraft(draftKey, "");
+      }
       const stream = new Channel<StreamUpdate>();
       channel.current = stream;
       stream.onmessage = (update) => {
@@ -670,12 +666,10 @@ export function useStudio() {
       }
       streamedRun.current = run.id;
       if (!finishedRuns.current.has(run.id)) setActiveRun(run);
-      if (override === undefined)
-        setDrafts((current) => ({
-          ...current,
-          [draftKey]: "",
-          [`${workspace}:${conversation}`]: "",
-        }));
+      if (override === undefined) {
+        writeDraft(draftKey, "");
+        if (draftKey !== `${workspace}:${conversation}`) writeDraft(`${workspace}:${conversation}`, "");
+      }
       if (draftKey !== `${workspace}:${conversation}`) {
         setKnowledgeScopes((previous) => ({ ...previous, [draftKey]: null }));
         setGraphLookups((previous) => ({ ...previous, [draftKey]: false }));
@@ -741,6 +735,7 @@ export function useStudio() {
     activeRun,
     preparingRun,
     draft,
+    draftPersistence: draft ? chatDrafts.persisted(draftKey) ? "local" : "temporary" : null,
     setDraft,
     contextSelection,
     setContextSelection,

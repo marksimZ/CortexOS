@@ -1,3 +1,4 @@
+import { draftStore } from "../../draft-store";
 import { useEffect,useRef,useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { FilePlus2,FileText,X } from 'lucide-react';
@@ -14,7 +15,7 @@ import { TaskWorkbench } from './TaskWorkbench';
 import { groups,type Assessment,type Body,type Payload,type Requirement,type Snapshot } from './types';
 import './harness.css';
 interface Draft {ids:string[];body:Body|null;weights:Record<string,number>;note:string;version:number;step:number;stale:boolean;reportStale:boolean;dirty:boolean}
-const drafts=new Map<string,Draft>();
+const drafts=draftStore<Draft>("harness-analysis", value => Array.isArray((value as Draft | null)?.ids));
 const empty=():Draft=>({ids:[],body:null,weights:{compatibility:3,automation:3,governance:3,context:3},note:'',version:0,step:0,stale:false,reportStale:false,dirty:false});
 export function HarnessFitLab({workspaceId,desktop}:{workspaceId:string|null;desktop:boolean}){
  if(!workspaceId||!desktop)return <section><p>请在桌面应用中选择工作区，导入项目规范后开始分析。</p></section>;
@@ -35,7 +36,6 @@ function WorkspaceLab({workspaceId}:{workspaceId:string}){
   }catch(e){if(active.current)setError(errorText(e));}finally{if(active.current)setBusy(false);}
  };
  useEffect(()=>{active.current=true;void read();return()=>{active.current=false;};},[workspaceId]);
- useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(drafts.size){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
  const confirm=(text:string,action:()=>void)=>{pending.current=action;setConfirmation(text);openDialog(confirmDialog.current);};
  const importFile=async()=>{
   setBusy(true);setError('');try{

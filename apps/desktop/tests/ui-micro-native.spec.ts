@@ -1,3 +1,4 @@
+import { expectPicker } from "./select-picker";
 import { expect, test, type Page } from "@playwright/test";
 import { createServer, type ServerResponse } from "node:http";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -153,9 +154,10 @@ test("native input cooldown, reading position, split cancellation and file exten
     await splitChecks(page, "调整文件预览宽度", ".source-workbench", () => page.getByRole("button", { name: "显示文件预览", exact: true }).click());
     await expect(sourceDialog).toBeVisible();
     await page.getByRole("combobox", { name: "文件版本", exact: true }).click();
-    const menu = page.getByRole("listbox", { name: "文件版本选项", exact: true });
-    const corners = await menu.evaluate(el => {
-      const outer = getComputedStyle(el), inner = getComputedStyle(el.querySelector('[role="option"]')!);
+    const select = page.getByRole("combobox", { name: "文件版本", exact: true });
+    await expectPicker(select, true);
+    const corners = await select.evaluate(el => {
+      const outer = getComputedStyle(el, "::picker(select)"), inner = getComputedStyle(el.querySelector("option")!);
       return { outer: parseFloat(outer.borderTopLeftRadius), inner: parseFloat(inner.borderTopLeftRadius), gap: parseFloat(outer.paddingLeft) };
     });
     expect(corners.outer).toBe(corners.inner + corners.gap);
