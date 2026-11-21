@@ -27,10 +27,12 @@ const dbPath = join(data, "cortexos.sqlite3");
 const reportFile = join(output, `${mode}.json`);
 const report = resume ? JSON.parse(readFileSync(reportFile, "utf8")) : { mode, cases: [] };
 const resumeRemoval = resumeFresh && report.cases.length === 3;
+const resumeMigrationCheck = resumeUpgrade && report.cases.length === 2;
 if (resume) {
-  assert.ok(report.cases.length === 1 || resumeRemoval);
+  assert.ok(report.cases.length === 1 || resumeRemoval || resumeMigrationCheck);
   assert.equal(report.cases[0].name, resumeFresh ? "fresh candidate installation and first launch" : "published 0.2.0 installed and opened");
   if (resumeRemoval) assert.equal(report.cases[2].name, "default uninstallation and reinstall preserved database, evaluation and credential");
+  if (resumeMigrationCheck) assert.equal(report.cases[1].name, "failed upgrade left the old binary and database readable");
   assert.ok(report.failure && report.finished);
   copyFileSync(reportFile, join(output, `${mode}-attempt-${randomUUID()}.json`));
   delete report.failure;
@@ -189,7 +191,7 @@ async function createWorkspace(ui) {
   await ui("click", "^创建工作区$");
   return waitFor(savedWorkspace);
 }
-const matchesWorkspace = (workspace) => openDatabase(dbPath, (db) => {
+const matchesWorkspace = (workspace, path = dbPath) => openDatabase(path, (db) => {
   assert.equal(db.prepare("SELECT name FROM workspaces WHERE id=?").get(workspace).name, workspaceName);
   const node = db.prepare("SELECT latest_version, effective_version FROM knowledge_nodes WHERE workspace_id=?").get(workspace);
   assert.equal(node.latest_version, 2);
@@ -348,12 +350,29 @@ async function verifyExplicitUninstall() {
   record("explicit uninstall data deletion scoped to the disposable guest", { unrelatedFilePreserved:true });
 }
 
+async function verifyMigration(workspace) {
+  assert.ok(workspace);
+  assert.equal(registryVersion(), metadata.version);
+  await withApp((ui) => ui("find", `^${workspaceName}$`));
+  assert.equal(verifyDatabase(dbPath), 26);
+  matchesWorkspace(workspace);
+  // The name refers to the first pending migration. The backup itself is still at schema 7.
+  const backup = readdirSync(data).find((name) => /^before-migration-8-.*\.sqlite3$/.test(name));
+  assert.ok(backup);
+  const path = join(data, backup);
+  assert.equal(verifyDatabase(path), 7);
+  matchesWorkspace(workspace, path);
+  record("published release upgraded with migration backup and preserved knowledge versions", { previousSchema:7, schema:26, backup });
+}
+
 try {
   if (!resume) await prepareWebView();
   if (resumeRemoval) {
     assert.equal(registryVersion(), metadata.version);
     assert.equal(verifyDatabase(dbPath), 26);
     await verifyExplicitUninstall();
+  } else if (resumeMigrationCheck) {
+    await verifyMigration(savedWorkspace());
   } else if (mode === "upgrade") {
     if (resumeUpgrade && registryVersion() && registryVersion() !== "0.2.0") await uninstallPreserving();
     if (registryVersion() !== "0.2.0") await install(old, "0.2.0");
@@ -371,13 +390,7 @@ try {
     matchesWorkspace(workspace);
     record("failed upgrade left the old binary and database readable", { exitCode:failureExit, fault:"executable-path-is-directory" });
     await install(candidate, metadata.version);
-    await withApp((ui) => ui("find", `^${workspaceName}$`));
-    assert.equal(verifyDatabase(dbPath), 26);
-    matchesWorkspace(workspace);
-    const backup = readdirSync(data, {recursive:true}).find((name) => /before-migration-7-.*\.sqlite3$/.test(name));
-    assert.ok(backup);
-    assert.equal(verifyDatabase(join(data, backup)), 7);
-    record("published release upgraded with migration backup and preserved knowledge versions", { previousSchema:7, schema:26 });
+    await verifyMigration(workspace);
   } else {
     if (!resumeFresh) await install(candidate, metadata.version);
     assert.equal(registryVersion(), metadata.version);

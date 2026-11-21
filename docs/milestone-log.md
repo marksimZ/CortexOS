@@ -1,5 +1,12 @@
 # 里程碑记录
 
+## 2026-11-21 Phase H4 隔离 Windows 安装验收
+
+- 重启后启用沙盒。在真实 Windows 11 x64 来宾发现并修复两处问题。rc.1 误把构建机绝对前端路径识别为外部 URL，rc.2 在可执行文件位置被同名目录阻挡时仍返回成功。修复文件为 `scripts/release-dry-run.ps1`、Tauri NSIS 配置及 `windows/installer-hooks.nsh`。
+- `release-dry-run.ps1 -Version 0.2.1-rc.3` 构建通过，36 项前端嵌入路径、NSIS 11 项解包、SHA-256、第三方材料与敏感模式检查通过。`updates-native.spec.ts` 对实际候选文件复跑一项，通过。
+- `prepare-windows-release-sandbox.ps1 -WebView2Installer` 生成隔离输入，`windows-release-guest.mjs` 的全新安装 4 项和旧版升级 3 项通过。确认真实 v0.2.0 从 Schema 7 升为 26，保留有效知识与可读备份，错误安装路径返回 2。来宾均已关闭。
+- [发布准入](release/h4-release-checklist.md)保留 No-Go。项目授权、正式 Authenticode、正式更新分发和物理多屏及 DPI 仍待确认。H4 停在验收点。
+
 ## 2026-11-21 Phase H4 发布工程与隔离安装准备
 
 - 延用正式 NSIS 产品标识和安装范围。接入本机手动触发的稳定版、预览版更新，要求包签名与签名内版本均匹配。统一关于页及新记录使用实际应用版本。
