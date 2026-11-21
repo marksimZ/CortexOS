@@ -7,6 +7,7 @@ import { SelectMenu } from '../../components/SelectMenu';
 import { FileName } from '../../components/FileName';
 import { notify } from '../../components/Toast';
 import { errorText } from '../personalized';
+import { useNavigation } from '../../navigation';
 import { RequirementEditor } from './RequirementEditor';
 import { FitReport } from './FitReport';
 import { FitStatus } from './FitStatus';
@@ -18,24 +19,29 @@ interface Draft {ids:string[];body:Body|null;weights:Record<string,number>;note:
 const drafts=draftStore<Draft>("harness-analysis", value => Array.isArray((value as Draft | null)?.ids));
 const empty=():Draft=>({ids:[],body:null,weights:{compatibility:3,automation:3,governance:3,context:3},note:'',version:0,step:0,stale:false,reportStale:false,dirty:false});
 export function HarnessFitLab({workspaceId,desktop}:{workspaceId:string|null;desktop:boolean}){
+ const route=useNavigation();
+ const requested=Number(route.params.get('assessment'));
+ const version=Number.isSafeInteger(requested)&&requested>0&&requested<=0xffffffff?requested:null;
+ const step=route.params.get('step')==='experiments'?4:route.params.get('step')==='tasks'?3:0;
+ const experiment=route.params.get('experiment');
  if(!workspaceId||!desktop)return <section><p>请在桌面应用中选择工作区，导入项目规范后开始分析。</p></section>;
- return <WorkspaceLab key={workspaceId} workspaceId={workspaceId}/>;
+ return <WorkspaceLab key={`${workspaceId}:${version??''}:${step}:${experiment??''}`} workspaceId={workspaceId} requestedVersion={version} requestedStep={step} requestedExperiment={experiment}/>;
 }
-function WorkspaceLab({workspaceId}:{workspaceId:string}){
+function WorkspaceLab({workspaceId,requestedVersion,requestedStep,requestedExperiment}:{workspaceId:string;requestedVersion:number|null;requestedStep:number;requestedExperiment:string|null}){
  const [data,setData]=useState<Payload|null>(null),[s,setS]=useState<Draft>(empty),[busy,setBusy]=useState(false),[error,setError]=useState(''),[historical,setHistorical]=useState(false);
  const [source,setSource]=useState<{path:string;content:string;line:number}|null>(null);
  const sourceDialog=useRef<HTMLDialogElement>(null),confirmDialog=useRef<HTMLDialogElement>(null),active=useRef(true),pending=useRef<()=>void>(()=>{});
  const [confirmation,setConfirmation]=useState('');
  const setDraft=(patch:Partial<Draft>)=>setS(prev=>{const next={...prev,...patch,dirty:true};drafts.set(workspaceId,next);return next;});
  const from=(a:Assessment|null):Draft=>a?{...empty(),ids:a.body.snapshotIds,body:a.body,weights:a.body.weights,note:a.body.note,version:a.version}:empty();
- const read=async(version:number|null=null,keepDraft=true)=>{
+ const read=async(version:number|null=null,keepDraft=true,step=0)=>{
   setBusy(true);setError('');try{
    const next=await invoke<Payload>('get_harness_fit',{workspaceId,version});if(!active.current)return;
    setData(next);setHistorical(version!==null&&version!==next.history[0]?.version);
-   setS(keepDraft&&version===null&&drafts.has(workspaceId)?drafts.get(workspaceId)!:from(next.selected));
+   setS(keepDraft&&version===null&&drafts.has(workspaceId)?drafts.get(workspaceId)!:{...from(next.selected),step:next.selected?step:0});
   }catch(e){if(active.current)setError(errorText(e));}finally{if(active.current)setBusy(false);}
  };
- useEffect(()=>{active.current=true;void read();return()=>{active.current=false;};},[workspaceId]);
+ useEffect(()=>{active.current=true;void read(requestedVersion,!requestedStep,requestedStep);return()=>{active.current=false;};},[workspaceId,requestedVersion,requestedStep]);
  const confirm=(text:string,action:()=>void)=>{pending.current=action;setConfirmation(text);openDialog(confirmDialog.current);};
  const importFile=async()=>{
   setBusy(true);setError('');try{
@@ -91,7 +97,7 @@ function WorkspaceLab({workspaceId}:{workspaceId:string}){
      {s.body&&s.dirty&&<p className="fit-notice">先保存分析版本，再生成绑定此版本的测试任务。</p>}
      {busy&&<p role="status">正在处理本地资料…</p>}
      {s.stale&&<p className="fit-notice">资料选择已变化，请先分析所选资料。</p>}
-     {s.step===4&&s.body?<HarnessExperiments key={`${workspaceId}:${s.version}`} workspaceId={workspaceId} assessmentVersion={s.version}/>:s.step===3&&s.body?<TaskWorkbench key={`${workspaceId}:${s.version}`} workspaceId={workspaceId} assessmentVersion={s.version} requirements={s.body.requirements} snapshots={data.snapshots}/>:s.step===0||!s.body||s.stale?<div className="fit-start"><h3>先了解项目，再选择编程工具</h3><p>导入development.md、AGENTS.md或项目说明，确认需求后查看候选工具及每项依据。</p><h4>本地能力目录</h4><ul>{data.catalog.entries.map(e=><li className="fit-catalog-item" key={e.id}><span>{e.name}</span>{e.version?<span>{e.version}</span>:<FitStatus tone="attention">安装版本未知</FitStatus>}</li>)}</ul></div>:s.step===1?<>
+     {s.step===4&&s.body?<HarnessExperiments key={`${workspaceId}:${s.version}`} workspaceId={workspaceId} assessmentVersion={s.version} requestedExperiment={s.version===requestedVersion?requestedExperiment:null}/>:s.step===3&&s.body?<TaskWorkbench key={`${workspaceId}:${s.version}`} workspaceId={workspaceId} assessmentVersion={s.version} requirements={s.body.requirements} snapshots={data.snapshots}/>:s.step===0||!s.body||s.stale?<div className="fit-start"><h3>先了解项目，再选择编程工具</h3><p>导入development.md、AGENTS.md或项目说明，确认需求后查看候选工具及每项依据。</p><h4>本地能力目录</h4><ul>{data.catalog.entries.map(e=><li className="fit-catalog-item" key={e.id}><span>{e.name}</span>{e.version?<span>{e.version}</span>:<FitStatus tone="attention">安装版本未知</FitStatus>}</li>)}</ul></div>:s.step===1?<>
       <div className="fit-section-heading"><h3>确认项目要求</h3><button className="button secondary" disabled={busy||historical} onClick={()=>void calculate(false)}>查看适配结果</button></div>
       <p>线索保留原文；请检查否定、举例和未来计划。关联条件表示需要支持该能力；不确定的表述先保持未知，确认后再标记“必须满足”。</p>
       <RequirementEditor data={data} requirements={s.body.requirements} disabled={busy||historical} onChange={changeRequirement} onSource={r=>void viewSource(r)}/>

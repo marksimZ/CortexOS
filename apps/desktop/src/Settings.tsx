@@ -19,6 +19,16 @@ import { StorageInventory } from "./components/StorageInventory";
 import { DataPortability } from "./components/DataPortability";
 import { LocalDiagnostics } from "./components/LocalDiagnostics";
 import { AppUpdates } from "./components/AppUpdates";
+import { navigate, useNavigation } from "./navigation";
+
+const sections = [
+  ["model", "模型连接"],
+  ["cloud", "云端模型"],
+  ["profiles", "运行方案"],
+  ["usage", "资源与用量"],
+  ["data", "本地数据"],
+  ["about", "关于"],
+] as const;
 
 export function SettingsPage({ studio }: { studio: Studio }) {
   const draft = studio.settingsDraft;
@@ -26,7 +36,8 @@ export function SettingsPage({ studio }: { studio: Studio }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [capacityInvalid, setCapacityInvalid] = useState(false);
-  const [section, setSection] = useState("model");
+  const route = useNavigation();
+  const section = sections.find(([id]) => id === route.params.get("section"))?.[0] ?? "model";
   const installed = studio.health?.models.some(
     (model) => model.name === draft.model,
   );
@@ -43,20 +54,13 @@ export function SettingsPage({ studio }: { studio: Studio }) {
       <h1 id="page-title" className="sr-only">设置</h1>
       <div className="page-content settings-content">
         <nav className="settings-navigation" aria-label="设置分类">
-          {[
-            ["model", "模型连接"],
-            ["cloud", "云端模型"],
-            ["profiles", "运行方案"],
-            ["usage", "资源与用量"],
-            ["data", "本地数据"],
-            ["about", "关于"],
-          ].map(([id, label]) => (
+          {sections.map(([id, label]) => (
             <button
               key={id}
               className="button text-button"
               aria-pressed={section === id}
               aria-controls={`${id}-section`}
-              onClick={() => setSection(id)}
+              onClick={() => navigate("settings", { section: id, workspace: route.workspace })}
             >
               {label}
             </button>

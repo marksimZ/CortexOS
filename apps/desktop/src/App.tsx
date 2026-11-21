@@ -70,12 +70,14 @@ export default function App() {
   const mainRef = useRef<HTMLElement>(null);
   const previousPage = useRef(page);
   const workspaceDialog = useRef<HTMLDialogElement>(null);
+  const afterWorkspace = useRef<"chat" | "cloud" | null>(null);
   const volatileDialog = useRef<HTMLDialogElement>(null);
   useDraftWindow(() => openDialog(volatileDialog.current), reportError);
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const openCreateWorkspace = () => {
+  const openCreateWorkspace = (next?: "chat" | "cloud") => {
+    afterWorkspace.current = next ?? null;
     setWorkspaceName("");
     setWorkspaceError(null);
     openDialog(workspaceDialog.current);
@@ -234,9 +236,17 @@ export default function App() {
             setWorkspaceError(null);
             void studio
               .createWorkspace(workspaceName)
-              .then(() => {
+              .then((workspace) => {
                 notify("工作区已创建");
-                navigate(page);
+                if (afterWorkspace.current === "cloud") {
+                  navigate("settings", { section: "cloud", workspace: workspace.id });
+                } else if (afterWorkspace.current === "chat") {
+                  navigate("chat", { workspace: workspace.id });
+                } else if (page === "settings") {
+                  navigate("settings", { section: route.params.get("section"), workspace: workspace.id });
+                } else {
+                  navigate(page);
+                }
                 workspaceDialog.current?.close();
               })
               .catch((value) => setWorkspaceError(errorText(value)))

@@ -192,7 +192,7 @@ export function KnowledgePage({
                     ? "在桌面程序中管理知识。"
                     : !workspace
                       ? "先创建或选择工作区。"
-                      : "手动记录，或从回答保存草稿。"}
+                      : "通过「资料文件」导入文档，或新建知识。"}
                 </p>
                 {(query || filter !== "all") && (
                   <button

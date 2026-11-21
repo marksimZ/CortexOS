@@ -1,11 +1,11 @@
 use crate::models::AppResult;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::future::{Future, poll_fn};
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskKind {
     Chat,
@@ -63,6 +63,24 @@ struct Active {
     summary: TaskSummary,
     cancel: watch::Sender<bool>,
 }
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LiveTask {
+    #[serde(flatten)]
+    pub task: TaskSummary,
+    status: TaskStatus,
+}
+
+fn live_status(task: &Active, waiting: bool) -> TaskStatus {
+    if *task.cancel.borrow() {
+        TaskStatus::Cancelling
+    } else if waiting {
+        TaskStatus::Queued
+    } else {
+        TaskStatus::Running
+    }
+}
+
 pub struct TaskSlot {
     active: Mutex<Option<Active>>,
     permit: Arc<Semaphore>,
@@ -248,14 +266,7 @@ impl TaskSlot {
         let queue = self.waiting.lock().map_err(|_| "等待队列不可用。")?;
         let active = self.active.lock().map_err(|_| "任务状态不可用。")?;
         let mut counts = TaskCounts::default();
-        for task in queue.iter().chain(active.iter()) {
-            let status = if *task.cancel.borrow() {
-                TaskStatus::Cancelling
-            } else if active.as_ref().is_some_and(|a| a.summary.id == task.summary.id) {
-                TaskStatus::Running
-            } else {
-                TaskStatus::Queued
-            };
+        for status in queue.iter().map(|t| live_status(t, true)).chain(active.iter().map(|t| live_status(t, false))) {
             match status {
                 TaskStatus::Queued => counts.queued += 1,
                 TaskStatus::Running => counts.running += 1,
@@ -264,6 +275,19 @@ impl TaskSlot {
             }
         }
         Ok(counts)
+    }
+    pub(crate) fn live_tasks(&self, workspace: Option<&str>) -> AppResult<Vec<LiveTask>> {
+        let queue = self.waiting.lock().map_err(|_| "等待队列不可用。")?;
+        let active = self.active.lock().map_err(|_| "任务状态不可用。")?;
+        Ok(active.iter().map(|task| (task, false)).chain(queue.iter().map(|task| (task, true)))
+            .filter(|(task, _)| {
+                let summary = &task.summary;
+                Some(summary.workspace_id.as_str()) == workspace
+                    || (summary.kind == TaskKind::LocalMaintenance
+                        && matches!(summary.workspace_id.as_str(), "application-storage" | "diagnostics"))
+            })
+            .map(|(task, waiting)| LiveTask { task: task.summary.clone(), status: live_status(task, waiting) })
+            .collect())
     }
     pub fn scoped_request(
         &self,

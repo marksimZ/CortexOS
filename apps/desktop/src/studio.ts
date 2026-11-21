@@ -387,6 +387,7 @@ export function useStudio() {
         : current,
     );
     await openWorkspace(workspace.id);
+    return workspace;
   };
 
   const draftKey = `${workspaceId}:${conversationId ?? "new"}`;

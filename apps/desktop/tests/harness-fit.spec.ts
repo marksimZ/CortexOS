@@ -78,6 +78,9 @@ test('local document fit imports actual development spec and retains reviewed ev
   expect(await nativeInvoke(page,'list_standard_benchmarks',{workspaceId})).toEqual([]);
   const other=await nativeInvoke<{id:string}>(page,'create_workspace',{name:'隔离工作区'});
   expect((await nativeInvoke<Payload>(page,'get_harness_fit',{workspaceId:other.id,version:null})).selected).toBeNull();
+  await page.evaluate(id=>{location.hash=`#/benchmark?workspace=${id}&view=harness&assessment=1&step=tasks`;},workspaceId);
+  await expect(page.getByRole('button',{name:'4. 测试任务',exact:true})).toHaveAttribute('aria-current','step');
+  await expect(page.getByRole('combobox',{name:'分析历史版本',exact:true})).toHaveValue('1');
   expect(app.consoleErrors).toEqual([]);
  }finally{await app.stop();}
 });

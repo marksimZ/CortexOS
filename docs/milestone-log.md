@@ -1,5 +1,12 @@
 # 里程碑记录
 
+## 2026-11-21 Phase H5 产品体验验收
+
+- 在空工作区加入本机、云端、恢复及跳过引导。标题栏加入任务中心与按需帮助。任务中心复用队列与历史记录，保留现有个性化评测准入。
+- 首轮 WebView2 内部走查 13 项通过。复跑历史定位与相关流程 7 项通过。Edge 的 2 项工作区切换回归定位为设置分类丢失，修复后 5 项通过。最终构建的引导和队列回归 3 项通过。原生与浏览器均在非活动 Windows 桌面执行。
+- `npm.cmd run build`、`npm.cmd run lint`、`npm.cmd run format:check`、离线锁定的 `cargo check` 和包含 custom-protocol 的桌面构建通过。最终 ESLint 错误检查通过。完整命令、证据边界、场景耗时和体积对照见 [H5 验收](productization/h5-acceptance.md)。
+- Phase H 开发交付收口，停在 H5 用户验收点。正式发布继续按 H4 条件处理。
+
 ## 2026-11-21 Phase H4 隔离 Windows 安装验收
 
 - 重启后启用沙盒。在真实 Windows 11 x64 来宾发现并修复两处问题。rc.1 误把构建机绝对前端路径识别为外部 URL，rc.2 在可执行文件位置被同名目录阻挡时仍返回成功。修复文件为 `scripts/release-dry-run.ps1`、Tauri NSIS 配置及 `windows/installer-hooks.nsh`。

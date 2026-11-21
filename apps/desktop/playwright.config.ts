@@ -85,6 +85,7 @@ export default defineConfig({
         "diagnostics-native.spec.ts",
         "updates-native.spec.ts",
         "data-portability-native.spec.ts",
+        "h5-product-native.spec.ts",
         "chat.spec.ts",
         "markdown-camera.spec.ts",
         "chat-design.spec.ts",

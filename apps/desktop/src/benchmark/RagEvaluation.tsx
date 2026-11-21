@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from "react";
 import { SelectMenu } from "../components/SelectMenu";
 import { errorText, type KnowledgeReference, type RetrievalReport } from "../studio";
 import { RagRuntimeEvaluation } from "./RagRuntimeEvaluation";
+import { navigate, useNavigation } from "../navigation";
 
 const policies = {
   off: "关闭查找",
@@ -66,13 +67,16 @@ export function RagEvaluation({ desktop, workspaceId }: { desktop: boolean; work
 }
 
 function EvaluationTabs({ workspaceId }: { workspaceId: string }) {
-  const [runtime, setRuntime] = useState(false);
+  const route = useNavigation();
+  const experiment = route.params.get("experiment");
+  const runtime = !!experiment || route.params.get("tab") === "models";
+  const select = (models: boolean) => navigate("benchmark", { workspace: workspaceId, view: "rag", tab: models ? "models" : undefined });
   return <>
     <div className="benchmark-tabs rag-evaluation-tabs" role="group" aria-label="检索评测方式">
-      <button type="button" aria-pressed={!runtime} onClick={() => setRuntime(false)}>固定回放</button>
-      <button type="button" aria-pressed={runtime} onClick={() => setRuntime(true)}>模型组合对照</button>
+      <button type="button" aria-pressed={!runtime} onClick={() => select(false)}>固定回放</button>
+      <button type="button" aria-pressed={runtime} onClick={() => select(true)}>模型组合对照</button>
     </div>
-    {runtime ? <RagRuntimeEvaluation workspaceId={workspaceId} /> : <WorkspaceEvaluation workspaceId={workspaceId} />}
+    {runtime ? <RagRuntimeEvaluation workspaceId={workspaceId} experiment={experiment} /> : <WorkspaceEvaluation workspaceId={workspaceId} />}
   </>;
 }
 

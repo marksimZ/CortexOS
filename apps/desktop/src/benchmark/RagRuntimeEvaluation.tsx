@@ -53,7 +53,7 @@ type History = { id: string; createdAt: string; status: string };
 type Report = History & { plan: Plan; results: Result[] };
 type Catalog = { cases: { id: string; question: string }[]; history: History[]; report: Report | null };
 
-export function RagRuntimeEvaluation({ workspaceId }: { workspaceId: string }) {
+export function RagRuntimeEvaluation({ workspaceId, experiment }: { workspaceId: string; experiment: string | null }) {
   const id = useId();
   const confirm = useRef<HTMLDialogElement>(null);
   const [arms, setArms] = useState<ArmInput[]>([{ profileId: null, policy: "fts5" }, { profileId: null, policy: "graph" }]);
@@ -78,13 +78,13 @@ export function RagRuntimeEvaluation({ workspaceId }: { workspaceId: string }) {
   useEffect(() => {
     let current = true;
     void Promise.all([
-      invoke<Catalog>("get_rag_runtime_experiment", { workspaceId }),
+      invoke<Catalog>("get_rag_runtime_experiment", { workspaceId, id: experiment }),
       invoke<Profiles>("list_model_runtime_profiles", { workspaceId }),
     ]).then(([data, options]) => {
       if (current) { setCatalog(data); setProfiles(options.profiles); }
     }).catch(value => { if (current) setError(errorText(value)); });
     return () => { current = false; };
-  }, [workspaceId]);
+  }, [workspaceId, experiment]);
   useEffect(() => {
     if (preview) openDialog(confirm.current);
   }, [preview]);

@@ -1,6 +1,6 @@
 import { SelectMenu } from "./SelectMenu";
 import { Plus } from "lucide-react";
-import { navigate, type PageName } from "../navigation";
+import { navigate, navigationParams, type PageName } from "../navigation";
 import type { Studio } from "../studio";
 export function WorkspaceSwitcher({
   studio,
@@ -20,7 +20,10 @@ export function WorkspaceSwitcher({
         id="current-workspace"
         value={studio.workspaceId ?? ""}
         disabled={!studio.desktop || !studio.data || studio.loading}
-        onChange={(event) => navigate(page, { workspace: event.target.value })}
+        onChange={(event) => navigate(page, {
+          workspace: event.target.value,
+          section: page === "settings" ? navigationParams(window.location.hash).get("section") : undefined,
+        })}
       >
         {!studio.workspaceId && <option value="">尚未创建工作区</option>}
         {studio.data?.workspaces.map((workspace) => (

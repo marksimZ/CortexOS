@@ -78,7 +78,7 @@ function ExperimentChart({summary}:{summary:Summary[]}) {
   </figure>;
 }
 
-export function HarnessExperiments({workspaceId,assessmentVersion}:{workspaceId:string;assessmentVersion:number}) {
+export function HarnessExperiments({workspaceId,assessmentVersion,requestedExperiment}:{workspaceId:string;assessmentVersion:number;requestedExperiment:string|null}) {
   const scope={workspaceId,assessmentVersion};
   const [listing,setListing]=useState<Listing|null>(null);
   const [models,setModels]=useState<Model[]>([]);
@@ -126,7 +126,7 @@ export function HarnessExperiments({workspaceId,assessmentVersion}:{workspaceId:
     try {await operation();} catch(value) {if (alive.current && errorText(value)!=='已取消等待。') setError(errorText(value));}
     finally {if (alive.current) setBusy(false);}
   }
-  useEffect(()=>{void act(()=>load(undefined,true));},[]);
+  useEffect(()=>{void act(()=>load(requestedExperiment??undefined,true));},[requestedExperiment]);
   useEffect(()=>{
     if (!submitting && !listing?.request && (!listing?.active || busy)) return;
     let current=true;

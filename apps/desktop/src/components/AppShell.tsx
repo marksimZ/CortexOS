@@ -1,7 +1,7 @@
 import { BrandMark } from "./BrandMark";
 import { AppDialog, openDialog } from "./AppDialog";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { PanelLeft, X, Plus, BookOpen } from "lucide-react";
+import { CircleHelp, ListChecks, PanelLeft, X, Plus } from "lucide-react";
 import type { Studio } from "../studio";
 import { navigate, type PageName } from "../navigation";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -11,6 +11,8 @@ import { NavigationIcon } from "./NavigationIcon";
 import { WindowControls, WindowDragRegion, handleWindowDrag } from "./WindowControls";
 import { AppearanceControl } from "./AppearanceControl";
 import { Toast } from "./Toast";
+import { TaskCenter } from "./TaskCenter";
+import { WorkspaceHelp } from "./WorkspaceHelp";
 export const pages = [
   { id: "chat", label: "对话" }, { id: "knowledge", label: "知识" },
   { id: "graph", label: "图谱" }, { id: "benchmark", label: "评测" }, { id: "settings", label: "设置" },
@@ -28,6 +30,9 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [narrow, setNarrow] = useState(() => matchMedia("(max-width: 900px)").matches);
   const drawer = useRef<HTMLDialogElement>(null);
+  const tasks = useRef<HTMLDialogElement>(null);
+  const help = useRef<HTMLDialogElement>(null);
+  const [tasksOpen, setTasksOpen] = useState(false);
   useEffect(() => {
     const query = matchMedia("(max-width: 900px)");
     const update = () => { setNarrow(query.matches); if (!query.matches) drawer.current?.close(); };
@@ -35,6 +40,7 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
     return () => query.removeEventListener("change", update);
   }, []);
   const conversation = studio.conversations.find(item => item.id === studio.conversationId);
+  const workspace = studio.data?.workspaces.find(item => item.id === studio.workspaceId);
   const sidebar = (mobile: boolean) => <>
     <Brand />
     <button className="button secondary new-thread" disabled={!studio.desktop || !studio.workspaceId || studio.loading || studio.creatingConversation || studio.sending} onClick={() => {
@@ -46,7 +52,6 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
     <div className="sidebar-threads"><ConversationList studio={studio} onSelect={() => drawer.current?.close()} /></div>
     <div className="sidebar-workspace">
       <WorkspaceSwitcher studio={studio} page={page} openCreateWorkspace={() => { drawer.current?.close(); openCreateWorkspace(); }} />
-      <a className="button secondary" href="#/knowledge" onClick={() => drawer.current?.close()}><BookOpen size={14} aria-hidden="true" />查看知识</a>
     </div>
   </>;
   return <div className={`app-shell prototype-shell reference-chat page-${page} ${collapsed ? "sidebar-collapsed" : ""}`}>
@@ -61,9 +66,20 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
         <button className="icon-button navigation-toggle" aria-label={narrow ? "打开导航" : collapsed ? "展开全局导航" : "收起全局导航"} aria-expanded={narrow ? mobileOpen : !collapsed} aria-controls={narrow ? "mobile-navigation" : "primary-sidebar"} aria-haspopup={narrow ? "dialog" : undefined} title={narrow ? "打开导航" : collapsed ? "展开全局导航" : "收起全局导航"} onClick={() => {
           if (narrow) { openDialog(drawer.current); setMobileOpen(true); } else setCollapsed(!collapsed);
         }}><PanelLeft size={18} /></button>
-        <div className="topbar-title"><strong>{page === "chat" ? conversation?.title ?? "新的对话" : pages.find(item => item.id === page)?.label}</strong><span>{studio.data?.workspaces.find(item => item.id === studio.workspaceId)?.name ?? "本地工作区"}</span></div>
+        <div className="topbar-title"><strong>{page === "chat" ? conversation?.title ?? "新的对话" : pages.find(item => item.id === page)?.label}</strong><span>{workspace?.name ?? "本地工作区"}</span></div>
         {studio.desktop ? <WindowDragRegion onError={studio.reportError} /> : <span className="topbar-spacer" />}
         <ModelStatus studio={studio} />
+        <button className="icon-button" type="button" aria-label="任务中心" title="任务中心" aria-haspopup="dialog" onClick={() => {
+          if (tasks.current?.open) { tasks.current.close(); return; }
+          help.current?.close();
+          openDialog(tasks.current);
+          setTasksOpen(true);
+        }}><ListChecks size={18} aria-hidden="true" /></button>
+        <button className="icon-button" type="button" aria-label="使用帮助" title="使用帮助" aria-haspopup="dialog" onClick={() => {
+          if (help.current?.open) { help.current.close(); return; }
+          tasks.current?.close();
+          openDialog(help.current);
+        }}><CircleHelp size={18} aria-hidden="true" /></button>
         <AppearanceControl />
         {studio.desktop && <WindowControls onError={studio.reportError} />}
       </header>
@@ -73,6 +89,8 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
       <header className="panel-header"><h2 id="mobile-navigation-title">导航与会话</h2><button className="icon-button" aria-label="关闭导航" onClick={() => drawer.current?.close()}><X size={18} /></button></header>
       <div className="panel-body">{mobileOpen && sidebar(true)}</div>
     </AppDialog>
+    <TaskCenter dialog={tasks} open={tasksOpen} onClose={() => setTasksOpen(false)} desktop={studio.desktop} workspaceId={studio.workspaceId} workspaceName={workspace?.name} />
+    <WorkspaceHelp dialog={help} page={page} />
     <Toast />
   </div>;
 }

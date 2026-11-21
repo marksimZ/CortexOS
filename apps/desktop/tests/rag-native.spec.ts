@@ -82,6 +82,13 @@ test("model combination runs through native permissions and retains the report",
     const other = await nativeInvoke<{ id: string }>(page, "create_workspace", { name: "F7 隔离" });
     await expect(nativeInvoke(page, "get_rag_runtime_experiment", { workspaceId:other.id,id:catalog.report.id })).rejects.toBeTruthy();
     await expect(nativeInvoke(page, "export_rag_runtime_experiment", { workspaceId:other.id,id:catalog.report.id })).rejects.toBeTruthy();
+    await page.getByRole("button", { name:"任务中心", exact:true }).click();
+    const record = page.getByRole("dialog", { name:"任务中心", exact:true })
+      .getByRole("listitem").filter({ hasText:"模型组合对照" });
+    await expect(record).toContainText("已完成");
+    await record.getByRole("link", { name:"查看记录", exact:true }).click();
+    await expect(page).toHaveURL(new RegExp(`experiment=${catalog.report.id}`));
+    await expect(page.getByLabel("历史对照", { exact:true })).toHaveValue(catalog.report.id);
   } finally {
     await app?.stop();
     await new Promise<void>(resolve => server.close(() => resolve()));

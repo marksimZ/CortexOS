@@ -4,6 +4,7 @@ mod cloud;
 mod commands;
 mod db;
 mod diagnostics;
+mod task_center;
 mod execution;
 mod generation;
 mod graph;
@@ -101,6 +102,9 @@ pub fn run() {
             updates::install_update,
             diagnostics::read_diagnostics,
             diagnostics::export_diagnostics,
+            task_center::read_live_tasks,
+            task_center::read_task_history,
+            task_center::cancel_waiting_task,
             portability::backup_preview,
             portability::backup_save,
             portability::backup_open,

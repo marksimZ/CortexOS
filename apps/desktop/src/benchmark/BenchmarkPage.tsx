@@ -16,17 +16,18 @@ export function BenchmarkPage({ studio }: { studio: Studio }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const route = useNavigation();
   const requestedBatch = route.params.get("batch");
+  const requestedJob = route.params.get("job");
   const harness = route.benchmarkView === "harness";
   const rag = route.benchmarkView === "rag";
   const personalized = route.benchmarkView === "personalized";
   useEffect(() => {
-    if (!personalized || !requestedBatch) return;
+    if (!personalized || (!requestedBatch && !requestedJob)) return;
     const request = new AbortController();
     void benchmark("personalized_access", undefined, request.signal)
       .then(status => { if (status.allowed) setProfileOpen(true); })
       .catch(() => {}); // The connection screen remains available when access expires.
     return () => request.abort();
-  }, [personalized, requestedBatch]);
+  }, [personalized, requestedBatch, requestedJob]);
   if(route.workspace&&route.workspace!==studio.workspaceId)return <div><p role="status">{studio.data&&!studio.data.workspaces.some(w=>w.id===route.workspace)?"链接中的工作区不存在。":"正在切换到链接中的工作区…"}</p><button className="button secondary" onClick={()=>{studio.clearError();navigate("benchmark",{workspace:studio.workspaceId});}}>返回当前工作区</button></div>;
   return <section className="standard-page benchmark-page" aria-labelledby="page-title">
     <h1 id="page-title" className="sr-only">评测</h1>

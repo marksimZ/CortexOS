@@ -2,7 +2,7 @@
 
 ## Phase H2–H5 产品化
 
-[产品化实施计划](productization/h2-h5-implementation-plan.md)统一列出 H2 数据迁移、H3 可靠性、H4 发布和 H5 产品验收。已交付 [H2 数据管理](productization/h2-data-management.md) 和 [H3 可靠性](productization/h3-acceptance.md)。H4 已完成隔离验收，见 [发布准入](release/h4-release-checklist.md) 和 [安装矩阵](release/h4-install-upgrade-validation.md)。确认 H4 后进入 H5。
+[产品化实施计划](productization/h2-h5-implementation-plan.md)统一列出 H2 数据迁移、H3 可靠性、H4 发布和 H5 产品验收。已交付 [H2 数据管理](productization/h2-data-management.md) 和 [H3 可靠性](productization/h3-acceptance.md)。H4 已完成隔离安装和升级验收，见 [安装矩阵](release/h4-install-upgrade-validation.md)。H5 已交付首次使用引导、任务中心和按需帮助，停在 [H5 验收](productization/h5-acceptance.md)。正式发布仍按 [发布准入](release/h4-release-checklist.md) 核对。
 
 ## 当前验收点：Phase G5 发布候选版
 

@@ -27,7 +27,7 @@ export function ChatPage({
   onSaveKnowledge,
 }: {
   studio: Studio;
-  onCreateWorkspace: () => void;
+  onCreateWorkspace: (next?: "chat" | "cloud") => void;
   onSaveKnowledge: (message: Message, excerpt: string) => void;
 }) {
   const route = useNavigation();
@@ -344,6 +344,7 @@ export function ChatPage({
             <EmptyState
               studio={studio}
               modelReady={modelReady}
+              cloudAnswer={cloudAnswer}
               onCreateWorkspace={onCreateWorkspace}
             />
           )}

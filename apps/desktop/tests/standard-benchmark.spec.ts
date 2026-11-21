@@ -72,7 +72,16 @@ for (const queueOnly of [false, true]) test(queueOnly ? "standard batch can canc
       await page.getByRole("checkbox",{name:/我已检查题库、模型和发送范围/}).check();
       await page.getByRole("button",{name:"确认并运行未发送题目",exact:true}).click();
       const cancel=page.getByRole("button",{name:"取消等待",exact:true});await expect(cancel).toBeVisible();
-      await page.reload();await expect(cancel).toBeVisible();await expect(page.getByRole("status").filter({hasText:"固定题库"})).not.toContainText("待确认");await page.screenshot({path:info.outputPath("waiting.png")});await cancel.click();await expect(cancel).toBeHidden();
+      await page.reload();await expect(cancel).toBeVisible();await expect(page.getByRole("status").filter({hasText:"固定题库"})).not.toContainText("待确认");await page.screenshot({path:info.outputPath("waiting.png")});
+      const tasks=page.getByRole("dialog",{name:"任务中心",exact:true});
+      await page.getByRole("button",{name:"任务中心",exact:true}).click();
+      await expect(tasks.getByText("前序任务释放运行资源后开始。",{exact:true})).toBeVisible();
+      await expect(tasks.getByText("进行中",{exact:true})).toBeVisible();
+      await expect(tasks.getByText("当前没有其他记录。",{exact:true})).toBeVisible();
+      await page.screenshot({path:info.outputPath("shared-queue-center.png")});
+      await tasks.getByRole("button",{name:"取消等待",exact:true}).click();
+      await expect(tasks.getByRole("button",{name:"取消等待",exact:true})).toHaveCount(0);
+      await tasks.getByRole("button",{name:"关闭任务中心",exact:true}).click();await expect(cancel).toBeHidden();
       const untouched=await nativeInvoke<Batch>(page,"get_standard_benchmark",{workspaceId:workspace,batchId});
       expect(untouched.status).toBe("planned");expect(untouched.items).toEqual(plan.items);expect(wire).toHaveLength(1);
       expect((await nativeInvoke<Batch>(page,"get_standard_benchmark",{workspaceId:workspace,batchId:holder.id})).status).toBe("running");
@@ -88,6 +97,11 @@ for (const queueOnly of [false, true]) test(queueOnly ? "standard batch can canc
       expect(detail.execution.snapshot.request.keep_alive).toBe(0);
       expect(detail.execution.snapshot.requestHash).toBe(createHash("sha256").update(wire[1].raw).digest("hex"));
       expect(detail.execution.contextManifest).toMatchObject({localModelRetention:{source:"approved_benchmark_input",keepAliveSeconds:0}});
+      await page.getByRole("button",{name:"任务中心",exact:true}).click();
+      const recorded=tasks.getByRole("listitem").filter({hasText:"已处理 8 / 8 道题"});
+      await expect(recorded).toContainText("已完成");
+      await recorded.getByRole("link",{name:"查看记录",exact:true}).click();
+      await expect(page).toHaveURL(new RegExp(`batch=${batchId}`));
       return;
     }
     const changed=await nativeInvoke(page,"start_standard_benchmark",{workspaceId:workspace,batchId,approvedPlanHash:"tampered"}).then(()=>false,()=>true);expect(changed).toBe(true);expect(wire).toHaveLength(0);
