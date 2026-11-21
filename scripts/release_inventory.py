@@ -14,7 +14,7 @@ LICENSE_SOURCES = ROOT / "docs/release/license-sources"
 LICENSE_HASHES = {
     "dropbox-alloc-stdlib.txt": "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae",
     "jsonschema.txt": "117829c3ca21efb132d81a44b55363d395ab8eea18526873bc828da4c0e5f038",
-    "mpl-2.0.txt": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7cee34c2b91f1d5",
+    "mpl-2.0.txt": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
     "nugine-simd.txt": "71674605ec4c087fe9eb534e3e4f9e26eb2e4aabcd76a29fd156c6a844d44b3d",
     "nsis-3.13-copying.txt": "9afab55b28917f993049218d52d5ed9ec56498bc6d53fe422aea5b60c867ee4b",
     "nsis-3.13-downloader.txt": "daab4a8b00759c9a0712d9d15583ff947d2b6aa0db72e5292711c20986e4a0d2",
