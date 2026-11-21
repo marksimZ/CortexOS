@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -21,16 +21,21 @@ const program = join(programDirectory, "cortexos-desktop.exe");
 const uninstaller = join(programDirectory, "uninstall.exe");
 const data = join(process.env.APPDATA, "com.cortexos.desktop");
 const dbPath = join(data, "cortexos.sqlite3");
-const port = 49491;
 const report = { mode, cases: [] };
 const digest = (name) => createHash("sha256").update(readFileSync(name)).digest("hex");
 const evidence = () => writeFileSync(join(output, `${mode}.json`), JSON.stringify(report, null, 2) + "\n");
 const record = (name, detail) => { report.cases.push({ name, result: "passed", detail }); evidence(); };
 const metadata = JSON.parse(readFileSync(join(input, "candidate.json"), "utf8").replace(/^\uFEFF/, ""));
-const old = join(input, "CortexOS_0.2.0_x64-setup.exe");
-const candidate = join(input, metadata.filename);
-assert.equal(digest(candidate), metadata.sha256.toLowerCase());
-assert.equal(digest(old), "b3a18e39b590c2615b024293e172e434949b263daf37cd7d122ff8c71a9ed1eb");
+assert.match(metadata.filename, /^CortexOS_\d+\.\d+\.\d+(?:-rc\.\d+)?_x64-setup\.exe$/);
+const local = mkdtempSync(join(process.env.TEMP, "cortexos-h4-"));
+function stage(filename, expected) {
+  const exe = join(local, filename);
+  copyFileSync(join(input, filename), exe);
+  assert.equal(digest(exe), expected.toLowerCase());
+  return exe;
+}
+const old = stage("CortexOS_0.2.0_x64-setup.exe", "b3a18e39b590c2615b024293e172e434949b263daf37cd7d122ff8c71a9ed1eb");
+const candidate = stage(metadata.filename, metadata.sha256);
 assert.equal(existsSync(dbPath), false);
 assert.equal(existsSync(program), false);
 evidence();
@@ -45,10 +50,31 @@ async function waitFor(read, milliseconds = 30_000) {
   throw new Error(`Guest wait timed out${error ? `: ${error.message}` : ""}`);
 }
 
-function registryVersion() {
+function registryValue(key, value) {
   try {
-    return execFileSync("reg.exe", ["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\CortexOS", "/v", "DisplayVersion"], {encoding:"utf8", stdio:["ignore","pipe","ignore"]}).trim().split(/\s+/).at(-1);
+    return execFileSync("reg.exe", ["query", key, "/v", value], {encoding:"utf8", stdio:["ignore","pipe","ignore"]}).trim().split(/\s+/).at(-1);
   } catch { return null; }
+}
+
+const registryVersion = () => registryValue("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\CortexOS", "DisplayVersion");
+
+function webViewVersion() {
+  const id = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+  return [`HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\${id}`, `HKCU\\Software\\Microsoft\\EdgeUpdate\\Clients\\${id}`]
+    .map((key) => registryValue(key,"pv")).find((value) => value && value !== "0.0.0.0") ?? null;
+}
+
+async function prepareWebView() {
+  const before = webViewVersion();
+  report.webView2 = { before, after: before };
+  evidence();
+  if (before) return;
+  const checksum = join(input, "webview2.sha256");
+  assert.ok(existsSync(checksum), "Evergreen WebView2 is missing, and no verified offline installer was supplied");
+  const runtime = stage("MicrosoftEdgeWebView2RuntimeInstallerX64.exe", readFileSync(checksum, "ascii").trim());
+  await run(runtime, ["/silent", "/install"], { timeout:180_000, windowsHide:true });
+  report.webView2.after = await waitFor(webViewVersion);
+  evidence();
 }
 
 async function install(exe, version) {
@@ -58,44 +84,71 @@ async function install(exe, version) {
 }
 
 async function withApp(action) {
-  const child = spawn(program, [], { env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-address=127.0.0.1 --remote-debugging-port=${port}` }, windowsHide:true, stdio:"ignore" });
-  let socket;
+  const child = spawn(program, [], { windowsHide:true, stdio:"ignore" });
+  const ui = (operation, name, value = "") => guestUi(child.pid, operation, name, value);
   try {
-    const target = await waitFor(async () => (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((item) => item.type === "page" && item.url.includes("tauri.localhost")));
-    socket = new WebSocket(target.webSocketDebuggerUrl);
-    await once(socket, "open");
-    let sequence = 0;
-    async function evaluate(expression) {
-      const id = ++sequence;
-      const answer = new Promise((done, reject) => {
-        const timer = setTimeout(() => {
-          socket.removeEventListener("message", receive);
-          reject(new Error("No response from the application window"));
-        }, 5000);
-        function receive(ev) {
-          const reply = JSON.parse(ev.data);
-          if (reply.id !== id) return;
-          clearTimeout(timer);
-          socket.removeEventListener("message", receive);
-          if (reply.error || reply.result.exceptionDetails) reject(new Error("Installed application command failed"));
-          else done(reply.result.result.value);
-        }
-        socket.addEventListener("message", receive);
-      });
-      socket.send(JSON.stringify({ id, method:"Runtime.evaluate", params:{ expression, returnByValue:true, awaitPromise:true } }));
-      return answer;
-    }
-    const invoke = (name, args = {}) => evaluate(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(name)}, ${JSON.stringify(args)})`);
-    await waitFor(() => invoke("bootstrap"));
-    const result = await action(invoke, evaluate);
-    // Ask the real app window to close through its normal handler.
-    await evaluate(`(() => { const b = document.querySelector('[aria-label="关闭窗口"], [title="关闭窗口"]'); if (b) b.click(); return !!b; })()`).catch(() => false);
+    await ui("find", "^新建工作区$");
+    const result = await action(ui);
+    await ui("click", "^关闭窗口$");
     await waitFor(() => child.exitCode !== null, 12_000);
     assert.equal(child.exitCode, 0);
     return result;
   } finally {
-    socket?.close();
     if (child.exitCode === null) child.kill();
+  }
+}
+
+async function guestUi(pid, operation, name, value) {
+  const literal = (text) => `'${text.replaceAll("'", "''")}'`;
+  const script = `
+$ErrorActionPreference='Stop'
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes
+$root=[System.Windows.Automation.AutomationElement]::RootElement
+$scope=[System.Windows.Automation.TreeScope]::Descendants
+$all=[System.Windows.Automation.Condition]::TrueCondition
+$name=${literal(name)}
+$action=${literal(operation)}
+$content=${literal(value)}
+$deadline=[DateTime]::UtcNow.AddSeconds(24)
+$seen=@()
+do {
+  $handle=(Get-Process -Id ${pid} -ErrorAction Stop).MainWindowHandle
+  if (!$handle) { Start-Sleep -Milliseconds 250; continue }
+  $window=[System.Windows.Automation.AutomationElement]::FromHandle($handle)
+  $items=@($window.FindAll($scope,$all))
+  $seen=@($items | Where-Object {$_.Current.Name} | Select-Object -First 45 | ForEach-Object {$_.Current.Name})
+  $found=@($items | Where-Object {$_.Current.Name -match $name})
+  [array]::Reverse($found)
+  foreach ($item in $found) {
+    if ($action -eq 'find') { exit 0 }
+    if (!$item.Current.IsEnabled) { continue }
+    if ($action -eq 'enabled') { exit 0 }
+    $pattern=$null
+    if ($action -eq 'click' -and $item.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$pattern)) {
+      $pattern.Invoke(); exit 0
+    }
+    if ($action -eq 'check' -and $item.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern,[ref]$pattern)) {
+      if ($pattern.Current.ToggleState -ne 'On') { $pattern.Toggle() }; exit 0
+    }
+    if ($action -eq 'set' -and $item.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit) {
+      $item.SetFocus()
+      if ($item.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$pattern)) {
+        try { $pattern.SetValue($content); exit 0 } catch [System.InvalidOperationException] {}
+      }
+      if ($content -notmatch '^[A-Za-z0-9 -]+$') { throw 'Unexpected guest keyboard content' }
+      Add-Type -AssemblyName System.Windows.Forms
+      [System.Windows.Forms.SendKeys]::SendWait('^a'+$content); exit 0
+    }
+  }
+  Start-Sleep -Milliseconds 250
+} while ([DateTime]::UtcNow -lt $deadline)
+throw ('No guest UI element for ' + $action + ' ' + $name + '. Observed names: ' + ($seen -join ', '))
+`;
+  try {
+    await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { timeout:35_000, windowsHide:true });
+  } catch (error) {
+    throw new Error(`Guest UI ${operation} ${name} failed: ${error.stderr ?? error.message}`, { cause:error });
   }
 }
 
@@ -114,6 +167,12 @@ function verifyDatabase(path) {
 
 const text = "H4 synthetic legacy knowledge text";
 const workspaceName = "H4 synthetic isolated workspace";
+async function createWorkspace(ui) {
+  await ui("click", "^新建工作区$");
+  await ui("set", "^工作区名称$", workspaceName);
+  await ui("click", "^创建工作区$");
+  return waitFor(() => openDatabase(dbPath, (db) => db.prepare("SELECT id FROM workspaces WHERE name=?").get(workspaceName)?.id));
+}
 const matchesWorkspace = (workspace) => openDatabase(dbPath, (db) => {
   assert.equal(db.prepare("SELECT name FROM workspaces WHERE id=?").get(workspace).name, workspaceName);
   const versions = db.prepare("SELECT v.content FROM knowledge_versions v JOIN knowledge_nodes n ON v.node_id=n.id WHERE n.workspace_id=? ORDER BY v.version").all(workspace);
@@ -133,7 +192,16 @@ function seedKnowledge(workspace) {
   }, false);
 }
 
-async function createBenchmarkHistory(invoke, workspaceId) {
+function benchmarkHistory(workspaceId) {
+  return openDatabase(dbPath, (db) => db.prepare(`
+    SELECT b.id AS batchId, i.run_id AS runId, r.app_version AS appVersion
+    FROM benchmark_batches b JOIN benchmark_batch_items i ON i.batch_id=b.id
+    JOIN benchmark_runs r ON r.id=i.run_id
+    WHERE b.workspace_id=? AND b.status='completed' AND i.case_id='math-001'
+  `).get(workspaceId));
+}
+
+async function createBenchmarkHistory(ui, workspaceId) {
   const name = "h4-synthetic-model";
   const digest = createHash("sha256").update(name).digest("hex");
   const details = { format:"gguf", family:"fixture", parameter_size:"synthetic", quantization_level:"synthetic" };
@@ -157,20 +225,18 @@ async function createBenchmarkHistory(invoke, workspaceId) {
   server.listen(11434, "127.0.0.1");
   await once(server, "listening");
   try {
-    const datasets = await invoke("list_benchmark_datasets", {workspaceId});
-    const dataset = datasets.find((item) => item.id === "cortex-core-60" && item.version === 2);
-    const input = { datasetId:dataset.id, datasetVersion:2, datasetHash:dataset.contentHash, caseIds:["math-001"], repetitions:1,
-      models:[{kind:"local",local:{model:name,expectedDigest:digest,requirements:["completion"],parameters:{numCtx:4096,numPredict:64,temperature:0,timeoutSeconds:10}}}],
-      maxOutputTokens:64, price:null, pythonImage:null, releaseModels:[], localKeepAliveSeconds:0 };
-    const batch = await invoke("plan_standard_benchmark", {workspaceId,input});
-    await invoke("start_standard_benchmark", {workspaceId,batchId:batch.id,approvedPlanHash:batch.planHash});
-    const result = await waitFor(async () => {
-      const current = await invoke("get_standard_benchmark", {workspaceId,batchId:batch.id});
-      return current.status === "completed" && current;
-    });
+    await ui("click", "^评测$");
+    await ui("check", `^${name}$`);
+    await ui("click", "^清空选择$");
+    await ui("set", "^查找题目$", "math-001");
+    await ui("check", "^math-001");
+    await ui("click", "^预览标准评测计划$");
+    await ui("check", "^我已检查题库、模型和发送范围");
+    await ui("click", "^确认并运行未发送题目$");
+    const result = await waitFor(() => benchmarkHistory(workspaceId));
     assert.equal(modelRequests, 1);
-    assert.ok(result.items[0].runId);
-    return {batchId:batch.id, runId:result.items[0].runId};
+    assert.equal(result.appVersion, metadata.version);
+    return result;
   } finally { server.close(); }
 }
 
@@ -218,9 +284,10 @@ throw 'Did not find the uninstall data option'
 }
 
 try {
+  await prepareWebView();
   if (mode === "upgrade") {
     await install(old, "0.2.0");
-    const workspace = await withApp(async (invoke) => (await invoke("create_workspace", {name:workspaceName})).id);
+    const workspace = await withApp(createWorkspace);
     seedKnowledge(workspace);
     assert.equal(verifyDatabase(dbPath), 7);
     matchesWorkspace(workspace);
@@ -242,7 +309,7 @@ try {
       if (blocker.exitCode === null) await once(blocker, "exit");
     }
     await install(candidate, metadata.version);
-    await withApp(async (invoke) => { const bootstrap = await invoke("bootstrap"); assert.ok(bootstrap.workspaces.some((item) => item.id === workspace)); });
+    await withApp((ui) => ui("find", `^${workspaceName}$`));
     assert.equal(verifyDatabase(dbPath), 26);
     matchesWorkspace(workspace);
     const backup = readdirSync(data, {recursive:true}).find((name) => /before-migration-7-.*\.sqlite3$/.test(name));
@@ -251,38 +318,42 @@ try {
     record("published release upgraded with migration backup and preserved knowledge versions", { previousSchema:7, schema:26 });
   } else {
     await install(candidate, metadata.version);
-    const workspace = await withApp(async (invoke) => (await invoke("create_workspace", {name:workspaceName})).id);
+    const workspace = await withApp(createWorkspace);
     assert.equal(verifyDatabase(dbPath), 26);
+    record("fresh candidate installation and first launch", { schema:26 });
     const connection = randomUUID(), secret = `synthetic-${randomUUID()}`;
     openDatabase(dbPath, (db) => db.prepare("INSERT INTO model_cloud_connections VALUES(?,?,?)").run(workspace,connection,JSON.stringify({id:connection,provider:"anthropic",label:"H4 synthetic connection",address:null,compatibleRerank:false,catalogState:"unconfigured",catalogCheckedAt:null,models:[],probes:[],limits:[]})), false);
-    const history = await withApp(async (invoke) => {
-      assert.equal((await invoke("update_channels")).version, metadata.version);
-      await invoke("bind_runtime_cloud_key", {workspaceId:workspace,connectionId:connection,apiKey:secret});
-      const list = await invoke("list_runtime_cloud_connections", {workspaceId:workspace});
-      assert.ok(list.some((item) => item.credentialAvailable));
-      return createBenchmarkHistory(invoke, workspace);
+    const history = await withApp(async (ui) => {
+      await ui("click", "^设置$");
+      await ui("click", "^关于$");
+      await ui("find", `^当前版本 ${metadata.version.replace(/[.]/g, "[.]")}$`);
+      await ui("click", "^云端模型$");
+      await ui("set", "^API 密钥$", secret);
+      await ui("click", "^绑定密钥$");
+      await ui("enabled", "^刷新模型列表$");
+      return createBenchmarkHistory(ui, workspace);
     });
     assert.equal(readFileSync(dbPath).includes(secret), false);
-    assert.equal(openDatabase(dbPath, (db) => db.prepare("SELECT app_version FROM benchmark_runs WHERE id=?").get(history.runId).app_version), metadata.version);
-    record("fresh candidate installation, first launch, restart and synthetic credential binding", { schema:26 });
+    assert.ok(history.runId);
+    record("restart, synthetic credential and standard evaluation using a loopback fixture", { schema:26, evaluation:history });
     await uninstallPreserving();
     assert.equal(verifyDatabase(dbPath), 26);
     await install(candidate, metadata.version);
-    await withApp(async (invoke) => {
-      const list = await invoke("list_runtime_cloud_connections", {workspaceId:workspace});
-      assert.ok(list.some((item) => item.credentialAvailable));
-      assert.ok((await invoke("bootstrap")).workspaces.some((item) => item.id === workspace));
-      const batch = await invoke("get_standard_benchmark", {workspaceId:workspace,batchId:history.batchId});
-      assert.equal(batch.status, "completed");
-      assert.equal(batch.items[0].runId, history.runId);
+    await withApp(async (ui) => {
+      await ui("find", `^${workspaceName}$`);
+      await ui("click", "^设置$");
+      await ui("click", "^云端模型$");
+      await ui("enabled", "^刷新模型列表$");
     });
+    assert.deepEqual(benchmarkHistory(workspace), history);
     record("default uninstallation and reinstall preserved database, evaluation and credential", { schema:26 });
     await uninstallRemovingGuestData();
     record("explicit uninstall data deletion scoped to the disposable guest", { unrelatedFilePreserved:true });
   }
   report.finished = new Date().toISOString();
 } catch (error) {
-  report.failure = { name:error.name, message:error.message };
+  report.failure = { name:error.name, message:error.message, code:error.code, signal:error.signal, killed:error.killed, stdout:error.stdout, stderr:error.stderr };
+  report.finished = new Date().toISOString();
   process.exitCode = 1;
 } finally {
   evidence();

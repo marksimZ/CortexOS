@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { copyFile, mkdir, mkdtemp, readFile, unlink } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { launchNative, nativeInvoke } from "./native";
 
@@ -16,7 +16,8 @@ test("Windows updater checks channels, rejects altered packages and verifies a s
   const keyDirectory = await mkdtemp(join(tmpdir(), "cortexos-h4-updater-"));
   const keyFile = join(keyDirectory, "rehearsal.key");
   const installer = info.outputPath("signed-rc.exe");
-  const version = "0.2.1-rc.1";
+  const version = /^CortexOS_(\d+\.\d+\.\d+-rc\.\d+)_x64-setup\.exe$/.exec(basename(candidate))?.[1];
+  if (!version) throw new Error("Use a versioned CortexOS Windows candidate installer");
   const cli = resolve("node_modules/@tauri-apps/cli/tauri.js");
   const localEnv = { ...process.env };
   delete localEnv.TAURI_SIGNING_PRIVATE_KEY;

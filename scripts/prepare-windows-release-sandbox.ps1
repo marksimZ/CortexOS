@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory)][string]$CandidateDirectory,
     [Parameter(Mandatory)][string]$PublishedInstaller,
-    [Parameter(Mandatory)][string]$OutputDirectory
+    [Parameter(Mandatory)][string]$OutputDirectory,
+    [string]$WebView2Installer
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,6 +29,16 @@ $node = Get-Command node.exe -CommandType Application | Select-Object -First 1 -
 & $node -e 'require("node:sqlite")'
 if ($LASTEXITCODE -ne 0) { throw '准备 Node 22.13+ x64（需提供内置 SQLite）。' }
 Copy-Item -LiteralPath $node -Destination (Join-Path $input 'node.exe')
+if ($WebView2Installer) {
+    $runtime = (Resolve-Path -LiteralPath $WebView2Installer).Path
+    $signature = Get-AuthenticodeSignature -LiteralPath $runtime
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=Microsoft Corporation(?:,|$)') {
+        throw 'WebView2 安装器的微软签名无效。'
+    }
+    $runtimeFile = Join-Path $input 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
+    Copy-Item -LiteralPath $runtime -Destination $runtimeFile
+    (Get-FileHash -LiteralPath $runtimeFile -Algorithm SHA256).Hash | Set-Content -Encoding ascii -LiteralPath (Join-Path $input 'webview2.sha256')
+}
 
 foreach ($mode in @('fresh', 'upgrade')) {
     $caseResult = (New-Item -Type Directory -Path (Join-Path $evidence $mode)).FullName

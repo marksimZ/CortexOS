@@ -62,9 +62,13 @@ try {
     }
     $notices = Join-Path $output 'THIRD-PARTY-NOTICES.txt'
     $materials = Join-Path $output 'third-party-materials.zip'
+    $frontendDist = [IO.Path]::GetRelativePath($tauriDir, $web).Replace('\', '/')
+    if (-not $frontendDist.StartsWith('../') -or [Uri]::IsWellFormedUriString($frontendDist, [UriKind]::Absolute)) {
+        throw '前端资源路径必须是相对于 Tauri 项目的目录。'
+    }
     $overlay = @{
         version = $Version
-        build = @{ frontendDist = $web; beforeBuildCommand = $null }
+        build = @{ frontendDist = $frontendDist; beforeBuildCommand = $null }
         bundle = @{ createUpdaterArtifacts = $false; resources = @{
             "$notices" = 'THIRD-PARTY-NOTICES.txt'; "$materials" = 'third-party-materials.zip'
         } }
@@ -72,7 +76,7 @@ try {
     $overlayPath = Join-Path $output 'tauri-candidate.json'
     [IO.File]::WriteAllText($overlayPath, ($overlay | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
     $start = [DateTime]::UtcNow
-    Invoke-ReleasedTool npm.cmd @('run', 'tauri', '--', 'build', '--ci', '--no-sign', '--bundles', 'nsis', '--config', $overlayPath, '--', '--offline', '--locked')
+    Invoke-ReleasedTool npm.cmd @('run', 'tauri', '--', 'build', '--ci', '--no-sign', '--bundles', 'nsis', '--config', $overlayPath, '--features', 'tauri/custom-protocol', '--', '--offline', '--locked')
     $name = "CortexOS_${Version}_x64-setup.exe"
     $exe = Get-Item -LiteralPath (Join-Path $tauriDir "target/release/bundle/nsis/$name")
     if ($exe.LastWriteTimeUtc -lt $start) { throw '候选安装包不是本次构建产物。' }
@@ -101,6 +105,19 @@ try {
         if ((Get-FileHash -LiteralPath $installed).Hash -ne (Get-FileHash -LiteralPath $expected).Hash) { throw '随包声明材料校验失败。' }
     }
     $program = Join-Path $extracted 'cortexos-desktop.exe'
+    Invoke-ReleasedTool py.exe @('-3', '-c', @'
+import sys
+from pathlib import Path
+exe, web = map(Path, sys.argv[1:])
+binary = exe.read_bytes()
+assets = sorted(p for p in web.rglob('*') if p.is_file())
+if not (web / 'index.html').is_file():
+    raise SystemExit('The build is missing index.html')
+missing = [p.relative_to(web).as_posix() for p in assets if ('/' + p.relative_to(web).as_posix()).encode() not in binary]
+if missing:
+    raise SystemExit(f'Assets missing from Windows executable: {missing}')
+print(f'Verified {len(assets)} embedded frontend paths')
+'@, $program, $web)
     Invoke-ReleasedTool py.exe @('-3', '-c', @'
 import re, sys
 from pathlib import Path
