@@ -7,7 +7,7 @@
 | 问题 | 结果、方法与文件 | 发布影响 |
 | --- | --- | --- |
 | Windows 签名与完整性 | 使用 Windows Authenticode 验证与 SHA-256 复核。候选名、大小及哈希见[安装矩阵](h0-windows-validation.md)。 | 最终产物应按发布策略签名，并对签名后的字节重算校验值。没有采购证书，也没有更改 Windows 执行策略。 |
-| 安装包内容 | 对照 [Tauri 配置](../../apps/desktop/src-tauri/tauri.conf.json) 与生成的 `target/release/nsis/x64/installer.nsi`。应用负载为主程序，WebView2 安装段另列；无额外 `resources` 或 `externalBin`。实际扫描 H0 的 27 个前端产物和发布主程序。未发现列入检查的源码、数据库、日志、环境文件或密钥文件路径。GitHub Token 与 PEM 私钥标记四类模式均为 0 命中，证据为 `artifacts/phase-h0/payload-inspection.json`。 | 安装器未独立解包，签名后的发布产物还要复核内容与哈希。 |
+| 安装包内容 | 检查 [Tauri 配置](../../apps/desktop/src-tauri/tauri.conf.json)、NSIS 生成脚本、H0 前端构建产物及主程序。追加静态解包后，公开 v0.2.0、G5 和 H0 留档的安装器各有 9 个条目。清单、哈希及原始字节模式扫描见[安装矩阵](h0-windows-validation.md)。 | 签名后的实际发布产物仍要复核内容与哈希。 |
 | 更新渠道 | [构建选项](../../apps/desktop/src-tauri/tauri.conf.json)、[Windows 交付文档](../windows-delivery.md) 与 [README](../../README.md) 显示当前通过 GitHub Releases 手动下载，未配置 Tauri updater、自动更新公钥或更新端点。 | 发布时同一入口提供安装器和 `SHA256SUMS.txt`，核对下载字节及 Authenticode 签发者。哈希一致只能证明与公布的字节相符。 |
 | Docker 边界 | 代码复核 [Python 启动参数](../../apps/desktop/src-tauri/src/benchmark/python.rs) 及 [Harness 会话](../../apps/desktop/src-tauri/src/benchmark/harness/session.rs)。G5 原生固定回复通过真实 Docker 接力及归属清理。H0 没有更改容器条件，也未重跑全套隔离反向测试。 | 保留无网络、无宿主敏感目录及 Docker Socket、非 root、只读根、能力与资源限制。G5 限定场景证据可追溯。 |
 | API Key | [Windows 凭据存储](../../apps/desktop/src-tauri/src/cloud/vault.rs) 通过 `CredReadW` / `CredWriteW`，凭据作用域含账户及工作区标识，调试与正式作用域分开。相关运行逻辑见[连接层](../../apps/desktop/src-tauri/src/cloud/runtime_connections.rs)。G5 合成凭据的保存、更新、重读、删除测试通过。 | 正式身份升级、恢复能力仍随安装矩阵验收。未读取真实用户凭据，也未发送真实云端请求。 |

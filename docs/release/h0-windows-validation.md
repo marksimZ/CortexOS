@@ -12,6 +12,12 @@
 
 本轮在本机用 `Get-FileHash -Algorithm SHA256` 和 `Get-AuthenticodeSignature` 复核三个文件，已发布 v0.2.0 的哈希与原同目录 `SHA256SUMS.txt` 一致。H0 用 `npm.cmd run tauri -- build --bundles nsis` 离线构建，安装器及主程序均为 `NotSigned`。官方发版页见 [v0.2.0](https://github.com/marksimZ/CortexOS/releases/tag/v0.2.0)。
 
+## 2026-11-21 离线安装包检查
+
+用经 SHA-256 核对的便携 7-Zip 26.06 执行 `l -tNsis -slt`、`t -tNsis` 和 `x -tNsis`。三个归档均通过完整性检查，各解出一个主程序、一个卸载程序和 7 项 NSIS 临时插件或界面资源，没有额外数据文件、源码目录或凭据文件。解出的主程序与安装器签名均为 `NotSigned`。逐文件摘要和日志在本地 `artifacts/phase-h0/installer-audit/installer-payloads.json`。 [7-Zip 26.06 官方归档和摘要](https://github.com/ip7z/7zip/releases/expanded_assets/26.06)
+
+H0 主程序 SHA-256 为 `804D84E9E866E0A014C22F6EA9B71BA50A2213A8610CF20FD02817B8C1722624`。它与当时本地 Release 主程序只有三个字节不同，均位于 Tauri 安装包类型标记。将本地标记从 `UNK` 替换为 `NSS` 后逐字节相同。三个解出的主程序在原始字节扫描中，对凭据文件名、PEM 私钥及两种 GitHub Token 模式均为零命中。原始字节扫描覆盖所列模式，嵌入资源内容另见构建产物检查。此次验证为静态解包，正式安装与运行仍见下方验收矩阵。 [Tauri 安装包类型标记](https://github.com/tauri-apps/tauri/blob/dev/crates/tauri-utils/src/platform.rs)
+
 ## 验收矩阵
 
 当前 Windows 会话能在非活动桌面运行调试程序，没有发现可用的 Windows Sandbox 或 Hyper-V 管理工具。非活动桌面仍共享当前账户下的正式注册表和凭据，正式安装、升级或卸载可能改变真实用户环境。本轮对正式身份的 GUI 测试保留人工验收。
