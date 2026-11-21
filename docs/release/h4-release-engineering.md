@@ -30,4 +30,10 @@ Tauri 官方更新组件锁定 2.14.1，复用现有 Rust 网络栈。启用 `re
 
 ## 已验证的更新路径
 
-`updates-native.spec.ts` 在非活动 Windows 桌面的原生 WebView2 上用 `tauri signer` 生成本轮专用签名。一个用例在 5.3 秒内通过。验证了打开关于页时无更新请求，稳定版忽略候选版，两渠道拒绝当前版本，拒绝篡改包、错误签名版本、跨地址下载、过大响应和服务 503，正确签名能完成校验。调试包的实际安装入口不可用。本次测试到校验为止，正式安装交接仍待隔离来宾。
+`updates-native.spec.ts` 在非活动 Windows 桌面的原生 WebView2 上用 `tauri signer` 生成本轮专用签名。最终候选包复跑 1 项，用例耗时 4.1 秒，整次运行 4.7 秒。打开关于页时无更新请求，稳定版忽略候选版，预览版忽略仅增加构建标记的当前版本。篡改包、错误签名版本、跨地址下载、过大响应和服务 503 均验证了对应拒绝或失败状态，正确签名完成校验。调试包的实际安装入口不可用。正式安装交接仍待隔离来宾。原始日志与两种尺寸截图位于 `artifacts/phase-h4/updater-verified-rc.log` 和 `artifacts/phase-h4/updater-verified-rc/`。
+
+## 候选构建与改动
+
+- `scripts/release-dry-run.ps1 -Version 0.2.1-rc.1 -OutputDirectory artifacts/phase-h4/verified-rc -SevenZip artifacts/phase-h0/installer-audit/portable/7z.exe` 从干净的 `dcad612` 完成 Windows x64 候选构建。TypeScript、锁定的 Rust 检查、前端生产构建和 Tauri NSIS 打包通过。Vite 保留原有图谱块体积提示。没有执行全量单元测试。
+- 相关代码包括 `updates.rs`、Tauri 配置、命令许可及 `AppUpdates.tsx`。应用版本读取共用于诊断、备份、评测与项目评测的新记录。SQLite 迁移和项目身份沿用原配置。
+- 发布工具包括 `release-dry-run.ps1`、`release_inventory.py`、两份来宾准备与执行脚本、更新集成测试及第三方许可材料。安装包比 H0 留档增加 178,620 字节。应用空闲资源和运行性能未在 H4 重测。

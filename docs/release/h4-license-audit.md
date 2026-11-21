@@ -14,3 +14,5 @@
 Rust 发行包的缺项按锁定版本保存上游许可原文。保留 `selectors 0.38.0` 覆盖源代码和 MPL 文本，其余四个上游分别核对固定提交。 [alloc-stdlib](https://github.com/dropbox/rust-alloc-no-stdlib/blob/0a81fd6928ea3b33c8cd484aa4575d50ffb98012/LICENSE) · [jsonschema](https://github.com/Stranger6667/jsonschema/blob/4eb7a64d9cf45bcbf38c7a69e544477294460751/LICENSE) · [simd](https://github.com/Nugine/simd/blob/d74c030d9dc4f3cae02146d1f497ff62726ef09a/LICENSE) · [WebView2 Rust](https://github.com/wravery/webview2-rs/blob/edc2caf886175ccaebe86078c9cfe1ae2a187328/LICENSE)
 
 多许可条目记录上游原始表达式。正式分发前还需由维护者核对最终采用条款、适用版权原文、上游 NOTICE 和所有人工复核项。候选材料用于核查，不能替代权利人授权。
+
+最终候选的 `license-audit.json` 记录 262 项 Rust 运行依赖、60 项 Windows 目标解析出的其他条目及 85 项参与前端生产打包的 npm 依赖。31 个 JavaScript 源映射均可归因，自动清单未留下缺失许可文件。普通 Rust 依赖中的 MPL 源码随包提供四份，分别为 `cssparser`、`dtoa-short`、`option-ext` 和 `selectors`。`cssparser-macros` 作为构建时过程宏单列。包内两份第三方材料均与生成文件哈希相符。最终分发法律判断与项目授权继续待维护者审批。

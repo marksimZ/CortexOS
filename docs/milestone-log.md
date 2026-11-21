@@ -6,6 +6,7 @@
 - 新增 `scripts/release-dry-run.ps1`、`scripts/release_inventory.py` 与 Windows 沙盒验收入口。首份本地候选完成生产构建、7-Zip NSIS 归档完整性检查、11 项解包白名单及两种签名状态读取。正式分发保留 No-Go。
 - `npm.cmd run typecheck`、锁定离线 Rust 检查及调试桌面构建通过。非活动桌面的 `updates-native.spec.ts` 通过 1 项，含稳定版与预览版、服务失败、完整性和版本签名校验。证据与范围见 [H4 发布工程](release/h4-release-engineering.md)。
 - 经批准启用 Windows 沙盒，Windows 返回需要重启。全新安装、旧版升级、卸载和正式更新安装验收仍待来宾环境。见 [安装矩阵](release/h4-install-upgrade-validation.md) 与 [发布准入](release/h4-release-checklist.md)。
+- `release-dry-run.ps1` 从 `dcad612` 完成正式标识的 `0.2.1-rc.1` 候选，6,485,232 字节，SHA-256 已记录。对该实际文件复跑 `updates-native.spec.ts`，1 项通过。候选材料覆盖 262 项 Rust 运行依赖与 85 个前端包。`prepare-windows-release-sandbox.ps1` 已生成网络关闭的 `fresh.wsb` 和 `upgrade.wsb`，等待重启后执行。
 
 ## 2026-11-21 Phase H3 可靠性与本机诊断
 
