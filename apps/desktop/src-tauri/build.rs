@@ -3,6 +3,15 @@ fn main() {
     println!("cargo:rerun-if-changed=icons");
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
+            "backup_preview",
+            "backup_save",
+            "backup_open",
+            "restore_stage",
+            "restore_cancel",
+            "restore_on_start",
+            "restore_ack",
+            "backup_history",
+            "export_knowledge",
             "storage_inventory",
             "cancel_storage_inventory",
             "storage_recovery_history",
@@ -22,6 +31,7 @@ fn main() {
             "activate_model_runtime_profile",
             "delete_model_runtime_profile",
             "list_runtime_cloud_connections",
+            "bind_runtime_cloud_key",
             "add_runtime_cloud_connection",
             "remove_runtime_cloud_connection",
             "refresh_runtime_cloud_catalog",

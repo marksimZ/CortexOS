@@ -104,6 +104,16 @@ struct Entry {
     outcome: Option<Outcome>,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Cleanup {
+    bytes: u64,
+    at: String,
+}
+
+const CLEANUP_PLAN: &str = "cleanup-plan.json";
+const CLEANUP_RESULT: &str = "cleanup-result.json";
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Record {
@@ -114,6 +124,8 @@ pub(crate) struct Record {
     backup_location: String,
     outcome: Option<Outcome>,
     can_restore: bool,
+    can_cleanup: bool,
+    cleanup: Option<Cleanup>,
 }
 
 fn os_error(context: &str) -> String {
@@ -412,6 +424,60 @@ fn cached_backup(entry: &Entry) -> AppResult<Option<DirectoryId>> {
     directory_id(&entry.directory.join("files"))
 }
 
+fn cleanup_cache(entry: &Entry, profile: &Path) -> AppResult<()> {
+    let _parents = lock_ancestors(&entry.directory)?;
+    let current = cache_path(profile, &entry.plan.cache)?;
+    if directory_id(&current)?.is_none_or(|id| id == entry.plan.source)
+        || checked_size(&current)?.files == 0
+    {
+        return Err("当前界面缓存尚未确认重建，旧备份已保留。".into());
+    }
+    let prior = read_record::<Cleanup>(&entry.directory.join(CLEANUP_PLAN))?;
+    if read_record::<Cleanup>(&entry.directory.join(CLEANUP_RESULT))?.is_some() {
+        return Ok(());
+    }
+    let saved = entry.directory.join("files");
+    let retiring = entry.directory.join("files-purging");
+    let plan = match prior {
+        Some(plan) => plan,
+        None => {
+            if cached_backup(entry)? != Some(entry.plan.source)
+                || directory_id(&retiring)?.is_some()
+            {
+                return Err("缓存备份已变化，请重新读取。".into());
+            }
+            let plan = Cleanup {
+                bytes: checked_size(&saved)?.logical_bytes,
+                at: now(),
+            };
+            write_record(&entry.directory, CLEANUP_PLAN, &plan)?;
+            plan
+        }
+    };
+    if let Some(id) = cached_backup(entry)? {
+        if id != entry.plan.source || directory_id(&retiring)?.is_some() {
+            return Err("缓存备份已变化，现有文件已保留。".into());
+        }
+        move_verified(&saved, &retiring, id)?;
+    }
+    if let Some(id) = directory_id(&retiring)? {
+        if id != entry.plan.source {
+            return Err("待清理目录身份已变化，现有文件已保留。".into());
+        }
+        checked_size(&retiring)?;
+        // The path is the verified archive under locked application-owned parents.
+        fs::remove_dir_all(&retiring).map_err(|_| "缓存未清理完，请确认没有进程占用后重试。")?;
+    }
+    write_record(
+        &entry.directory,
+        CLEANUP_RESULT,
+        &Cleanup {
+            bytes: plan.bytes,
+            at: now(),
+        },
+    )
+}
+
 fn outcome(status: Status, detail: Option<String>, saved_bytes: Option<u64>) -> Outcome {
     Outcome {
         status,
@@ -585,6 +651,7 @@ pub(crate) enum Request {
     Archive { cache: String, approval_id: String },
     Restore { id: String },
     Cancel { id: String },
+    CleanupCache { id: String, confirmed: bool },
 }
 
 fn schedule(root: &Path, plan: &Plan) -> AppResult<()> {
@@ -622,6 +689,9 @@ fn card_records(root: &Path) -> AppResult<Vec<Record>> {
     let mut records = Vec::new();
     for entry in rows {
         let (label, _) = cache_info(&entry.plan.cache)?;
+        let cleanup_started =
+            read_record::<Cleanup>(&entry.directory.join(CLEANUP_PLAN))?.is_some();
+        let cleanup = read_record::<Cleanup>(&entry.directory.join(CLEANUP_RESULT))?;
         let (action, backup, can_restore) = match &entry.plan.action {
             Action::Archive => (
                 "archive",
@@ -641,7 +711,9 @@ fn card_records(root: &Path) -> AppResult<Vec<Record>> {
             requested_at: entry.plan.at,
             backup_location: backup.to_string_lossy().into_owned(),
             outcome: entry.outcome,
-            can_restore,
+            can_restore: can_restore && !cleanup_started,
+            can_cleanup: cleanup.is_none() && (can_restore || cleanup_started),
+            cleanup,
         });
     }
     Ok(records)
@@ -719,6 +791,25 @@ pub(crate) async fn storage_recovery_request(
             return Err("已有一项预约，请先重开应用处理或撤销它。".into());
         }
         let (profile, pid) = live.ok_or("无法核实当前界面数据位置。")?;
+        if let Request::CleanupCache { ref id, confirmed } = request {
+            if !confirmed {
+                return Err("请先确认清理所选缓存备份。".into());
+            }
+            let entry = rows
+                .iter()
+                .find(|row| {
+                    row.id == *id
+                        && matches!(row.plan.action, Action::Archive)
+                        && row.plan.profile == profile
+                        && row
+                            .outcome
+                            .as_ref()
+                            .is_some_and(|result| result.status == Status::Archived)
+                })
+                .ok_or("未找到可以清理的缓存备份。")?;
+            cleanup_cache(entry, &profile)?;
+            return card_records(&root);
+        }
         let browser = Browser {
             pid,
             creation: browser_creation(pid)?.ok_or("界面进程已变化，请重新预览。")?,
@@ -758,6 +849,9 @@ pub(crate) async fn storage_recovery_request(
                                 .is_some_and(|result| result.status == Status::Archived)
                     })
                     .ok_or("未找到可以恢复的备份。")?;
+                if read_record::<Cleanup>(&entry.directory.join(CLEANUP_PLAN))?.is_some() {
+                    return Err("此缓存备份已安排清理。".into());
+                }
                 if cached_backup(entry)? != Some(entry.plan.source) {
                     return Err("备份目录已变化或已恢复。".into());
                 }
@@ -776,7 +870,7 @@ pub(crate) async fn storage_recovery_request(
                     },
                 )
             }
-            Request::Cancel { .. } => unreachable!(),
+            Request::Cancel { .. } | Request::CleanupCache { .. } => unreachable!(),
         };
         schedule(
             &root,

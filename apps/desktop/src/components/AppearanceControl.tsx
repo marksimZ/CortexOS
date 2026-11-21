@@ -4,19 +4,21 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { preference, remember } from "../studio";
 
 type Appearance = "system" | "light" | "dark";
-const stored = preference("appearance");
-const initial: Appearance = stored === "dark" || stored === "light" ? stored : "system";
+function savedAppearance(): Appearance {
+  const stored = preference("appearance");
+  return stored === "dark" || stored === "light" ? stored : "system";
+}
 const media = window.matchMedia("(prefers-color-scheme: dark)");
 function apply(value: Appearance) {
   const scheme = value === "system" ? (media.matches ? "dark" : "light") : value;
   document.documentElement.dataset.theme = value;
   document.documentElement.dataset.colorScheme = scheme;
 }
-apply(initial);
+apply(savedAppearance());
 
 export function AppearanceControl() {
   const id = useId();
-  const [appearance, setAppearance] = useState<Appearance>(initial);
+  const [appearance, setAppearance] = useState<Appearance>(savedAppearance);
   useEffect(() => {
     apply(appearance);
     const update = () => apply(appearance);

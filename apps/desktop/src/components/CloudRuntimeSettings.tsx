@@ -30,6 +30,7 @@ type Probe = { model: string; capability: Capability; state: string; checkedAt: 
 type Connection = {
   id: string; label: string; provider: Provider; address: string | null; compatibleRerank: boolean;
   catalogState: string; catalogCheckedAt: string | null; models: Model[]; probes: Probe[]; limits: Limits[];
+  credentialAvailable?: boolean;
 };
 const time = (value: string) => new Date(value).toLocaleString("zh-CN", { hour12: false });
 const stateLabel = (value: string) => statuses[value] ?? "状态未知";
@@ -82,7 +83,19 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
   }
 
   function update(row: Connection) {
-    setConnections(current => current.map(item => item.id === row.id ? row : item));
+    setConnections(current => current.map(item => item.id === row.id ? { ...item, ...row } : item));
+  }
+
+  function bindKey(event: FormEvent<HTMLFormElement>, connection: Connection) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const apiKey = new FormData(form).get("apiKey");
+    void run(async () => {
+      await invoke("bind_runtime_cloud_key", { workspaceId, connectionId: connection.id, apiKey });
+      form.reset();
+      update({ ...connection, credentialAvailable: true });
+      setNotice("密钥已在本机绑定。可以刷新模型列表检查连接。");
+    });
   }
 
   function add(event: FormEvent<HTMLFormElement>) {
@@ -175,6 +188,13 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
           <span>{providers[connection.provider]} {connection.address}</span>
           <button type="button" className="button text-button" disabled={busy} onClick={() => setPending("remove")}>移除连接</button>
         </div>
+        {connection.credentialAvailable === false && <form className="settings-fields" onSubmit={event => bindKey(event, connection)}>
+          <p>此连接需要在本机绑定密钥。</p>
+          <div className="field"><label htmlFor="runtime-cloud-bind-key">API 密钥</label>
+            <input key={connection.id} id="runtime-cloud-bind-key" name="apiKey" type="password" autoComplete="off"
+              spellCheck={false} maxLength={1024} required disabled={busy} /></div>
+          <button className="button secondary" disabled={busy}>绑定密钥</button>
+        </form>}
         {pending === "remove" && <div className="cloud-runtime-confirm">
           <p>移除「{connection.label}」及其保存在 Windows 中的密钥？</p>
           <button type="button" className="button secondary" onClick={() => void run(async () => {
@@ -188,12 +208,12 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
         </div>}
         <CloudKnowledgeSettings key={connection.id} workspaceId={workspaceId} connectionId={connection.id} />
         <div className="cloud-runtime-actions">
-          <button type="button" className="button secondary" disabled={busy} onClick={() => void run(async () => {
+          <button type="button" className="button secondary" disabled={busy || connection.credentialAvailable === false} onClick={() => void run(async () => {
             const row = await invoke<Connection>("refresh_runtime_cloud_catalog", { workspaceId, connectionId: connection.id });
             update(row);
             if (model && model !== manual && !row.models.some(item => item.id === model)) { setManualModel(model); setModel(manual); }
           })}>刷新模型列表</button>
-          <span>目录{connection.catalogState === "verified" ? "已读取" : stateLabel(connection.catalogState)}{connection.catalogCheckedAt && "，" + time(connection.catalogCheckedAt)}</span>
+          <span>{connection.credentialAvailable === false ? "等待绑定密钥" : <>目录{connection.catalogState === "verified" ? "已读取" : stateLabel(connection.catalogState)}{connection.catalogCheckedAt && "，" + time(connection.catalogCheckedAt)}</>}</span>
         </div>
         <div className="field">
           <label htmlFor="runtime-cloud-model">模型</label>
@@ -223,7 +243,7 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
                   {probe && <><br /><time dateTime={probe.checkedAt}>{stateLabel(probe.state)}，{time(probe.checkedAt)}</time>
                     {probe.dimensions != null && "，" + probe.dimensions + " 维"}</>}
                 </span>
-                {!unavailable && <button type="button" className="button text-button" disabled={busy}
+                {!unavailable && <button type="button" className="button text-button" disabled={busy || connection.credentialAvailable === false}
                   onClick={() => setPending(role)} aria-label={"验证" + roles[role]}>验证</button>}
               </li>;
             })}

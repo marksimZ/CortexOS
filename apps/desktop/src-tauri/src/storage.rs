@@ -155,7 +155,7 @@ fn check_cancel(cancel: &watch::Receiver<bool>) -> AppResult<()> {
     }
 }
 
-fn is_link(metadata: &fs::Metadata) -> bool {
+pub(crate) fn is_link(metadata: &fs::Metadata) -> bool {
     #[cfg(windows)]
     {
         use std::os::windows::fs::MetadataExt;
@@ -316,7 +316,7 @@ fn normal_directory(path: &Path) -> Result<bool, ()> {
 }
 
 #[cfg(windows)]
-fn disk_free_bytes(directory: &Path) -> Option<u64> {
+pub(crate) fn disk_free_bytes(directory: &Path) -> Option<u64> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
     let directory: Vec<_> = directory.as_os_str().encode_wide().chain([0]).collect();
@@ -334,7 +334,7 @@ fn disk_free_bytes(directory: &Path) -> Option<u64> {
 }
 
 #[cfg(not(windows))]
-fn disk_free_bytes(_: &Path) -> Option<u64> {
+pub(crate) fn disk_free_bytes(_: &Path) -> Option<u64> {
     None
 }
 
@@ -505,10 +505,22 @@ fn evidence_groups() -> Vec<Item> {
             "索引与模型、版本和授权绑定。回收前需核对引用和重建条件。",
         ),
         Item::new(
-            "harness",
-            "项目任务记录",
+            "knowledge-content",
+            "知识正文与版本",
             "工作区",
-            "审核、修订和补丁保存在任务记录中。容器占用需要另行核验。",
+            "正文和版本保存在数据库中，可用于对照与恢复。",
+        ),
+        Item::new(
+            "benchmark-results",
+            "评测历史与结果",
+            "工作区",
+            "统计评测配置、评分明细与资源数据的库内字节。",
+        ),
+        Item::new(
+            "harness",
+            "项目任务记录与已保存副本",
+            "工作区",
+            "统计已保存的项目资料、草案与计划。当前容器里的未提交副本由 Docker 管理。",
         ),
         Item::new(
             "external-models",
@@ -596,6 +608,20 @@ fn read_references(
                     "SELECT (SELECT coalesce(sum(length(vector)),0) FROM rag_vectors)+(SELECT coalesce(sum(length(vector)),0) FROM model_cloud_vectors)+(SELECT coalesce(sum(length(block)),0) FROM knowledge_fts_data)",
                 ),
             ),
+            "knowledge-content" => (
+                &[("知识版本", "SELECT count(*) FROM knowledge_versions")],
+                Some("SELECT coalesce(sum(length(CAST(title AS BLOB))+length(CAST(content AS BLOB))),0) FROM knowledge_versions"),
+            ),
+            "benchmark-results" => (
+                &[
+                    ("评测运行", "SELECT count(*) FROM benchmark_runs"),
+                    ("独立评分记录", "SELECT count(*) FROM benchmark_evaluations"),
+                ],
+                Some("SELECT
+                    (SELECT coalesce(sum(length(CAST(config_snapshot_json AS BLOB))+length(CAST(hardware_snapshot_json AS BLOB))),0) FROM benchmark_runs)
+                    +(SELECT coalesce(sum(length(CAST(metrics_json AS BLOB))+length(CAST(details_json AS BLOB))),0) FROM benchmark_evaluations)
+                    +(SELECT coalesce(sum(length(CAST(values_json AS BLOB))),0) FROM benchmark_resource_samples)"),
+            ),
             "harness" => (
                 &[
                     (
@@ -611,7 +637,10 @@ fn read_references(
                         "SELECT count(*) FROM benchmark_generated_cases r JOIN benchmark_generation_jobs j ON j.id=r.job_id WHERE substr(json_extract(j.plan_json,'$.purpose'),1,8)='harness_'",
                     ),
                 ],
-                None,
+                Some("SELECT
+                    (SELECT coalesce(sum(length(CAST(files_json AS BLOB))),0) FROM benchmark_repository_snapshots)
+                    +(SELECT coalesce(sum(length(CAST(plan_json AS BLOB))),0) FROM benchmark_generation_jobs WHERE substr(json_extract(plan_json,'$.purpose'),1,8)='harness_')
+                    +(SELECT coalesce(sum(length(CAST(candidate_json AS BLOB))),0) FROM benchmark_generated_cases r JOIN benchmark_generation_jobs j ON j.id=r.job_id WHERE substr(json_extract(j.plan_json,'$.purpose'),1,8)='harness_')"),
             ),
             "external-models" => (
                 &[
@@ -706,6 +735,12 @@ fn inventory(
         )
         .at(directory, Some(directory_size(directory, true, cancel)?)),
     );
+    for (id, label, dir, reason) in [
+        ("portable-data", "备份与恢复记录", directory.join("data-portability"), "包含恢复前自动备份、恢复暂存及本机备份记录。用户另选位置的备份由用户保管。"),
+        ("cache-recovery-data", "已移出的界面缓存", directory.join("storage-recovery"), "界面缓存移出后的副本，用于撤销缓存回收。"),
+    ] {
+        items.push(Item::new(id, label, "CortexOS", reason).at(&dir, Some(directory_size(&dir, false, cancel)?)));
+    }
     let mut webview = Item::new(
         "webview",
         "应用界面数据与缓存",

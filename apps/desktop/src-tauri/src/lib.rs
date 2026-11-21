@@ -18,6 +18,7 @@ mod runtime_profiles;
 mod runtime_usage;
 mod local_runtime;
 mod ollama;
+mod portability;
 mod retrieval;
 mod rag;
 mod source_chunks;
@@ -75,6 +76,15 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            portability::backup_preview,
+            portability::backup_save,
+            portability::backup_open,
+            portability::restore::restore_stage,
+            portability::restore::restore_cancel,
+            portability::restore::restore_on_start,
+            portability::restore::restore_ack,
+            portability::backup_history,
+            portability::knowledge_export::export_knowledge,
             storage::storage_inventory,
             storage::cancel_storage_inventory,
             #[cfg(windows)]
@@ -96,6 +106,7 @@ pub fn run() {
             runtime_profiles::activate_model_runtime_profile,
             runtime_profiles::delete_model_runtime_profile,
             cloud::runtime_connections::list_runtime_cloud_connections,
+            cloud::runtime_connections::bind_runtime_cloud_key,
             cloud::runtime_connections::add_runtime_cloud_connection,
             cloud::runtime_connections::remove_runtime_cloud_connection,
             cloud::runtime_connections::refresh_runtime_cloud_catalog,

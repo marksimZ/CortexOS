@@ -9,11 +9,13 @@ type History = {
   action: "archive" | "restore";
   backupLocation: string;
   canRestore: boolean;
+  canCleanup: boolean;
+  cleanup: { bytes: number; at: string } | null;
   outcome: { status: string; detail: string | null; savedBytes: number | null } | null;
 }[];
 
 test("native cache confirmation, cancellation, restart backup and conflict-free recovery", async ({}, info) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const dataDirectory = info.outputPath("data");
   const profileDirectory = join(dataDirectory, "storage-test-webview");
   const cache = join(profileDirectory, "EBWebView", "Default", "Code Cache");
@@ -115,6 +117,37 @@ test("native cache confirmation, cancellation, restart backup and conflict-free 
     await expect(app.page.getByText("已恢复", { exact: true })).toBeVisible();
     await app.page.getByText("已恢复", { exact: true }).scrollIntoViewIfNeeded();
     await app.page.screenshot({ path: info.outputPath("recovery-result.png") });
+
+    // Archive again, then wait for WebView2 itself to recreate the Code Cache.
+    dialog = await openArchive();
+    await dialog.getByRole("button", { name: "确认预约", exact: true }).click();
+    await expect(app.page.getByText("待下次启动", { exact: true })).toBeVisible();
+    await app.closeFromUi();
+    await app.stop();
+    app = await launch();
+    await settings();
+    const rebuiltIndex = join(cache, "js", "index");
+    await expect.poll(async () => (await stat(rebuiltIndex).catch(() => undefined))?.size ?? 0).toBeGreaterThan(0);
+    const second = (await records()).find(row => row.id !== archived!.id && row.canCleanup)!;
+    expect(second).toBeDefined();
+    expect(await readFile(join(second.backupLocation, "cortexos-original-test.bin"), "utf8")).toBe("original");
+    await expect(nativeInvoke(app.page, "storage_recovery_request", {
+      request: { kind: "cleanupCache", id: second.id, confirmed: false },
+    })).rejects.toThrow("请先确认清理");
+    await app.page.locator("summary").filter({ hasText: "已移入备份" }).first().click();
+    await app.page.getByRole("button", { name: "清理缓存备份…", exact: true }).click();
+    const cleanupDialog = app.page.getByRole("dialog", { name: "确认清理缓存备份" });
+    await expect(cleanupDialog.getByRole("button", { name: "取消", exact: true })).toBeFocused();
+    await app.page.screenshot({ path: info.outputPath("cache-cleanup-confirm.png") });
+    await cleanupDialog.getByRole("button", { name: "确认清理", exact: true }).click();
+    await expect(app.page.getByText("已清理", { exact: true })).toBeVisible();
+    const cleaned = (await records()).find(row => row.id === second.id)!;
+    expect(cleaned.cleanup?.bytes).toBeGreaterThanOrEqual(8);
+    expect(cleaned.canRestore).toBe(false);
+    await expect(stat(second.backupLocation)).rejects.toHaveProperty("code", "ENOENT");
+    expect((await stat(rebuiltIndex)).size).toBeGreaterThan(0);
+    expect(await readFile(preserved, "utf8")).toBe("unmanaged");
+    await writeFile(info.outputPath("cleanup-history.json"), JSON.stringify(cleaned, null, 2));
   } finally {
     await app.stop();
   }

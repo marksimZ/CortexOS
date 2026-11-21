@@ -6,6 +6,15 @@
     "main"
   ],
   "permissions": [
+    "allow-backup-preview",
+    "allow-backup-save",
+    "allow-backup-open",
+    "allow-restore-stage",
+    "allow-restore-cancel",
+    "allow-restore-on-start",
+    "allow-restore-ack",
+    "allow-backup-history",
+    "allow-export-knowledge",
     "allow-storage-inventory",
     "allow-cancel-storage-inventory",
     "allow-storage-recovery-history",
@@ -25,6 +34,7 @@
     "allow-activate-model-runtime-profile",
     "allow-delete-model-runtime-profile",
     "allow-list-runtime-cloud-connections",
+    "allow-bind-runtime-cloud-key",
     "allow-add-runtime-cloud-connection",
     "allow-remove-runtime-cloud-connection",
     "allow-refresh-runtime-cloud-catalog",

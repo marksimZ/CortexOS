@@ -20,6 +20,7 @@ pub struct AppState {
     pub(crate) runtime_cloud: Arc<tokio::sync::Mutex<()>>,
     pub(crate) tasks: Arc<crate::tasks::TaskSlot>,
     pub(crate) storage_scans: Arc<crate::tasks::TaskSlot>,
+    pub(crate) opened_backup: Arc<Mutex<Option<crate::portability::OpenedBackup>>>,
     #[cfg(windows)]
     pub(crate) storage_preview: Arc<Mutex<Option<crate::storage::recovery::PreviewTicket>>>,
     pub closing: Arc<AtomicBool>,
@@ -36,6 +37,7 @@ impl AppState {
             runtime_cloud: Arc::new(tokio::sync::Mutex::new(())),
             tasks: Arc::new(crate::tasks::TaskSlot::default()),
             storage_scans: Arc::new(crate::tasks::TaskSlot::default()),
+            opened_backup: Arc::new(Mutex::new(None)),
             #[cfg(windows)]
             storage_preview: Arc::new(Mutex::new(None)),
             closing: Arc::new(AtomicBool::new(false)),

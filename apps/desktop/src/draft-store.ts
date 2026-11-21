@@ -9,6 +9,27 @@ let closing = false;
 let closeNative: (() => Promise<void>) | undefined;
 let requestNativeClose: (() => Promise<void>) | undefined;
 
+export function snapshotDrafts(include: (key: string) => boolean): Record<string, string> {
+  const entries: Record<string, string> = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && include(key)) {
+        const value = localStorage.getItem(key);
+        if (value !== null) entries[key] = value;
+      }
+    }
+  } catch {
+    throw new Error("无法读取草稿和界面偏好，请检查本地存储后重试。");
+  }
+  for (const [key, value] of volatile) {
+    if (!include(key)) continue;
+    if (value === undefined) delete entries[key];
+    else entries[key] = JSON.stringify(value);
+  }
+  return entries;
+}
+
 // The caller supplies a key scoped to the workspace and the document's base revision.
 export function draftStore<T>(namespace: string, accepts: (value: unknown) => boolean = () => true) {
   const keyFor = (key: string) => `${prefix}${namespace}.${encodeURIComponent(key)}`;

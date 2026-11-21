@@ -16,6 +16,7 @@ import { CloudRuntimeSettings } from "./components/CloudRuntimeSettings";
 import { RuntimeProfilesSettings } from "./components/RuntimeProfilesSettings";
 import { RuntimeResources } from "./components/RuntimeResources";
 import { StorageInventory } from "./components/StorageInventory";
+import { DataPortability } from "./components/DataPortability";
 
 export function SettingsPage({ studio }: { studio: Studio }) {
   const draft = studio.settingsDraft;
@@ -266,7 +267,7 @@ export function SettingsPage({ studio }: { studio: Studio }) {
               </div>
               <div>
                 <dt>文件访问</dt>
-                <dd>只读取你在“知识”页主动选择的文件</dd>
+                <dd>导入或恢复时，只读取你主动选择的文件</dd>
               </div>
               <div>
                 <dt>升级备份</dt>
@@ -280,6 +281,7 @@ export function SettingsPage({ studio }: { studio: Studio }) {
                 {studio.data.dataPath}
               </p>
             )}
+            {studio.desktop && section === "data" && <DataPortability workspaceId={studio.workspaceId} />}
             {studio.desktop && <StorageInventory />}
             <details className="field-help">
               <summary>隐私与存储说明</summary>

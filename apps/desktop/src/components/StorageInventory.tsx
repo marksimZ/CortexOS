@@ -46,11 +46,14 @@ type RecoveryRecord = {
   requestedAt: string;
   backupLocation: string;
   canRestore: boolean;
+  canCleanup: boolean;
+  cleanup: { bytes: number; at: string } | null;
   outcome: { status: RecoveryStatus; detail: string | null; savedBytes: number | null; at: string } | null;
 };
 type RecoveryRequest =
   | { kind: "archive"; cache: string; approvalId: string }
-  | { kind: "restore" | "cancel"; id: string };
+  | { kind: "restore" | "cancel"; id: string }
+  | { kind: "cleanupCache"; id: string; confirmed: true };
 
 const recoveryStatus: Record<RecoveryStatus, string> = {
   archived: "已移入备份",
@@ -137,7 +140,7 @@ function PreviewReport({ inventory, preview, canRequest, onArchive }: {
 }
 
 function RecoveryHistory({ records, disabled, onRequest }: {
-  records: RecoveryRecord[]; disabled: boolean; onRequest: (record: RecoveryRecord, kind: "restore" | "cancel") => void;
+  records: RecoveryRecord[]; disabled: boolean; onRequest: (record: RecoveryRecord, kind: "restore" | "cancel" | "cleanupCache") => void;
 }) {
   if (!records.length) return null;
   const pending = records.some(row => !row.outcome);
@@ -148,18 +151,22 @@ function RecoveryHistory({ records, disabled, onRequest }: {
       {records.map(row => <li key={row.id}>
         <details className="field-help" open={!row.outcome || row.outcome.status === "blocked" || undefined}>
           <summary>{row.action === "archive" ? "备份" : "恢复"}{row.label}
-            <span className="storage-size">{row.outcome ? recoveryStatus[row.outcome.status] : "待下次启动"}</span>
+            <span className="storage-size">{row.cleanup ? "已清理" : row.outcome ? recoveryStatus[row.outcome.status] : "待下次启动"}</span>
           </summary>
           <dl className="data-summary">
             <div><dt>预约时间</dt><dd>{new Date(row.requestedAt).toLocaleString("zh-CN")}</dd></div>
             {row.outcome && <div><dt>处理时间</dt><dd>{new Date(row.outcome.at).toLocaleString("zh-CN")}</dd></div>}
             <div><dt>{row.action === "archive" ? "备份位置" : "恢复前缓存的保存位置"}</dt><dd className="data-path">{row.backupLocation}</dd></div>
             {row.outcome?.savedBytes != null && <div><dt>文件大小</dt><dd>{bytes(row.outcome.savedBytes)}</dd></div>}
-            {row.outcome?.status === "archived" && <div><dt>释放空间</dt><dd>0 字节（同盘备份）</dd></div>}
+            {row.outcome?.status === "archived" && !row.cleanup && <div><dt>释放空间</dt><dd>0 字节（同盘备份）</dd></div>}
+            {row.cleanup && <div><dt>已清理的文件大小</dt><dd>{bytes(row.cleanup.bytes)}</dd></div>}
           </dl>
           {row.outcome?.detail && <p className="form-error">{row.outcome.detail}</p>}
           {!row.outcome && <button type="button" className="button secondary" disabled={disabled} onClick={() => onRequest(row, "cancel")}>撤销预约</button>}
-          {row.canRestore && <button type="button" className="button secondary" disabled={disabled || pending} onClick={() => onRequest(row, "restore")}>恢复缓存…</button>}
+          {(row.canRestore || row.canCleanup) && <div className="cloud-runtime-actions">
+            {row.canRestore && <button type="button" className="button secondary" disabled={disabled || pending} onClick={() => onRequest(row, "restore")}>恢复缓存…</button>}
+            {row.canCleanup && <button type="button" className="button text-button" disabled={disabled || pending} onClick={() => onRequest(row, "cleanupCache")}>清理缓存备份…</button>}
+          </div>}
         </details>
       </li>)}
     </ul>
@@ -175,7 +182,7 @@ export function StorageInventory() {
   const [records, setRecords] = useState<RecoveryRecord[]>([]);
   const [recoveryError, setRecoveryError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [confirmation, setConfirmation] = useState<{ request: RecoveryRequest; label: string; path: string | null }>();
+  const [confirmation, setConfirmation] = useState<{ request: RecoveryRequest; label: string; path: string | null; size?: number | null }>();
   const dialog = useRef<HTMLDialogElement>(null);
   const cancelConfirmation = useRef<HTMLButtonElement>(null);
   const activeScan = useRef<string | null>(null);
@@ -244,7 +251,7 @@ export function StorageInventory() {
     setRecoveryError("");
     try {
       setRecords(await invoke<RecoveryRecord[]>("storage_recovery_request", { request }));
-      setInventory(previous => previous?.reclaimPreview
+      setInventory(previous => request.kind === "cleanupCache" ? undefined : previous?.reclaimPreview
         ? { ...previous, reclaimPreview: { ...previous.reclaimPreview, approvalId: null } }
         : previous);
       dialog.current?.close();
@@ -296,23 +303,27 @@ export function StorageInventory() {
         void requestRecovery({ kind, id: record.id });
       } else {
         setRecoveryError("");
-        setConfirmation({ request: { kind, id: record.id }, label: record.label, path: record.backupLocation });
+        const request = kind === "cleanupCache" ? { kind, id: record.id, confirmed: true as const } : { kind, id: record.id };
+        setConfirmation({ request, label: record.label, path: record.backupLocation, size: record.outcome?.savedBytes });
       }
     }} />
     <AppDialog ref={dialog} className="form-dialog" aria-labelledby="confirm-cache-operation"
       onClose={() => setConfirmation(undefined)} onCancel={event => { if (saving) event.preventDefault(); }}>
       {confirmation && <form onSubmit={event => { event.preventDefault(); void requestRecovery(confirmation.request); }}>
-        <h2 id="confirm-cache-operation">{confirmation.request.kind === "archive" ? "确认移到备份" : "确认恢复缓存"}</h2>
+        <h2 id="confirm-cache-operation">{confirmation.request.kind === "archive" ? "确认移到备份" : confirmation.request.kind === "cleanupCache" ? "确认清理缓存备份" : "确认恢复缓存"}</h2>
         <p><strong>{confirmation.label}</strong></p>
         {confirmation.path && <p className="data-path">{confirmation.path}</p>}
+        {confirmation.request.kind === "cleanupCache" && confirmation.size != null && <p>备份文件大小 {bytes(confirmation.size)}</p>}
         <p>{confirmation.request.kind === "archive"
           ? "下次打开 CortexOS 时，应用会复查并将此项缓存移到同盘备份。文件保留在备份中，这一步不会释放磁盘空间。"
-          : "下次打开 CortexOS 时，应用会把此项备份放回原位置。如果已经生成新缓存，会先把新缓存单独保存。"}
+          : confirmation.request.kind === "cleanupCache"
+            ? "确认界面缓存已重建后，应用会删除旧副本。清理完成后，这份旧副本将无法恢复。"
+            : "下次打开 CortexOS 时，应用会把此项备份放回原位置。如果已经生成新缓存，会先把新缓存单独保存。"}
         </p>
         {recoveryError && <p className="form-error" role="alert">{recoveryError}</p>}
         <div className="cloud-runtime-actions">
           <button type="button" className="button secondary" ref={cancelConfirmation} disabled={saving} onClick={() => dialog.current?.close()}>取消</button>
-          <button type="submit" className="button primary" disabled={saving}>{saving ? "正在预约…" : "确认预约"}</button>
+          <button type="submit" className="button primary" disabled={saving}>{confirmation.request.kind === "cleanupCache" ? (saving ? "正在清理…" : "确认清理") : (saving ? "正在预约…" : "确认预约")}</button>
         </div>
       </form>}
     </AppDialog>

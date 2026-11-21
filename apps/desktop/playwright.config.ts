@@ -14,7 +14,7 @@ export default defineConfig({
     reducedMotion: "reduce",
     screenshot: "only-on-failure",
   },
-  webServer: {
+  webServer: process.env.CORTEXOS_NATIVE_ONLY === "1" ? undefined : {
     command: "npm.cmd run dev",
     url: "http://127.0.0.1:1420",
     reuseExistingServer: !process.env.CI,
@@ -81,6 +81,7 @@ export default defineConfig({
         "ui-micro-native.spec.ts",
         "storage-native.spec.ts",
         "storage-recovery-native.spec.ts",
+        "data-portability-native.spec.ts",
         "chat.spec.ts",
         "markdown-camera.spec.ts",
         "chat-design.spec.ts",

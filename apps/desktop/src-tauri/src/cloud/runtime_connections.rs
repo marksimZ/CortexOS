@@ -531,11 +531,19 @@ fn estimated_bytes<'a>(texts: impl IntoIterator<Item = &'a str>) -> u64 {
     texts.into_iter().map(|text| text.len() as u64 + 64).sum()
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ListedConnection {
+    #[serde(flatten)]
+    connection: RuntimeConnection,
+    credential_available: bool,
+}
+
 #[tauri::command]
 pub async fn list_runtime_cloud_connections(
     state: State<'_, AppState>,
     workspace_id: String,
-) -> AppResult<Vec<RuntimeConnection>> {
+) -> AppResult<Vec<ListedConnection>> {
     let db = state.database.clone()?;
     tauri::async_runtime::spawn_blocking(move || {
         let c = db.connection()?;
@@ -544,8 +552,35 @@ pub async fn list_runtime_cloud_connections(
             "SELECT configuration_json FROM model_cloud_connections WHERE workspace_id=?1 ORDER BY id",
         ).map_err(error)?;
         let rows = query.query_map([&workspace_id], |r| r.get::<_, String>(0)).map_err(error)?;
-        rows.map(|row| serde_json::from_str(&row.map_err(error)?).map_err(json_error)).collect()
+        rows.map(|row| {
+            let connection = serde_json::from_str(&row.map_err(error)?).map_err(json_error)?;
+            let credential_available = credential(&db, &workspace_id, &connection).is_ok();
+            Ok(ListedConnection { connection, credential_available })
+        }).collect()
     }).await.map_err(|_| "无法读取云端连接。")?
+}
+
+#[tauri::command]
+pub async fn bind_runtime_cloud_key(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    connection_id: String,
+    api_key: String,
+) -> AppResult<()> {
+    let key = Zeroizing::new(api_key);
+    let _operation = state.runtime_cloud.try_lock().map_err(|_| "正在处理另一项云端设置。")?;
+    crate::commands::blocking(state.database.clone()?, move |db| {
+        let c = db.connection()?;
+        let entry = get(&c, &workspace_id, &connection_id)?;
+        if !valid_key(&key) || entry.label.contains(key.as_str())
+            || entry.address.as_ref().is_some_and(|address| address.contains(key.as_str()))
+        {
+            return Err("请检查连接地址和密钥。".into());
+        }
+        entry.endpoint()?;
+        WindowsVault::for_runtime(&db.path, &workspace_id, &connection_id)
+            .write_payload(&(entry.credential_binding()?, key.as_str()))
+    }).await
 }
 
 #[tauri::command]

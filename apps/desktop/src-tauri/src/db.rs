@@ -113,8 +113,7 @@ fn require_chat_run(connection: &Connection, run_id: &str) -> AppResult<()> {
     Ok(())
 }
 
-fn migrate(connection: &mut Connection, directory: &Path, migrations: &[&str]) -> AppResult<()> {
-    connection.execute_batch("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,checksum TEXT NOT NULL,applied_at TEXT NOT NULL)").map_err(error)?;
+fn migration_version(connection: &Connection, migrations: &[&str]) -> AppResult<usize> {
     let applied = {
         let mut statement = connection
             .prepare("SELECT version,checksum FROM schema_migrations ORDER BY version")
@@ -136,13 +135,53 @@ fn migrate(connection: &mut Connection, directory: &Path, migrations: &[&str]) -
             return Err("数据库版本或迁移校验不匹配。请保留数据并使用兼容的应用版本。".into());
         }
     }
-    if applied.len() == migrations.len() {
+    Ok(applied.len())
+}
+
+pub(crate) fn backup_schema_version(connection: &Connection) -> AppResult<usize> {
+    migration_version(connection, MIGRATIONS).and_then(|version| {
+        if version == 0 {
+            Err("备份缺少数据库版本记录。".into())
+        } else {
+            Ok(version)
+        }
+    })
+}
+
+pub(crate) fn migrate_restored(connection: &mut Connection, directory: &Path) -> AppResult<()> {
+    migrate(connection, directory, MIGRATIONS)
+}
+
+pub(crate) fn check_backup_schema(connection: &Connection, version: usize) -> AppResult<()> {
+    if backup_schema_version(connection)? != version {
+        return Err("数据库版本与备份清单不一致。".into());
+    }
+    let mut expected = Connection::open_in_memory().map_err(error)?;
+    migrate(&mut expected, Path::new(""), &MIGRATIONS[..version])?;
+    fn schema(c: &Connection) -> AppResult<Vec<(String, String, String)>> {
+        c.prepare("SELECT type,name,sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT GLOB 'sqlite_*' ORDER BY type,name")
+            .map_err(error)?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .map_err(error)?
+            .collect::<rusqlite::Result<_>>()
+            .map_err(error)
+    }
+    if schema(connection)? != schema(&expected)? {
+        return Err("备份的数据库结构与该版本不符。".into());
+    }
+    Ok(())
+}
+
+fn migrate(connection: &mut Connection, directory: &Path, migrations: &[&str]) -> AppResult<()> {
+    connection.execute_batch("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,checksum TEXT NOT NULL,applied_at TEXT NOT NULL)").map_err(error)?;
+    let applied = migration_version(connection, migrations)?;
+    if applied == migrations.len() {
         return Ok(());
     }
-    if !applied.is_empty() {
+    if applied > 0 {
         let backup = directory.join(format!(
             "before-migration-{}-{}.sqlite3",
-            applied.len() + 1,
+            applied + 1,
             new_id()
         ));
         connection
@@ -150,7 +189,7 @@ fn migrate(connection: &mut Connection, directory: &Path, migrations: &[&str]) -
             .map_err(|_| "升级前备份失败，请检查磁盘空间与权限；原数据库未升级。".to_string())?;
     }
     let transaction = connection.transaction().map_err(error)?;
-    for (index, sql) in migrations.iter().enumerate().skip(applied.len()) {
+    for (index, sql) in migrations.iter().enumerate().skip(applied) {
         transaction.execute_batch(sql).map_err(error)?;
         if matches!(index + 1, 6 | 13) {
             crate::retrieval::rebuild(&transaction)?;
@@ -212,6 +251,7 @@ fn event_at(
 pub struct Database {
     connection: Mutex<Connection>,
     pub path: PathBuf,
+    pub(crate) restore_issue: Option<String>,
     _lock: Option<File>,
 }
 
@@ -303,6 +343,7 @@ impl Database {
         let lock = options.open(directory.join("cortexos.lock")).map_err(|_| {
             "数据目录正在被另一个 CortexOS 窗口使用，或没有访问权限。请先关闭另一窗口。".to_string()
         })?;
+        let restore_issue = crate::portability::apply_pending(&path).err();
         let mut connection = Connection::open(&path).map_err(error)?;
         connection
             .busy_timeout(std::time::Duration::from_secs(3))
@@ -328,6 +369,7 @@ impl Database {
         let database = Self {
             connection: Mutex::new(connection),
             path,
+            restore_issue,
             _lock: Some(lock),
         };
         database.recover_interrupted()?;
@@ -338,7 +380,7 @@ impl Database {
         let mut connection = Connection::open_in_memory().map_err(error)?;
         connection.pragma_update(None, "foreign_keys", "ON").map_err(error)?;
         migrate(&mut connection, Path::new(""), MIGRATIONS)?;
-        Ok(Self { connection: Mutex::new(connection), path: PathBuf::new(), _lock: None })
+        Ok(Self { connection: Mutex::new(connection), path: PathBuf::new(), restore_issue: None, _lock: None })
     }
 
     pub(crate) fn connection(&self) -> AppResult<MutexGuard<'_, Connection>> {
