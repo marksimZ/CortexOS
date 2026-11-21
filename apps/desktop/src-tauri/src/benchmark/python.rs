@@ -45,6 +45,22 @@ pub(crate) struct Reply {
     pub error: Vec<u8>,
     pub termination: Option<String>,
 }
+fn docker_executable() -> std::path::PathBuf {
+    #[cfg(windows)]
+    for (directory, relative) in [
+        ("ProgramFiles", "Docker/Docker/resources/bin/docker.exe"),
+        ("LOCALAPPDATA", "Programs/DockerDesktop/resources/bin/docker.exe"),
+    ] {
+        if let Some(root) = std::env::var_os(directory) {
+            let path = std::path::PathBuf::from(root).join(relative);
+            if path.is_file() {
+                return path;
+            }
+        }
+    }
+    "docker".into()
+}
+
 /// Bounded native Docker CLI invocation. Never invokes a shell or host Python.
 fn command(
     args: &[String],
@@ -52,7 +68,7 @@ fn command(
     timeout: Duration,
     cancel: Option<&watch::Receiver<bool>>,
 ) -> Result<Reply, String> {
-    let mut cmd = Command::new("docker");
+    let mut cmd = Command::new(docker_executable());
     cmd.args(args)
         .env_remove("DOCKER_HOST")
         .env_remove("DOCKER_CONTEXT")
@@ -173,6 +189,39 @@ fn environment_with(
     image: Option<&str>,
     run: &mut impl FnMut(&[String], Option<&[u8]>, Duration) -> Result<Reply, String>,
 ) -> Result<Value, String> {
+    let endpoint = linux_endpoint(run)?;
+    let image = image
+        .filter(|s| valid_image(s))
+        .ok_or("select_local_python_image_id")?;
+    let inspected = docker_json(run(
+        &args(&[
+            "--host",
+            &endpoint,
+            "image",
+            "inspect",
+            image,
+            "--format",
+            "{{json .}}",
+        ]),
+        None,
+        Duration::from_secs(5),
+    )?)?;
+    if inspected["Id"] != image
+        || inspected["Os"] != "linux"
+        || inspected["Config"]["Volumes"]
+            .as_object()
+            .is_some_and(|v| !v.is_empty())
+    {
+        return Err("invalid_python_image".into());
+    }
+    Ok(
+        json!({"endpoint":endpoint,"imageId":image,"metadata":{"id":inspected["Id"],"os":inspected["Os"],"architecture":inspected["Architecture"],"repoDigests":inspected["RepoDigests"]},"pythonVersionStatus":"checked_in_each_assertion_container"}),
+    )
+}
+
+fn linux_endpoint(
+    run: &mut impl FnMut(&[String], Option<&[u8]>, Duration) -> Result<Reply, String>,
+) -> Result<String, String> {
     let endpoint = docker_json(run(
         &args(&[
             "context",
@@ -195,33 +244,20 @@ fn environment_with(
     {
         return Err("linux_docker_required".into());
     }
-    let image = image
-        .filter(|s| valid_image(s))
-        .ok_or("select_local_python_image_id")?;
-    let inspected = docker_json(run(
-        &args(&[
-            "--host",
-            endpoint,
-            "image",
-            "inspect",
-            image,
-            "--format",
-            "{{json .}}",
-        ]),
-        None,
-        Duration::from_secs(5),
-    )?)?;
-    if inspected["Id"] != image
-        || inspected["Os"] != "linux"
-        || inspected["Config"]["Volumes"]
-            .as_object()
-            .is_some_and(|v| !v.is_empty())
-    {
-        return Err("invalid_python_image".into());
+    Ok(endpoint.to_owned())
+}
+
+pub(crate) fn local_engine_status(cancel: &watch::Receiver<bool>) -> &'static str {
+    match linux_endpoint(&mut |args, input, timeout| command(args, input, timeout, Some(cancel))) {
+        Ok(_) => "available",
+        Err(error) => match error.as_str() {
+            "local_docker_required" => "nonlocal_context",
+            "linux_docker_required" => "linux_required",
+            "wall_timeout" => "timeout",
+            "docker_unavailable" => "cli_unavailable",
+            _ => "unavailable",
+        },
     }
-    Ok(
-        json!({"endpoint":endpoint,"imageId":image,"metadata":{"id":inspected["Id"],"os":inspected["Os"],"architecture":inspected["Architecture"],"repoDigests":inspected["RepoDigests"]},"pythonVersionStatus":"checked_in_each_assertion_container"}),
-    )
 }
 pub(crate) fn create_args(endpoint: &str, image: &str, name: &str) -> Vec<String> {
     args(&[

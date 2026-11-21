@@ -793,6 +793,9 @@ pub(crate) async fn storage_inventory(
     let lease = state
         .storage_scans
         .claim(&scan_id, SCOPE, TaskKind::LocalMaintenance)?;
+    if state.closing.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err("应用正在关闭，已停止读取存储清单。".into());
+    }
     let receiver = lease.receiver();
     let preview = preview.unwrap_or(false);
     let active = state.has_active();

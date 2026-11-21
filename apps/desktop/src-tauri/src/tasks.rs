@@ -18,6 +18,26 @@ pub enum TaskKind {
     LocalMaintenance,
 }
 
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum TaskStatus {
+    Queued,
+    Running,
+    Cancelling,
+    Completed,
+    Failed,
+    Cancelled,
+    Interrupted,
+}
+
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TaskCounts {
+    pub queued: usize,
+    pub running: usize,
+    pub cancelling: usize,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskSummary {
@@ -224,6 +244,27 @@ impl TaskSlot {
             .as_ref()
             .map(|a| a.summary.clone()))
     }
+    pub(crate) fn counts(&self) -> AppResult<TaskCounts> {
+        let queue = self.waiting.lock().map_err(|_| "等待队列不可用。")?;
+        let active = self.active.lock().map_err(|_| "任务状态不可用。")?;
+        let mut counts = TaskCounts::default();
+        for task in queue.iter().chain(active.iter()) {
+            let status = if *task.cancel.borrow() {
+                TaskStatus::Cancelling
+            } else if active.as_ref().is_some_and(|a| a.summary.id == task.summary.id) {
+                TaskStatus::Running
+            } else {
+                TaskStatus::Queued
+            };
+            match status {
+                TaskStatus::Queued => counts.queued += 1,
+                TaskStatus::Running => counts.running += 1,
+                TaskStatus::Cancelling => counts.cancelling += 1,
+                _ => unreachable!(),
+            }
+        }
+        Ok(counts)
+    }
     pub fn scoped_request(
         &self,
         workspace: &str,
@@ -359,11 +400,15 @@ mod scheduler_tests {
             _ = &mut last => panic!("occupied"),
             _ = std::future::ready(()) => {}
         }
+        let counts = slot.counts().unwrap();
+        assert_eq!((counts.queued, counts.running, counts.cancelling), (3, 1, 0));
         assert!(slot.cancel("stop", "one", TaskKind::Benchmark).is_err());
         assert!(slot.is_waiting("stop", "two", TaskKind::Benchmark).unwrap());
         assert!(slot.cancel("stop", "two", TaskKind::RagIndex).is_err());
         slot.cancel_waiting("stop", "two", TaskKind::Benchmark)
             .unwrap();
+        let counts = slot.counts().unwrap();
+        assert_eq!((counts.queued, counts.running, counts.cancelling), (2, 1, 1));
         assert!(stopped.await.is_err());
         assert!(!slot.is_waiting("stop", "two", TaskKind::Benchmark).unwrap());
         assert!(!*active.receiver().borrow());

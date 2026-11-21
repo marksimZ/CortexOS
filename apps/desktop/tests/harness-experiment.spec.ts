@@ -76,6 +76,7 @@ test('G5 three tool queue isolates cancellation and recovers a forced exit', asy
   const tools = ['codex', 'claude', 'aider'] as const;
   type Tool = typeof tools[number];
   const calls: string[] = [];
+  const samples: { phase: string; at: string; values: unknown }[] = [];
   let awaitingHolder = false;
   let releaseHolder!: () => void;
   const held = new Promise<void>(done => { releaseHolder = done; });
@@ -112,6 +113,12 @@ test('G5 three tool queue isolates cancellation and recovers a forced exit', asy
     const endpoint = `http://127.0.0.1:${address.port}`;
     app = await launchNative(info,{dataDirectory:data,endpoint,executable});
     const page = app.page;
+    const sample = async (phase: string) => {
+      if (process.env.CORTEXOS_H3_HARNESS_SAMPLE !== "1") return;
+      const { stdout } = await exec("pwsh.exe", ["-NoProfile", "-File", resolve("tests/h3-sample.ps1"),
+        "-AppProcessId", String(app!.processId)], { windowsHide: true, timeout: 12000 });
+      samples.push({ phase, at: new Date().toISOString(), values: JSON.parse(stdout) });
+    };
     const checks = comparisonChecks((await list(app)).options);
     const {stdout}=await exec('py',['-3.13','-c','import sqlite3,sys; c=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); print(c.execute("SELECT json_extract(plan_json,\'$.checkId\') FROM benchmark_generation_jobs WHERE id=?", [sys.argv[2]]).fetchone()[0])',join(data,'cortexos.sqlite3'),checks[0].id],{windowsHide:true});
     const checkId = stdout.trim();
@@ -126,6 +133,7 @@ test('G5 three tool queue isolates cancellation and recovers a forced exit', asy
     }});
     await nativeInvoke(page,'start_standard_benchmark',{workspaceId,batchId:holder.id,approvedPlanHash:holder.planHash});
     await expect.poll(()=>awaitingHolder,{timeout:15000}).toBe(true);
+    await sample("benchmark-holder");
     function enqueue(tool: Tool) {
       const runtime = checks[tools.indexOf(tool)];
       return nativeInvoke<{id:string;error?:string}>(app!.page,`start_harness_${tool}_session`,{workspaceId,waitForResources:true,input:{
@@ -160,6 +168,7 @@ test('G5 three tool queue isolates cancellation and recovers a forced exit', asy
     expect(stopped).toMatchObject({status:'cancelled',clean:true});
     expect(failed).toMatchObject({status:'failed',clean:true});
     expect(failed.error).toBeTruthy();
+    await sample("aider-running");
     const queuedAtExit = enqueue('codex'); const queuedId = await waiting('codex');
     await exec('taskkill',['/PID',String(app.processId),'/T','/F'],{windowsHide:true});
     await app.stop();
@@ -173,7 +182,9 @@ test('G5 three tool queue isolates cancellation and recovers a forced exit', asy
     expect((await state('codex',codexId)).selected.status).toBe('cancelled');
     expect((await state('claude',claudeId)).selected.error).toBe(failed.error);
     expect(calls).toEqual(['holder','codex','claude','aider']);
+    await sample("recovered");
     await writeFile(info.outputPath('queue-evidence.json'),JSON.stringify({calls,codex:stopped.status,claude:failed.error,aider:recovered.status,cancelledWaitSaved:false,replayed:false},null,2));
+    if (samples.length) await writeFile(info.outputPath("h3-harness-resources.json"), JSON.stringify(samples, null, 2));
   } finally {
     releaseHolder();
     await app?.stop();

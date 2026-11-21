@@ -1,5 +1,12 @@
 # 里程碑记录
 
+## 2026-11-21 Phase H3 可靠性与本机诊断
+
+- 在「设置 → 关于」加入本机诊断及脱敏 JSON 导出。统一队列状态投影，关闭窗口时纳入存储任务取消与收尾。本机生成服务按常见 HTTP 错误给出处理提示。
+- 前端 `npm.cmd run build`、`npm.cmd run lint`、`npm.cmd run format:check` 及离线锁定的桌面 custom-protocol 构建通过，ESLint 有 63 条已有警告。6 项 Rust 专项和 9 项原生用例通过，含隔离库的 SQLite 写锁恢复、索引取消及 120 秒固定流式。执行命令和实际结果见 [H3 验收](productization/h3-acceptance.md)。
+- 获准临时启动本机 Linux Docker，用固定回环跑完 Codex、Claude Code、Aider 队列。停止、失败接手和重启恢复符合预期，新增残留容器为 0，测试后引擎恢复关闭。[性能回归](productization/h3-performance-regression.md)记录启动、检索、图谱和资源样本。
+- 真实模型多轮加载、正式云端请求、执行中物理切断 Docker 引擎、多小时趋势和系统冷开机仍待补验。停在 H3 验收点。
+
 ## 2026-11-21 Phase H2 数据管理与迁移
 
 - 在设置交付全量或工作区备份、校验、重启恢复和安全备份。从空库写入工作区数据并重建全文索引，避免其他工作区的索引词残留。保留 Schema 26、现有依赖和历史评测记录。

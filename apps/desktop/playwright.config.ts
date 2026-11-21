@@ -22,6 +22,7 @@ export default defineConfig({
   },
   projects: [
     ...(process.env.CORTEXOS_H1_BASELINE === "1" ? [{ name: "h1-baseline", testMatch: "h1-baseline.spec.ts" }] : []),
+    ...(process.env.CORTEXOS_H3_BASELINE === "1" ? [{ name: "h3-baseline", testMatch: "h3-baseline.spec.ts" }] : []),
     ...(process.env.CORTEXOS_HARNESS_EXPERIMENT === "1" ? [{name:"harness-experiment",testMatch:"harness-experiment.spec.ts"}] : []),
     ...(process.env.CORTEXOS_HARNESS_AIDER_SESSION === "1" ? [{name:"harness-aider-session",testMatch:"harness-aider-session.spec.ts"}] : []),
     ...(process.env.CORTEXOS_HARNESS_AIDER_RUNTIME === "1" ? [{name:"harness-aider-runtime",testMatch:"harness-aider-runtime.spec.ts"}] : []),
@@ -81,6 +82,7 @@ export default defineConfig({
         "ui-micro-native.spec.ts",
         "storage-native.spec.ts",
         "storage-recovery-native.spec.ts",
+        "diagnostics-native.spec.ts",
         "data-portability-native.spec.ts",
         "chat.spec.ts",
         "markdown-camera.spec.ts",

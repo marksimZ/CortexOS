@@ -65,8 +65,12 @@ impl AppState {
     pub fn has_active(&self) -> bool {
         self.tasks.has_active()
     }
+    pub(crate) fn has_shutdown_work(&self) -> bool {
+        self.has_active() || self.storage_scans.has_active()
+    }
     pub fn cancel_active(&self) {
         self.tasks.cancel_active();
+        self.storage_scans.cancel_active();
     }
     pub(crate) fn claim_task(
         &self,

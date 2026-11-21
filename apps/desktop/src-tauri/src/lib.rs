@@ -3,6 +3,7 @@ mod citations;
 mod cloud;
 mod commands;
 mod db;
+mod diagnostics;
 mod execution;
 mod generation;
 mod graph;
@@ -76,6 +77,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            diagnostics::read_diagnostics,
+            diagnostics::export_diagnostics,
             portability::backup_preview,
             portability::backup_save,
             portability::backup_open,
@@ -275,14 +278,14 @@ pub fn run() {
                 let state = window.state::<commands::AppState>().inner().clone();
                 let was_closing = state.closing.swap(true, Ordering::SeqCst);
                 let pending_copy = state.database.as_ref().ok().is_some_and(|db| db.pending_workspace_jobs().is_ok_and(|jobs| !jobs.is_empty()) || db.pending_codex_runtime_jobs().is_ok_and(|jobs| !jobs.is_empty()) || db.pending_aider_runtime_jobs().is_ok_and(|jobs| !jobs.is_empty()) || db.pending_claude_runtime_jobs().is_ok_and(|jobs| !jobs.is_empty()) || db.pending_sessions(benchmark::python::session::Kind::Aider).is_ok_and(|jobs| !jobs.is_empty()) || db.pending_sessions(benchmark::python::session::Kind::Claude).is_ok_and(|jobs| !jobs.is_empty()) || db.pending_sessions(benchmark::python::session::Kind::Codex).is_ok_and(|jobs| !jobs.is_empty()));
-                if state.has_active() || state.close_cleanup.load(Ordering::SeqCst) || (!was_closing && pending_copy) {
+                if state.has_shutdown_work() || state.close_cleanup.load(Ordering::SeqCst) || (!was_closing && pending_copy) {
                     api.prevent_close();
                     if !was_closing {
                         state.close_cleanup.store(true, Ordering::SeqCst);
                         state.cancel_active();
                         let window = window.clone();
                         tauri::async_runtime::spawn(async move {
-                            while state.has_active() {
+                            while state.has_shutdown_work() {
                                 tokio::time::sleep(std::time::Duration::from_millis(40)).await;
                             }
                             if let Ok(db) = state.database.clone() {

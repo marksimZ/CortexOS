@@ -179,6 +179,9 @@ test("workspace hybrid retrieval uses the configured index and recovers from inv
       await page.getByRole("button", { name: "停止构建" }).click();
       await expect(page.getByText("已取消等待。", { exact: true })).toBeVisible();
       expect(requests).toHaveLength(0);
+      await nativeInvoke(page, "rag_cancel_index", { workspaceId: other.id });
+      await expect(occupied).resolves.toBe(true);
+      await expect(status(other.id)).resolves.toMatchObject({ indexed: 0, index: null });
     } finally {
       releaseBlocker();
       await occupied;
@@ -301,6 +304,21 @@ test("workspace hybrid retrieval uses the configured index and recovers from inv
     await nativeInvoke(page, "revoke_source", { workspaceId, sourceId: source.id, expectedRevision: 1 });
     await expect(rebuild()).resolves.toMatchObject({ indexed: 1, eligible: 1 });
     expect(requests).toHaveLength(unchanged + 1);
+    if (process.env.CORTEXOS_H3_RAG_TIMINGS === "1") {
+      const observed = [];
+      for (let i = 0; i < 8; i++) {
+        const before = performance.now();
+        const run = await send("另一个项目规则是什么？", chats.length + 1);
+        const elapsedMs = performance.now() - before;
+        expect(run.contextManifest.retrieval?.semanticStatus).toBe("completed");
+        observed.push(elapsedMs);
+      }
+      const ordered = observed.toSorted((a, b) => a - b);
+      await writeFile(info.outputPath("hybrid-end-to-end.json"), JSON.stringify({
+        source: "loopback embedding and reply, visible completion and run detail",
+        n: ordered.length, p50: (ordered[3] + ordered[4]) / 2, p95: ordered[7], elapsedMs: observed,
+      }, null, 2));
+    }
     expect(app.consoleErrors).toEqual([]);
   } finally {
     await app?.stop();

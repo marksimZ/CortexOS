@@ -454,6 +454,52 @@ mod tests {
     use crate::model_runtime::http_fixture;
 
     #[tokio::test]
+    async fn cloud_auth_service_and_timeout_are_recorded_without_automatic_replay() {
+        let database = Arc::new(Database::rag_evaluation_database().unwrap());
+        let workspace = database.create_workspace("异常验证").unwrap().id;
+        database.connection().unwrap().execute(
+            "INSERT INTO model_runtime_policies VALUES(?1,?2)",
+            params![workspace, serde_json::to_string(&Policy { retry_limit: 1, ..Policy::default() }).unwrap()],
+        ).unwrap();
+        let (url, server) = http_fixture::serve(2, |index, path, _| {
+            assert_eq!(path, "/embeddings");
+            ([401, 503][index], json!({"error":{"message":"provider-private-fixture"}}))
+        });
+        let target = CloudTarget::loopback_test(url, "fixture");
+        let text = ["fixed-check".into()];
+        for category in ["invalid_credential", "service_error"] {
+            let id = new_id();
+            let meter = Meter::new(database.clone(), workspace.clone(), id.clone(), "chat");
+            let failure = target.embed(&text, None, Duration::from_secs(2), &meter, "question", &[]).await.unwrap_err();
+            assert!(!failure.contains("provider-private-fixture"));
+            assert_eq!(meter.attempts(Capability::Embedding).unwrap(), 1);
+            let recorded: String = database.connection().unwrap().query_row(
+                "SELECT failure FROM model_cloud_calls WHERE operation_id=?1 AND state='failed'",
+                [&id], |row| row.get(0),
+            ).unwrap();
+            assert_eq!(recorded, category);
+        }
+        server.join().unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap()).parse().unwrap();
+        let hanging = std::thread::spawn(move || {
+            let (_connection, _) = listener.accept().unwrap();
+            std::thread::sleep(Duration::from_millis(350));
+        });
+        let target = CloudTarget::loopback_test(url, "fixture");
+        let id = new_id();
+        let meter = Meter::new(database.clone(), workspace, id.clone(), "chat");
+        target.embed(&text, None, Duration::from_millis(150), &meter, "question", &[]).await.unwrap_err();
+        assert_eq!(meter.attempts(Capability::Embedding).unwrap(), 1);
+        let recorded: String = database.connection().unwrap().query_row(
+            "SELECT failure FROM model_cloud_calls WHERE operation_id=?1 AND state='failed'",
+            [id], |row| row.get(0),
+        ).unwrap();
+        assert_eq!(recorded, "network_unavailable");
+        hanging.join().unwrap();
+    }
+
+    #[tokio::test]
     async fn metered_cloud_retries_rate_limits_and_reserves_budget_atomically() {
         let database = Arc::new(Database::rag_evaluation_database().unwrap());
         let workspace = database.create_workspace("限额验证").unwrap().id;

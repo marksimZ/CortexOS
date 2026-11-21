@@ -17,6 +17,7 @@ import { RuntimeProfilesSettings } from "./components/RuntimeProfilesSettings";
 import { RuntimeResources } from "./components/RuntimeResources";
 import { StorageInventory } from "./components/StorageInventory";
 import { DataPortability } from "./components/DataPortability";
+import { LocalDiagnostics } from "./components/LocalDiagnostics";
 
 export function SettingsPage({ studio }: { studio: Studio }) {
   const draft = studio.settingsDraft;
@@ -308,6 +309,7 @@ export function SettingsPage({ studio }: { studio: Studio }) {
               <strong>CortexOS</strong>
               <span className="version-label">0.2.0 本地工作台测试版</span>
             </div>
+            {studio.desktop && section === "about" && <LocalDiagnostics />}
           </div>
         </section>
       </div>

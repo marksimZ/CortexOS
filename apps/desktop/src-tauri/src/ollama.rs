@@ -358,10 +358,20 @@ impl Ollama {
             .send()
             .await
             .map_err(network_error)?;
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
+        let status = response.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
             return Err("所选模型不存在，请在设置中选择已安装模型。".into());
         }
-        if !response.status().is_success() {
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err("本机 Ollama 正在限流（HTTP 429），请稍后手动重试。".into());
+        }
+        if status.is_server_error() {
+            return Err(format!(
+                "本机 Ollama 服务返回错误（HTTP {}），请检查服务状态后重试。",
+                status.as_u16()
+            ));
+        }
+        if !status.is_success() {
             return Err("本地模型未能开始生成，请检查模型是否可用或尝试较小模型。".into());
         }
         Ok(response)
@@ -382,6 +392,19 @@ impl Ollama {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn local_http_503_reports_service_failure_without_response_body() {
+        let (url, server) = crate::model_runtime::http_fixture::serve(1, |_, path, _| {
+            assert_eq!(path, "/api/chat");
+            (503, json!({"error": "private-service-fixture"}))
+        });
+        let provider = Ollama::with_endpoint(url.as_str().trim_end_matches('/')).unwrap();
+        let error = provider.chat(&ModelSettings::default(), &json!({})).await.unwrap_err();
+        assert!(error.contains("HTTP 503"));
+        assert!(!error.contains("private-service-fixture"));
+        server.join().unwrap();
+    }
 
     #[test]
     fn parser_handles_split_utf8_multiple_frames_and_truncated_json() {

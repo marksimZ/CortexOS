@@ -6,6 +6,8 @@
     "main"
   ],
   "permissions": [
+    "allow-read-diagnostics",
+    "allow-export-diagnostics",
     "allow-backup-preview",
     "allow-backup-save",
     "allow-backup-open",

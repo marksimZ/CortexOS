@@ -225,11 +225,14 @@ fn controlled(c: &Case, mode: &str) -> (Score, usize) {
         }
         if a.iter().any(|s| s == "rm") {
             cleaned += 1;
-            return if mode == "cleanup_failure" {
+            return if mode == "cleanup_failure" || (mode == "engine_interrupted" && cleaned == 2) {
                 Err("daemon_down".into())
             } else {
                 Ok(reply(json!("removed")))
             };
+        }
+        if mode == "engine_interrupted" && index == 1 {
+            return Err("daemon_down".into());
         }
         let payload: Value = serde_json::from_slice(input.unwrap()).unwrap();
         let mut observed = json!({"protocol":1,"python":[3,13],"outcome":"returned","return":typed(&tests[index].output),"arguments":typed(&payload["args"]),"input_unchanged":true,"extra_output":false});
@@ -297,6 +300,13 @@ fn scoring_python_all_93_controlled_observations_and_failure_modes() {
     let (s, cleaned) = controlled(&case(), "cancelled");
     assert_eq!(s.state, State::Cancelled);
     assert_eq!(cleaned, 1);
+    let (s, cleanup_attempts) = controlled(&case(), "engine_interrupted");
+    assert_eq!(s.state, State::ExecutionError);
+    assert_eq!(s.metrics["assertionsRun"], 1);
+    assert_eq!(s.metrics["correctness"], Value::Null);
+    assert_eq!(s.details["ownedContainers"][0]["removed"], true);
+    assert_eq!(s.details["ownedContainers"][1]["removed"], false);
+    assert_eq!(cleanup_attempts, 2);
     let (s, _) = controlled(&case(), "panic");
     assert_eq!(s.state, State::ScoringError);
 }
