@@ -242,7 +242,7 @@ impl Database {
         }
         let hash = dataset::hash(serde_json::to_vec(&payload).map_err(json_error)?.as_slice());
         Ok(
-            json!({"reportSchema":"cortexos.benchmark-report","schemaVersion":1,"createdAt":now(),"applicationVersion":env!("CARGO_PKG_VERSION"),"contentHash":hash,"payload":payload}),
+            json!({"reportSchema":"cortexos.benchmark-report","schemaVersion":1,"createdAt":now(),"applicationVersion":crate::app_version(),"contentHash":hash,"payload":payload}),
         )
     }
 }

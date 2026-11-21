@@ -26,13 +26,22 @@ mod source_chunks;
 mod sources;
 mod storage;
 mod tasks;
+#[cfg(windows)]
+mod updates;
 
-use std::sync::atomic::Ordering;
+use std::sync::{OnceLock, atomic::Ordering};
 use tauri::Manager;
+
+static APP_VERSION: OnceLock<String> = OnceLock::new();
+
+pub(crate) fn app_version() -> &'static str {
+    APP_VERSION.get().map(String::as_str).unwrap_or(env!("CARGO_PKG_VERSION"))
+}
 
 pub fn run() {
     #[allow(unused_mut)]
     let mut context = tauri::generate_context!();
+    let _ = APP_VERSION.set(context.package_info().version.to_string());
     #[cfg(debug_assertions)]
     {
         if let Some(port) = std::env::var("CORTEXOS_TEST_CDP_PORT")
@@ -55,7 +64,12 @@ pub fn run() {
             window.create = false;
             window.clone()
         });
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(windows)]
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::UpdateState::default());
+    builder
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             let mut directory = app.path().app_data_dir()?;
@@ -77,6 +91,14 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            #[cfg(windows)]
+            updates::update_channels,
+            #[cfg(windows)]
+            updates::check_update,
+            #[cfg(windows)]
+            updates::download_update,
+            #[cfg(windows)]
+            updates::install_update,
             diagnostics::read_diagnostics,
             diagnostics::export_diagnostics,
             portability::backup_preview,

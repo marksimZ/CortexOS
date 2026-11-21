@@ -313,7 +313,7 @@ test("workspace hybrid retrieval uses the configured index and recovers from inv
         expect(run.contextManifest.retrieval?.semanticStatus).toBe("completed");
         observed.push(elapsedMs);
       }
-      const ordered = observed.toSorted((a, b) => a - b);
+      const ordered = [...observed].sort((a, b) => a - b);
       await writeFile(info.outputPath("hybrid-end-to-end.json"), JSON.stringify({
         source: "loopback embedding and reply, visible completion and run detail",
         n: ordered.length, p50: (ordered[3] + ordered[4]) / 2, p95: ordered[7], elapsedMs: observed,

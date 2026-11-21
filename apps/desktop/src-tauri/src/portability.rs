@@ -357,7 +357,7 @@ fn archive(
     let mut manifest = Manifest {
         format_version: 1,
         backup_id: new_id(),
-        app_version: env!("CARGO_PKG_VERSION").into(),
+        app_version: crate::app_version().into(),
         schema_version: backup_schema_version(&c)?,
         created_at: now(),
         workspaces: workspaces(&c, id.as_deref())?,

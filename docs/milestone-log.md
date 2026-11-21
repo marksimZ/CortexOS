@@ -1,5 +1,12 @@
 # 里程碑记录
 
+## 2026-11-21 Phase H4 发布工程与隔离安装准备
+
+- 延用正式 NSIS 产品标识和安装范围。接入本机手动触发的稳定版、预览版更新，要求包签名与签名内版本均匹配。统一关于页及新记录使用实际应用版本。
+- 新增 `scripts/release-dry-run.ps1`、`scripts/release_inventory.py` 与 Windows 沙盒验收入口。首份本地候选完成生产构建、7-Zip NSIS 归档完整性检查、11 项解包白名单及两种签名状态读取。正式分发保留 No-Go。
+- `npm.cmd run typecheck`、锁定离线 Rust 检查及调试桌面构建通过。非活动桌面的 `updates-native.spec.ts` 通过 1 项，含稳定版与预览版、服务失败、完整性和版本签名校验。证据与范围见 [H4 发布工程](release/h4-release-engineering.md)。
+- 经批准启用 Windows 沙盒，Windows 返回需要重启。全新安装、旧版升级、卸载和正式更新安装验收仍待来宾环境。见 [安装矩阵](release/h4-install-upgrade-validation.md) 与 [发布准入](release/h4-release-checklist.md)。
+
 ## 2026-11-21 Phase H3 可靠性与本机诊断
 
 - 在「设置 → 关于」加入本机诊断及脱敏 JSON 导出。统一队列状态投影，关闭窗口时纳入存储任务取消与收尾。本机生成服务按常见 HTTP 错误给出处理提示。

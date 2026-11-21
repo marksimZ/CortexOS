@@ -17,7 +17,7 @@ type Sample = {
 const exec = promisify(execFile);
 const target = "http://127.0.0.1:1";
 const stats = (observations: number[]) => {
-  const sorted = observations.toSorted((a, b) => a - b);
+  const sorted = [...observations].sort((a, b) => a - b);
   const n = sorted.length;
   return { n, p50: (sorted[Math.floor((n - 1) / 2)] + sorted[Math.floor(n / 2)]) / 2, p95: sorted[Math.ceil(n * .95) - 1] };
 };

@@ -341,7 +341,7 @@ pub async fn start_harness_experiment(
     }
     let mut hardware = crate::benchmark::telemetry::hardware_snapshot();
     hardware["gpuSnapshot"] = crate::benchmark::resources::Sampler::new().gpu().await;
-    let plan = json!({"purpose":PURPOSE,"version":1,"owner":id,"workspaceId":workspace_id,"assessmentVersion":input.assessment_version,"provider":"ollama","evidence":provider.benchmark_evidence(),"hardware":hardware,"appVersion":env!("CARGO_PKG_VERSION"),"repetitions":input.repetitions,"confirmed":true,"createdAt":now(),"items":schedule.iter().map(|(_,p)|p).collect::<Vec<_>>()});
+    let plan = json!({"purpose":PURPOSE,"version":1,"owner":id,"workspaceId":workspace_id,"assessmentVersion":input.assessment_version,"provider":"ollama","evidence":provider.benchmark_evidence(),"hardware":hardware,"appVersion":crate::app_version(),"repetitions":input.repetitions,"confirmed":true,"createdAt":now(),"items":schedule.iter().map(|(_,p)|p).collect::<Vec<_>>()});
     let raw = plan.to_string();
     if *cancel.borrow() {
         return Err("cancelled".into());

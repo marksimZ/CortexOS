@@ -359,7 +359,7 @@ impl Database {
         } else {
             json!({"availability":"unavailable","reason":"not_collected_for_legacy_or_remote"})
         };
-        tx.execute("INSERT INTO benchmark_runs(id,workspace_id,dataset_id,dataset_version,launch_key,status,config_snapshot_json,config_hash,hardware_snapshot_json,app_version,source_revision,evaluator_version,created_at,started_at) VALUES(?1,?2,?12,?3,?4,'running',?5,?6,?7,?8,?9,?10,?11,?11)",params![id,workspace,version,intent.input.launch_key,encode(&intent.config)?,intent.config_hash,hardware.to_string(),env!("CARGO_PKG_VERSION"),format!("{}:{}",if version==1{"slice3-core-sha256"}else{"benchmark-scoring-sha256"},source_hash()),if !modern {"slice3-exact-v1"}else{super::evaluation::ENGINE_VERSION},run.started_at,dataset_id]).map_err(error)?;
+        tx.execute("INSERT INTO benchmark_runs(id,workspace_id,dataset_id,dataset_version,launch_key,status,config_snapshot_json,config_hash,hardware_snapshot_json,app_version,source_revision,evaluator_version,created_at,started_at) VALUES(?1,?2,?12,?3,?4,'running',?5,?6,?7,?8,?9,?10,?11,?11)",params![id,workspace,version,intent.input.launch_key,encode(&intent.config)?,intent.config_hash,hardware.to_string(),crate::app_version(),format!("{}:{}",if version==1{"slice3-core-sha256"}else{"benchmark-scoring-sha256"},source_hash()),if !modern {"slice3-exact-v1"}else{super::evaluation::ENGINE_VERSION},run.started_at,dataset_id]).map_err(error)?;
         let profile = encode(profile)?;
         tx.execute(
             "INSERT INTO benchmark_run_models VALUES(?1,0,?2,?3,?4)",

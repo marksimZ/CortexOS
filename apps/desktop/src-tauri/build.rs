@@ -3,6 +3,10 @@ fn main() {
     println!("cargo:rerun-if-changed=icons");
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
+            "update_channels",
+            "check_update",
+            "download_update",
+            "install_update",
             "read_diagnostics",
             "export_diagnostics",
             "backup_preview",

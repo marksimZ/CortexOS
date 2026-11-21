@@ -259,7 +259,7 @@ async fn capture(state: &AppState, lease: &Lease) -> AppResult<DiagnosticReport>
     }
     Ok(DiagnosticReport {
         format_version: 1,
-        app_version: env!("CARGO_PKG_VERSION"),
+        app_version: crate::app_version(),
         captured_at: now(),
         backend: "available",
         closing: state.closing.load(std::sync::atomic::Ordering::SeqCst),

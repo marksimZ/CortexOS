@@ -83,6 +83,7 @@ export default defineConfig({
         "storage-native.spec.ts",
         "storage-recovery-native.spec.ts",
         "diagnostics-native.spec.ts",
+        "updates-native.spec.ts",
         "data-portability-native.spec.ts",
         "chat.spec.ts",
         "markdown-camera.spec.ts",
