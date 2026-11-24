@@ -539,6 +539,7 @@ export function ChatPage({
           ) : null}
           {showWebResults && <div ref={searchPanel}>
             <ChatWebSources state={visibleResults}
+              workspaceId={studio.workspaceId}
               canAnswer={canAnswer && !!webInput?.question}
               includedCount={webInput?.count ?? 0}
               onDismiss={() => { setWebResults(null); focusComposer(); }}

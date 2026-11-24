@@ -1,9 +1,10 @@
 import { knowledge } from "./api/knowledge";
+import { webSearch } from "./api/web-search";
 import { AppDialog, openDialog } from "./components/AppDialog";
 import { SelectMenu } from "./components/SelectMenu";
 import { useEffect, useRef, useState } from "react";
 import { notify } from "./components/Toast";
-import { FileText, FolderSync, Plus, X } from "lucide-react";
+import { FileText, FolderSync, Globe, Plus, X } from "lucide-react";
 import { errorText } from "./studio";
 import type { EditKnowledge } from "./knowledge-types";
 import { FileName } from "./components/FileName";
@@ -61,11 +62,15 @@ export function SourceBrowser({
   const [readerCollapsed, setReaderCollapsed] = useState(false);
   const revoke = useRef<HTMLDialogElement>(null);
   const [items, setItems] = useState<SourceDocument[]>([]);
+  const [watchedFolders, setWatchedFolders] = useState<
+    { id: string; workspaceId: string; path: string; lastSyncedAt: string | null; createdAt: string }[]
+  >([]);
   const [selected, setSelected] = useState<Snapshot | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [webUrl, setWebUrl] = useState("");
   const [linePage, setLinePage] = useState(0);
   const [start, setStart] = useState(initial?.startLine ?? 1);
   const [end, setEnd] = useState(initial?.endLine ?? 1);
@@ -96,10 +101,14 @@ export function SourceBrowser({
     }
   };
   const refresh = async () => {
-    const list = await knowledge("list_sources", {
-      workspaceId: workspace,
-    });
-    if (live.current) setItems(list);
+    const [list, folders] = await Promise.all([
+      knowledge("list_sources", { workspaceId: workspace }),
+      knowledge("list_watched_folders", { workspaceId: workspace }).catch(() => []),
+    ]);
+    if (live.current) {
+      setItems(list);
+      setWatchedFolders(folders);
+    }
     return list;
   };
   useEffect(() => {
@@ -224,6 +233,107 @@ export function SourceBrowser({
           <p role="alert" className="form-error">
             {error}
           </p>
+        )}
+        {!preview && (
+          <form
+            className="web-url-capture"
+            style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}
+            onSubmit={(event) => {
+              event.preventDefault();
+              const targetUrl = webUrl.trim();
+              if (!targetUrl) return;
+              void perform(async () => {
+                const page = await webSearch("fetch_web_page", {
+                  workspaceId: workspace,
+                  url: targetUrl,
+                  saveToKnowledge: true,
+                });
+                if (live.current) {
+                  setWebUrl("");
+                  notify(`已抓取网页并存入知识：${page.title}`);
+                }
+              });
+            }}
+          >
+            <Globe size={16} aria-hidden="true" style={{ flexShrink: 0, opacity: 0.7 }} />
+            <input
+              type="url"
+              value={webUrl}
+              onChange={(event) => setWebUrl(event.target.value)}
+              placeholder="粘贴公开网页链接（https://...），抓取正文并直接存入知识库…"
+              disabled={busy}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <button className="button secondary" type="submit" disabled={busy || !webUrl.trim()}>
+              {busy ? "正在抓取…" : "抓取网页"}
+            </button>
+          </form>
+        )}
+        {!preview && watchedFolders.length > 0 && (
+          <section className="watched-folders" aria-label="已绑定的同步文件夹" style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 4 }}>
+              已绑定的同步文件夹（打开工作区时自动增量同步）：
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {watchedFolders.map((folder) => (
+                <div
+                  key={folder.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 12,
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    background: "var(--surface-muted, rgba(127,127,127,0.08))",
+                  }}
+                >
+                  <FolderSync size={14} aria-hidden="true" style={{ flexShrink: 0, opacity: 0.7 }} />
+                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={folder.path}>
+                    {folder.path}
+                  </span>
+                  <button
+                    type="button"
+                    className="button text-button"
+                    disabled={busy}
+                    onClick={() =>
+                      void perform(async () => {
+                        const report = await knowledge("sync_watched_folder", {
+                          workspaceId: workspace,
+                          folderId: folder.id,
+                        });
+                        if (live.current) {
+                          await refresh();
+                          notify(`同步完成：新增 ${report.imported}、更新 ${report.updated}、未变 ${report.unchanged}`);
+                        }
+                      })
+                    }
+                  >
+                    重新同步
+                  </button>
+                  <button
+                    type="button"
+                    className="button text-button"
+                    disabled={busy}
+                    onClick={() =>
+                      void perform(async () => {
+                        await knowledge("remove_watched_folder", {
+                          workspaceId: workspace,
+                          folderId: folder.id,
+                        });
+                        if (live.current) {
+                          await refresh();
+                          notify("已移除同步文件夹绑定");
+                        }
+                      })
+                    }
+                  >
+                    解绑
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
         {preview ? (
           <section className="source-preview">

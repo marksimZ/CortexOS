@@ -31,6 +31,15 @@ pub struct Source {
     pub enabled: bool,
     pub revision: i64,
 }
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchedFolder {
+    pub id: String,
+    pub workspace_id: String,
+    pub path: String,
+    pub last_synced_at: Option<String>,
+    pub created_at: String,
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
@@ -234,13 +243,15 @@ pub fn sync_folder(root: &Path, workspace: &str, db: &Database) -> AppResult<Fol
             Err(_) => skipped += 1,
         }
     }
-    Ok(FolderSyncReport {
+    let report = FolderSyncReport {
         folder: canonical.to_string_lossy().into_owned(),
         imported,
         updated,
         unchanged,
         skipped,
-    })
+    };
+    let _ = db.upsert_watched_folder(workspace, &report.folder);
+    Ok(report)
 }
 
 pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<PendingSource> {
@@ -609,5 +620,159 @@ impl Database {
         .map_err(error)?;
         refresh_nodes(&tx, id)?;
         tx.commit().map_err(error)
+    }
+
+    pub fn upsert_watched_folder(&self, workspace: &str, path: &str) -> AppResult<WatchedFolder> {
+        let timestamp = now();
+        let c = self.connection()?;
+        let existing: Option<(String, String)> = c
+            .query_row(
+                "SELECT id, created_at FROM watched_folders WHERE workspace_id=?1 AND path=?2",
+                params![workspace, path],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(error)?;
+        let (id, created_at) = if let Some((id, created_at)) = existing {
+            c.execute(
+                "UPDATE watched_folders SET last_synced_at=?2 WHERE id=?1",
+                params![id, timestamp],
+            )
+            .map_err(error)?;
+            (id, created_at)
+        } else {
+            let id = new_id();
+            c.execute(
+                "INSERT INTO watched_folders(id, workspace_id, path, last_synced_at, created_at) VALUES(?1, ?2, ?3, ?4, ?4)",
+                params![id, workspace, path, timestamp],
+            )
+            .map_err(error)?;
+            (id, timestamp.clone())
+        };
+        Ok(WatchedFolder {
+            id,
+            workspace_id: workspace.to_string(),
+            path: path.to_string(),
+            last_synced_at: Some(timestamp),
+            created_at,
+        })
+    }
+
+    pub fn list_watched_folders(&self, workspace: &str) -> AppResult<Vec<WatchedFolder>> {
+        let c = self.connection()?;
+        let mut stmt = c
+            .prepare(
+                "SELECT id, workspace_id, path, last_synced_at, created_at
+                 FROM watched_folders
+                 WHERE workspace_id=?1
+                 ORDER BY created_at DESC, id",
+            )
+            .map_err(error)?;
+        stmt.query_map(params![workspace], |r| {
+            Ok(WatchedFolder {
+                id: r.get(0)?,
+                workspace_id: r.get(1)?,
+                path: r.get(2)?,
+                last_synced_at: r.get(3)?,
+                created_at: r.get(4)?,
+            })
+        })
+        .map_err(error)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(error)
+    }
+
+    pub fn remove_watched_folder(&self, workspace: &str, folder_id: &str) -> AppResult<()> {
+        let c = self.connection()?;
+        let changed = c
+            .execute(
+                "DELETE FROM watched_folders WHERE workspace_id=?1 AND id=?2",
+                params![workspace, folder_id],
+            )
+            .map_err(error)?;
+        if changed != 1 {
+            return Err("未找到该同步文件夹绑定。".into());
+        }
+        Ok(())
+    }
+
+    pub fn sync_watched_folder(
+        &self,
+        workspace: &str,
+        folder_id: &str,
+    ) -> AppResult<FolderSyncReport> {
+        let path: String = {
+            let c = self.connection()?;
+            c.query_row(
+                "SELECT path FROM watched_folders WHERE workspace_id=?1 AND id=?2",
+                params![workspace, folder_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(error)?
+            .ok_or_else(|| "未找到该同步文件夹绑定。".to_string())?
+        };
+        let dir = PathBuf::from(&path);
+        if !dir.is_dir() {
+            return Err("该文件夹当前不存在或已移动，请移除绑定或重新选择文件夹。".into());
+        }
+        sync_folder(&dir, workspace, self)
+    }
+
+    pub fn sync_workspace_watched_folders(
+        &self,
+        workspace: &str,
+    ) -> AppResult<Vec<FolderSyncReport>> {
+        let folders = self.list_watched_folders(workspace)?;
+        let mut reports = Vec::new();
+        for folder in folders {
+            let dir = PathBuf::from(&folder.path);
+            if dir.is_dir() {
+                if let Ok(report) = sync_folder(&dir, workspace, self) {
+                    reports.push(report);
+                }
+            }
+        }
+        Ok(reports)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn watched_folders_upsert_sync_and_remove() {
+        let root = std::env::temp_dir().join(format!("cortexos-watched-{}", new_id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let db = Database::open(&root.join("data")).unwrap();
+        let workspace = db.create_workspace("同步测试").unwrap();
+        let notes = root.join("notes");
+        std::fs::create_dir_all(&notes).unwrap();
+        std::fs::write(notes.join("plan.md"), "# 计划\n第一版内容").unwrap();
+
+        let report = sync_folder(&notes, &workspace.id, &db).unwrap();
+        assert_eq!(report.imported, 1);
+        assert_eq!(report.updated, 0);
+
+        let folders = db.list_watched_folders(&workspace.id).unwrap();
+        assert_eq!(folders.len(), 1);
+        assert!(folders[0].last_synced_at.is_some());
+
+        std::fs::write(notes.join("plan.md"), "# 计划\n第二版更新内容").unwrap();
+        let rerun = db
+            .sync_watched_folder(&workspace.id, &folders[0].id)
+            .unwrap();
+        assert_eq!(rerun.updated, 1);
+
+        let all_reports = db.sync_workspace_watched_folders(&workspace.id).unwrap();
+        assert_eq!(all_reports.len(), 1);
+        assert_eq!(all_reports[0].unchanged, 1);
+
+        db.remove_watched_folder(&workspace.id, &folders[0].id)
+            .unwrap();
+        assert!(db.list_watched_folders(&workspace.id).unwrap().is_empty());
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -47,6 +47,19 @@ export const knowledge = createClient<{
     WorkspaceArgs,
     { folder: string; imported: number; updated: number; unchanged: number; skipped: number } | null
   >;
+  list_watched_folders: Command<
+    WorkspaceArgs,
+    { id: string; workspaceId: string; path: string; lastSyncedAt: string | null; createdAt: string }[]
+  >;
+  sync_watched_folder: Command<
+    WorkspaceArgs & { folderId: string },
+    { folder: string; imported: number; updated: number; unchanged: number; skipped: number }
+  >;
+  remove_watched_folder: Command<WorkspaceArgs & { folderId: string }, void>;
+  sync_workspace_watched_folders: Command<
+    WorkspaceArgs,
+    { folder: string; imported: number; updated: number; unchanged: number; skipped: number }[]
+  >;
   commit_source: Command<TicketArgs, SourceDocument>;
   discard_source: Command<TicketArgs, void>;
   revoke_source: Command<SourceArgs & { expectedRevision: number }, void>;

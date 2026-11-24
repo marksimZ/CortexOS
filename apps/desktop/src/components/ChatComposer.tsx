@@ -11,6 +11,8 @@ import { MarkdownContent } from "./MarkdownContent";
 import { ContextPicker } from "../ContextPicker";
 import { navigationHash } from "../navigation";
 import { webSearchProviderLabel, type WebSearchProvider } from "../api/web-search";
+import { assistant, type AssistantSettings } from "../api/assistant";
+import { notify } from "./Toast";
 import { cloudPresetForAddress } from "../cloud-presets";
 import { SelectMenu } from "./SelectMenu";
 import type { Studio } from "../studio";
@@ -63,6 +65,8 @@ export function ChatComposer({
   send: (content?: string) => Promise<void>;
 }) {
   const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const [assistantState, setAssistantState] = useState<AssistantSettings | null>(null);
+  const [switchingAssistant, setSwitchingAssistant] = useState(false);
   const taskPreview = taskDraft === "briefing" ? "预览新闻简报" : taskDraft === "reminder" ? "预览提醒" : undefined;
   const [searchChoice, setSearchChoice] = useState<{ workspace: string; provider: WebSearchProvider }>();
   const provider = searchConfigured
@@ -110,6 +114,18 @@ export function ChatComposer({
       previousPreview.current = preview;
     }
   }, [preview]);
+  useEffect(() => {
+    const ws = studio.workspaceId;
+    if (!studio.desktop || !ws) {
+      setAssistantState(null);
+      return;
+    }
+    let active = true;
+    void assistant("read_assistant", { workspaceId: ws })
+      .then((res) => { if (active) setAssistantState(res); })
+      .catch(() => { if (active) setAssistantState(null); });
+    return () => { active = false; };
+  }, [studio.desktop, studio.workspaceId]);
   return (
     <div className="composer-area">
       <div className="composer">
@@ -178,6 +194,37 @@ export function ChatComposer({
                 {localModels.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
               </optgroup>}
             </SelectMenu>
+            {studio.desktop && studio.workspaceId && assistantState && assistantState.versions.length > 0 && (
+              <SelectMenu
+                aria-label="助手分身"
+                title="快速切换当前工作区的助手分身"
+                value={assistantState.activeVersion === null ? "" : String(assistantState.activeVersion)}
+                disabled={switchingAssistant || !!studio.activeRun || currentRunning || studio.sending}
+                onChange={event => {
+                  const ws = studio.workspaceId;
+                  if (!ws) return;
+                  const nextVersion = event.target.value === "" ? null : Number(event.target.value);
+                  setSwitchingAssistant(true);
+                  void assistant("activate_assistant", { workspaceId: ws, version: nextVersion })
+                    .then(() => {
+                      setAssistantState(prev => prev ? { ...prev, activeVersion: nextVersion } : prev);
+                      const label = nextVersion === null
+                        ? "内置默认助手"
+                        : assistantState.versions.find(v => v.version === nextVersion)?.name || `分身 v${nextVersion}`;
+                      notify(`已切换助手分身：${label}`);
+                    })
+                    .catch(studio.reportError)
+                    .finally(() => setSwitchingAssistant(false));
+                }}
+              >
+                <option value="">默认助手</option>
+                {assistantState.versions.map(v => (
+                  <option key={v.version} value={String(v.version)}>
+                    {v.name || `分身 v${v.version}`}
+                  </option>
+                ))}
+              </SelectMenu>
+            )}
           </div>
           <div className="composer-actions">
             {studio.desktop && studio.workspaceId && <button

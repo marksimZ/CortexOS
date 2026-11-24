@@ -904,6 +904,52 @@ pub async fn import_source_folder(
 }
 
 #[tauri::command]
+pub async fn list_watched_folders(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> AppResult<Vec<crate::sources::WatchedFolder>> {
+    blocking(state.database.clone()?, move |db| {
+        db.list_watched_folders(&workspace_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn sync_watched_folder(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    folder_id: String,
+) -> AppResult<crate::sources::FolderSyncReport> {
+    blocking(state.database.clone()?, move |db| {
+        db.sync_watched_folder(&workspace_id, &folder_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn remove_watched_folder(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    folder_id: String,
+) -> AppResult<()> {
+    blocking(state.database.clone()?, move |db| {
+        db.remove_watched_folder(&workspace_id, &folder_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn sync_workspace_watched_folders(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> AppResult<Vec<crate::sources::FolderSyncReport>> {
+    blocking(state.database.clone()?, move |db| {
+        db.sync_workspace_watched_folders(&workspace_id)
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn commit_source(
     state: State<'_, AppState>,
     workspace_id: String,

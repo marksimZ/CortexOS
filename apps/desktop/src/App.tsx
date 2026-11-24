@@ -3,6 +3,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppDialog, openDialog } from "./components/AppDialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
+import { knowledge } from "./api/knowledge";
 import { AppShell, pages } from "./components/AppShell";
 import { lazyView } from "./components/lazyView";
 import type { EditKnowledge } from "./knowledge-types";
@@ -67,6 +68,21 @@ export default function App() {
   }, [routeWorkspace, routeConversation, loading, knownWorkspace, view, openWorkspace, openConversation, reportError]);
   const mainRef = useRef<HTMLElement>(null);
   const previousPage = useRef(page);
+  const syncedWorkspaces = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const ws = studio.workspaceId;
+    if (!studio.desktop || !ws || syncedWorkspaces.current.has(ws)) return;
+    syncedWorkspaces.current.add(ws);
+    void knowledge("sync_workspace_watched_folders", { workspaceId: ws })
+      .then((reports) => {
+        const imported = reports.reduce((sum, item) => sum + item.imported, 0);
+        const updated = reports.reduce((sum, item) => sum + item.updated, 0);
+        if (imported > 0 || updated > 0) {
+          notify(`已自动同步本地文件夹：新增 ${imported}、更新 ${updated}`);
+        }
+      })
+      .catch(() => {});
+  }, [studio.desktop, studio.workspaceId]);
   const workspaceDialog = useRef<HTMLDialogElement>(null);
   const afterWorkspace = useRef<"chat" | "cloud" | null>(null);
   const volatileDialog = useRef<HTMLDialogElement>(null);

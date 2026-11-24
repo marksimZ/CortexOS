@@ -45,6 +45,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0030_local_only_privacy.sql"),
     include_str!("../migrations/0031_personal_memory_evolution.sql"),
     include_str!("../migrations/0032_memory_summary_provenance.sql"),
+    include_str!("../migrations/0033_watched_folders.sql"),
 ];
 const MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const RUN_COLUMNS: &str = "id,workspace_id,conversation_id,assistant_message_id,model_id,status,started_at,finished_at,error_message";

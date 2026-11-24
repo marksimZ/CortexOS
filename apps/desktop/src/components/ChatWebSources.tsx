@@ -1,4 +1,7 @@
-import { webSearchProviderLabel, type WebSearchProvider, type WebSearchResponse, type WebSearchResult } from "../api/web-search";
+import { useState } from "react";
+import { webSearch, webSearchProviderLabel, type WebSearchProvider, type WebSearchResponse, type WebSearchResult } from "../api/web-search";
+import { notify } from "./Toast";
+import { errorText } from "../studio";
 
 export type SearchState = {
   scope: string;
@@ -61,23 +64,53 @@ export function questionWithSources(question: string, response: WebSearchRespons
   return { question: header + entries.join("").trimEnd(), count: included.length };
 }
 
-export function ChatWebSources({ state, onDismiss, onAnswer, onToggle, canAnswer, includedCount }: {
+export function ChatWebSources({ state, workspaceId, onDismiss, onAnswer, onToggle, canAnswer, includedCount }: {
   state: SearchState;
+  workspaceId?: string | null;
   onDismiss: () => void;
   onAnswer: () => void;
   onToggle: (url: string) => void;
   canAnswer: boolean;
   includedCount: number;
 }) {
+  const [savingUrl, setSavingUrl] = useState<string | null>(null);
+  const [savedUrls, setSavedUrls] = useState<Record<string, boolean>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const savePage = async (source: WebSearchResult) => {
+    if (!workspaceId || savingUrl) return;
+    setSavingUrl(source.url);
+    setSaveError(null);
+    try {
+      const page = await webSearch("fetch_web_page", {
+        workspaceId,
+        url: source.url,
+        saveToKnowledge: true,
+      });
+      setSavedUrls((prev) => ({ ...prev, [source.url]: true }));
+      notify(`已抓取并存入知识：${page.title}`);
+    } catch (err) {
+      setSaveError(errorText(err));
+    } finally {
+      setSavingUrl(null);
+    }
+  };
+
   return <section className="chat-web-sources" aria-label="联网查询来源">
     <h2 tabIndex={-1}>联网查询来源</h2>
     <p>查询服务：{webSearchProviderLabel[state.provider]}</p>
     {state.status === "loading" && <p role="status">正在查询…</p>}
     {state.status === "error" && <p className="form-error" role="alert">{state.error}</p>}
+    {saveError && <p className="form-error" role="alert">{saveError}</p>}
     {state.status === "ready" && (state.response.results.length ? <>
       <p role="status">找到 {state.response.results.length} 条来源。网页摘要是未经验证的外部资料。</p>
       <ol>{state.response.results.map(source => <Source key={source.url} source={source}
-        selected={!state.excludedUrls.includes(source.url)} onToggle={() => onToggle(source.url)} />)}</ol>
+        selected={!state.excludedUrls.includes(source.url)}
+        canSave={!!workspaceId}
+        saving={savingUrl === source.url}
+        saved={!!savedUrls[source.url]}
+        onSave={() => void savePage(source)}
+        onToggle={() => onToggle(source.url)} />)}</ol>
       {state.excludedUrls.length < state.response.results.length && <p>
         {includedCount
           ? `本次回答将附带 ${includedCount} 条来源，摘要按当前模型容量节选。`
@@ -92,13 +125,32 @@ export function ChatWebSources({ state, onDismiss, onAnswer, onToggle, canAnswer
   </section>;
 }
 
-function Source({ source, selected, onToggle }: { source: WebSearchResult; selected: boolean; onToggle: () => void }) {
+function Source({ source, selected, canSave, saving, saved, onSave, onToggle }: {
+  source: WebSearchResult;
+  selected: boolean;
+  canSave: boolean;
+  saving: boolean;
+  saved: boolean;
+  onSave: () => void;
+  onToggle: () => void;
+}) {
   const url = safeSourceUrl(source.url);
   if (!url) return null;
   return <li>
     <input type="checkbox" checked={selected} aria-label={`随回答发送：${source.title || url.hostname}`} onChange={onToggle} />
     <a href={url.href} target="_blank" rel="noopener noreferrer">{source.title || url.hostname}</a>
     <small>{url.hostname}</small>
+    {canSave && (
+      <button
+        type="button"
+        className="button text-button"
+        disabled={saving || saved}
+        onClick={onSave}
+        style={{ marginLeft: 8, fontSize: 12 }}
+      >
+        {saved ? "已入库" : saving ? "正在抓取…" : "抓取并存入知识"}
+      </button>
+    )}
     {source.snippet && <p>{source.snippet}</p>}
   </li>;
 }

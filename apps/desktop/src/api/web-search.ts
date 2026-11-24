@@ -17,11 +17,23 @@ export type WebSearchResponse = {
   searchedAt: string;
 };
 
+export type WebPageContent = {
+  title: string;
+  url: string;
+  text: string;
+  fetchedAt: string;
+  savedNodeId: string | null;
+};
+
 export const webSearch = createClient<{
   read_web_search_status: Command<WorkspaceArgs, { configured: boolean }>;
   save_web_search_key: Command<WorkspaceArgs & { key: string }, void>;
   search_web: Command<
     WorkspaceArgs & { query: string; provider: WebSearchProvider },
     WebSearchResponse
+  >;
+  fetch_web_page: Command<
+    WorkspaceArgs & { url: string; saveToKnowledge?: boolean },
+    WebPageContent
   >;
 }>();

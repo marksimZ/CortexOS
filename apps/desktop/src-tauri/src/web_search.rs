@@ -17,6 +17,8 @@ const NEWS_ENDPOINT: &str = "https://www.bing.com/news/search";
 const FIXTURE_KEY: &str = "cortexos-brave-fixture";
 const MAX_RESULTS: usize = 5;
 const MAX_BYTES: usize = 256 * 1024;
+const MAX_PAGE_BYTES: usize = 1024 * 1024;
+const MAX_PAGE_CHARS: usize = 16_000;
 
 pub(crate) struct WebSearch {
     fixture: AppResult<Option<Url>>,
@@ -149,6 +151,16 @@ pub(crate) struct WebResult {
 pub(crate) struct WebResults {
     results: Vec<WebResult>,
     searched_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WebPageContent {
+    title: String,
+    url: String,
+    text: String,
+    fetched_at: String,
+    saved_node_id: Option<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -510,5 +522,396 @@ fn read_news(body: &[u8]) -> AppResult<Vec<WebResult>> {
             Event::Eof => return Err(malformed()),
             _ => {}
         }
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn fetch_web_page(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    url: String,
+    save_to_knowledge: Option<bool>,
+) -> AppResult<WebPageContent> {
+    let parsed = result_url(url.trim())
+        .ok_or_else(|| "仅支持公开的 http/https 网页地址（已拦截内网或本机地址）。".to_string())?;
+    let ws = workspace_id.clone();
+    blocking(state.database.clone()?, move |db| {
+        require_workspace(&*db.connection()?, &ws)
+    })
+    .await?;
+
+    let client = model_client(Duration::from_secs(6))
+        .timeout(Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 5 {
+                return attempt.error("网页重定向次数过多。");
+            }
+            if result_url(attempt.url().as_str()).is_none() {
+                return attempt.error("重定向目标地址不受信任。");
+            }
+            attempt.follow()
+        }))
+        .build()
+        .map_err(|_| "无法初始化网页抓取连接。")?;
+
+    let mut response = client
+        .get(parsed.clone())
+        .header(
+            "User-Agent",
+            "CortexOS/0.2 (+https://github.com/marksimZ/CortexOS)",
+        )
+        .header(
+            "Accept",
+            "text/html, application/xhtml+xml, text/plain;q=0.9, */*;q=0.1",
+        )
+        .send()
+        .await
+        .map_err(|_| "网页连接失败或超时，请检查网络后重试。".to_string())?;
+
+    let final_url = response.url().clone();
+    if result_url(final_url.as_str()).is_none() {
+        return Err("网页最终跳转地址不受信任，已拦截。".into());
+    }
+    if !response.status().is_success() {
+        return Err(format!(
+            "网页读取失败（HTTP {}）。",
+            response.status().as_u16()
+        ));
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_PAGE_BYTES as u64)
+    {
+        return Err("网页体积超过 1 MiB 限制，已停止读取。".into());
+    }
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !content_type.is_empty()
+        && !content_type.contains("text/")
+        && !content_type.contains("html")
+        && !content_type.contains("xml")
+        && !content_type.contains("json")
+    {
+        return Err("目标链接不是文本或网页内容，无法提取正文。".into());
+    }
+
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| "网页读取中断或超时。".to_string())?
+    {
+        if body.len().saturating_add(chunk.len()) > MAX_PAGE_BYTES {
+            let take = MAX_PAGE_BYTES.saturating_sub(body.len());
+            body.extend_from_slice(&chunk[..take]);
+            break;
+        }
+        body.extend_from_slice(&chunk);
+    }
+
+    let raw = String::from_utf8_lossy(&body);
+    let (title, text) = extract_web_text(&raw, &content_type, &final_url);
+    if text.trim().is_empty() {
+        return Err("未能从该网页提取到可读正文内容（可能需要登录或纯脚本渲染）。".into());
+    }
+
+    let fetched_at = now();
+    let final_url_str = final_url.to_string();
+    let saved_node_id = if save_to_knowledge.unwrap_or(false) {
+        let host = final_url.host_str().unwrap_or("网页").to_string();
+        let node_title: String = title
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(60)
+            .collect::<String>()
+            .trim()
+            .to_string();
+        let node_title = if node_title.is_empty() {
+            format!("网页资料：{}", host)
+        } else {
+            node_title
+        };
+        let header = format!("来源网页：{final_url_str}\n抓取时间：{fetched_at}\n\n");
+        let max_body = 19_500usize.saturating_sub(header.chars().count());
+        let clipped_body: String = text.chars().take(max_body).collect();
+        let content = format!("{header}{clipped_body}");
+        let node_id = blocking(state.database.clone()?, move |db| {
+            db.save_knowledge(crate::knowledge::SaveKnowledge {
+                workspace_id,
+                node_id: None,
+                expected_revision: None,
+                title: node_title,
+                kind: "evidence".into(),
+                content,
+                change_reason: format!("抓取网页正文：{host}"),
+                source_message_id: None,
+                source_excerpt: None,
+            })
+        })
+        .await?;
+        Some(node_id)
+    } else {
+        None
+    };
+
+    Ok(WebPageContent {
+        title,
+        url: final_url_str,
+        text,
+        fetched_at,
+        saved_node_id,
+    })
+}
+
+fn extract_web_text(raw: &str, content_type: &str, url: &Url) -> (String, String) {
+    let fallback_title = url.host_str().unwrap_or("网页资料").to_string();
+    if content_type.contains("text/plain")
+        || content_type.contains("text/markdown")
+        || content_type.contains("application/json")
+    {
+        let cleaned = normalize_extracted_text(raw);
+        return (fallback_title, cleaned);
+    }
+
+    let title = extract_html_title(raw)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(fallback_title);
+    let stripped = strip_html_to_text(raw);
+    let cleaned = normalize_extracted_text(&stripped);
+    (title, cleaned)
+}
+
+fn extract_html_title(html: &str) -> Option<String> {
+    let lower = html.to_ascii_lowercase();
+    let start = lower.find("<title")?;
+    let after_open = html[start..].find('>')? + start + 1;
+    let end = lower[after_open..].find("</title>")? + after_open;
+    let raw_title = &html[after_open..end];
+    let decoded = decode_html_entities(raw_title);
+    let collapsed: String = decoded.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = collapsed.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.chars().take(160).collect())
+    }
+}
+
+fn strip_html_to_text(html: &str) -> String {
+    let mut out = String::with_capacity(html.len().min(64 * 1024));
+    let bytes = html.as_bytes();
+    let mut i = 0;
+    let mut skip_tag: Option<&'static str> = None;
+
+    while i < bytes.len() {
+        if let Some(tag) = skip_tag {
+            if bytes[i] == b'<' {
+                let rest = &html[i..];
+                if let Some(close_idx) = rest.find('>') {
+                    let inner = rest[1..close_idx].trim();
+                    if let Some(end_name) = inner.strip_prefix('/') {
+                        let end_name = end_name
+                            .split_whitespace()
+                            .next()
+                            .unwrap_or("")
+                            .to_ascii_lowercase();
+                        if end_name == tag {
+                            skip_tag = None;
+                        }
+                    }
+                    i += close_idx + 1;
+                    continue;
+                }
+            }
+            i += 1;
+            continue;
+        }
+
+        if bytes[i] == b'<' {
+            let rest = &html[i..];
+            if rest.starts_with("<!--") {
+                if let Some(end_comment) = rest.find("-->") {
+                    i += end_comment + 3;
+                    continue;
+                } else {
+                    break;
+                }
+            }
+            if let Some(close_idx) = rest.find('>') {
+                let tag_body = rest[1..close_idx].trim();
+                let is_closing = tag_body.starts_with('/');
+                let name_raw = tag_body
+                    .trim_start_matches('/')
+                    .split(|c: char| c.is_ascii_whitespace() || c == '/')
+                    .next()
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if !is_closing {
+                    match name_raw.as_str() {
+                        "script" => skip_tag = Some("script"),
+                        "style" => skip_tag = Some("style"),
+                        "noscript" => skip_tag = Some("noscript"),
+                        "svg" => skip_tag = Some("svg"),
+                        "template" => skip_tag = Some("template"),
+                        "br" | "hr" | "p" | "div" | "li" | "tr" | "h1" | "h2" | "h3" | "h4"
+                        | "h5" | "h6" | "section" | "article" | "blockquote" | "pre" => {
+                            out.push('\n');
+                        }
+                        _ => {}
+                    }
+                } else if matches!(
+                    name_raw.as_str(),
+                    "p" | "div"
+                        | "li"
+                        | "tr"
+                        | "h1"
+                        | "h2"
+                        | "h3"
+                        | "h4"
+                        | "h5"
+                        | "h6"
+                        | "section"
+                        | "article"
+                        | "blockquote"
+                        | "pre"
+                ) {
+                    out.push('\n');
+                }
+                i += close_idx + 1;
+                continue;
+            }
+        }
+
+        if let Some(ch) = html[i..].chars().next() {
+            out.push(ch);
+            i += ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    decode_html_entities(&out)
+}
+
+fn decode_html_entities(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.char_indices().peekable();
+    while let Some((idx, ch)) = chars.next() {
+        if ch == '&' {
+            let rest = &input[idx + 1..];
+            if let Some(semi) = rest.find(';') {
+                if semi > 0 && semi <= 12 {
+                    let entity = &rest[..semi];
+                    let decoded = match entity {
+                        "amp" => Some("&".to_string()),
+                        "lt" => Some("<".to_string()),
+                        "gt" => Some(">".to_string()),
+                        "quot" => Some("\"".to_string()),
+                        "apos" | "#39" | "#x27" | "#X27" => Some("'".to_string()),
+                        "nbsp" => Some(" ".to_string()),
+                        "mdash" => Some("—".to_string()),
+                        "ndash" => Some("–".to_string()),
+                        "hellip" => Some("…".to_string()),
+                        _ if entity.starts_with("#x") || entity.starts_with("#X") => {
+                            u32::from_str_radix(&entity[2..], 16)
+                                .ok()
+                                .and_then(char::from_u32)
+                                .map(|c| c.to_string())
+                        }
+                        _ if entity.starts_with('#') => entity[1..]
+                            .parse::<u32>()
+                            .ok()
+                            .and_then(char::from_u32)
+                            .map(|c| c.to_string()),
+                        _ => None,
+                    };
+                    if let Some(replacement) = decoded {
+                        out.push_str(&replacement);
+                        let target = idx + 1 + semi + 1;
+                        while let Some(&(next_idx, _)) = chars.peek() {
+                            if next_idx < target {
+                                chars.next();
+                            } else {
+                                break;
+                            }
+                        }
+                        continue;
+                    }
+                }
+            }
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn normalize_extracted_text(input: &str) -> String {
+    let mut lines = Vec::new();
+    let mut blank = false;
+    for raw_line in input.replace("\r\n", "\n").replace('\r', "\n").lines() {
+        let collapsed: String = raw_line.split_whitespace().collect::<Vec<_>>().join(" ");
+        if collapsed.is_empty() {
+            if !blank && !lines.is_empty() {
+                lines.push(String::new());
+                blank = true;
+            }
+        } else {
+            lines.push(collapsed);
+            blank = false;
+        }
+    }
+    while lines.last().is_some_and(String::is_empty) {
+        lines.pop();
+    }
+    lines
+        .join("\n")
+        .chars()
+        .take(MAX_PAGE_CHARS)
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_private_and_loopback_urls_for_web_fetch() {
+        assert!(result_url("http://127.0.0.1:8080/secret").is_none());
+        assert!(result_url("http://localhost:11434/api/tags").is_none());
+        assert!(result_url("http://192.168.1.10/admin").is_none());
+        assert!(result_url("file:///etc/passwd").is_none());
+        assert!(result_url("https://example.com/article").is_some());
+    }
+
+    #[test]
+    fn extracts_clean_text_and_title_from_html() {
+        let html = r#"<!doctype html>
+        <html>
+          <head>
+            <title>CortexOS &amp; 个人知识库</title>
+            <style>body { color: red; }</style>
+            <script>console.log("ignore me");</script>
+          </head>
+          <body>
+            <!-- comment to ignore -->
+            <h1>核心设计</h1>
+            <p>第一段内容 &nbsp; 包含 &lt;标签&gt;。</p>
+            <p>第二段内容。</p>
+          </body>
+        </html>"#;
+        let url = Url::parse("https://example.com/guide").unwrap();
+        let (title, text) = extract_web_text(html, "text/html; charset=utf-8", &url);
+        assert_eq!(title, "CortexOS & 个人知识库");
+        assert!(text.contains("核心设计"));
+        assert!(text.contains("第一段内容 包含 <标签>。"));
+        assert!(text.contains("第二段内容。"));
+        assert!(!text.contains("ignore me"));
+        assert!(!text.contains("color: red"));
     }
 }

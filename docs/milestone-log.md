@@ -1,5 +1,12 @@
 # 里程碑记录
 
+## 2026-11-24 专属个人 AI 演进（Phase 4 收口：网页正文抓取、持久化文件夹同步、对话栏助手切换）
+
+- **安全网页正文抓取与一键入库**：在 `web_search.rs` 新增 `fetch_web_page` 命令，复用 `result_url` 并在自定义重定向策略的每一跳拦截内网/回环/非 http(s) 地址（SSRF 防护），限制 1 MiB 与 15 秒超时，提取标题与纯文本正文；支持直接调用 `save_knowledge` 生效并同步进入 FTS5 检索。对话联网来源卡片新增「抓取并存入知识」按钮，资料文件对话框新增公开网页链接直接抓取入库入口。
+- **Schema 33 授权文件夹持久化与自动同步**：新增迁移 `0033_watched_folders.sql`，持久化记录工作区已授权的本地同步文件夹路径与最近同步时间；新增 `list_watched_folders`、`sync_watched_folder`、`remove_watched_folder`、`sync_workspace_watched_folders` 命令。用户同步文件夹时自动绑定，资料文件面板可查看已绑定目录、一键重新同步或解绑；切换进入工作区时后台静默增量同步并在有新增/更新时提示。
+- **对话页快捷切换助手分身**：在对话输入栏模型选择器旁新增助手分身下拉菜单（当工作区存在已发布分身版本时显示），支持在「默认助手」与各已发布分身间一键热切换。
+- **实测与未验证范围**：执行 `npm.cmd --prefix apps/desktop run build`、`node --experimental-strip-types --test apps/desktop/tests/unit/navigation.test.ts`、`cargo test --offline --locked --lib`（`web_search::tests` 2 项、`watched_folders_upsert_sync_and_remove` 1 项、`upgrades_existing_database_with_consistent_backup_and_checks_all_migrations` 1 项、`global_persona_and_memory_extraction_cycle` 1 项，全部通过）及 `cargo build --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`。未执行真实外网网页抓取、本地/云端模型推理或原生 WebView2 截图回归。
+
 ## 2026-11-24 专属个人 AI 演进（Step 0 拆库 + Phase 1–3）
 
 - **评测独立拆库**：先将基线改动归档提交 `c56f10e`，经由本机 Codex 在 `marksimZ` 账号下创建公开仓库 `CortexOS-Bench`，完整校验推送 26 个分支与 2 个标签并克隆至 `D:\vibecoding\CortexOS-Bench`；原 `origin` 保持不变。
