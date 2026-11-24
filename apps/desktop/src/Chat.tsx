@@ -1,10 +1,15 @@
 import { chat } from "./api/chat";
+import { saveReminder, type ReminderInput } from "./api/reminders";
+import { webSearch, type WebSearchProvider } from "./api/web-search";
+import { parseReminder, reminderOccurrences } from "./reminder-draft";
 import { AppDialog, openDialog } from "./components/AppDialog";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ChevronUp, PanelRight, Pencil } from "lucide-react";
 import { navigate, useNavigation } from "./navigation";
 import { ChatMessage } from "./components/ChatMessage";
 import { ChatComposer } from "./components/ChatComposer";
+import { ChatWebSources, questionWithSources, safeSourceUrl, type SearchState } from "./components/ChatWebSources";
+import { ReminderFields } from "./components/ReminderFields";
 import { EmptyState } from "./components/EmptyState";
 import { CognitiveInspector } from "./components/CognitiveInspector";
 import { ChatEvidence } from "./components/ChatEvidence";
@@ -12,7 +17,7 @@ import { useChatScroll } from "./components/useChatScroll";
 import { PaneDivider, splitStyle } from "./components/PaneDivider";
 import { notify } from "./components/Toast";
 import { errorText, preference, remember, type Message, type Studio } from "./studio";
-import { runtimeRoles, type CloudDisclosure, type CloudDraft, type CloudKnowledgeGrant, type Profile,
+import { cloudConnectionLabel, runtimeRoles, type CloudDisclosure, type CloudDraft, type CloudKnowledgeGrant, type Profile,
   type RuntimeRole } from "./runtime-profiles";
 
 const historyPageSize = 60;
@@ -44,6 +49,7 @@ export function ChatPage({
   const cloudLookup = currentRuntime?.profile?.embedding.kind === "cloud" || currentRuntime?.profile?.reranking.kind === "cloud";
   const cloudTurn = cloudAnswer || cloudLookup;
   const modelName = (target?.kind !== "off" ? target?.model : null) ?? studio.settings.model;
+  const answerConnection = currentRuntime?.disclosure.generation?.connection;
   const modelReady = cloudAnswer
     ? currentRuntime?.disclosure.generation?.connection.probes.some(item => item.model === modelName && item.capability === "generation" && item.state === "verified")
     : studio.health?.models.some(model => model.name === modelName || model.name === currentRuntime?.localBackup);
@@ -88,21 +94,83 @@ export function ChatPage({
   useEffect(() => {
     if (cloudDraft) openDialog(cloudDialog.current);
   }, [cloudDraft]);
+  const reminderHeading = useRef<HTMLHeadingElement>(null);
+  const [reminderDraft, setReminderDraft] = useState<ReminderInput | null>(null);
+  const [reminderSaving, setReminderSaving] = useState(false);
+  const [reminderError, setReminderError] = useState<string | null>(null);
+  const [reminderContext, setReminderContext] = useState<{ workspace: string; conversation: string | null; text: string } | null>(null);
+  const latestComposer = useRef({ workspace: studio.workspaceId, conversation: studio.conversationId, text: studio.draft });
+  useLayoutEffect(() => {
+    latestComposer.current = { workspace: studio.workspaceId, conversation: studio.conversationId, text: studio.draft };
+  }, [studio.workspaceId, studio.conversationId, studio.draft]);
+  const currentReminder = reminderContext?.workspace === studio.workspaceId && reminderContext?.conversation === studio.conversationId
+    ? reminderDraft : null;
+  const hasReminderDraft = currentReminder !== null;
+  useLayoutEffect(() => {
+    if (hasReminderDraft) reminderHeading.current?.focus();
+  }, [hasReminderDraft]);
+  const taskDraft = useMemo(() => parseReminder(studio.draft), [studio.draft]);
+  const isReminder = taskDraft !== null;
+  const isBriefing = currentReminder?.newsQuery != null;
+  const canSaveReminder = currentReminder !== null && !!currentReminder.title.trim() &&
+    (!isBriefing || !!currentReminder.newsQuery?.trim()) && reminderOccurrences(currentReminder).length > 0;
   const draftTooLong = useMemo(() => new TextEncoder().encode(studio.draft.trim()).length > 16_384, [studio.draft]);
-  const canSend =
+  const composerReady =
     studio.desktop &&
     !!studio.workspaceId &&
-    !!modelReady &&
     !!studio.draft.trim() &&
     !draftTooLong &&
-    (cloudAnswer || studio.knowledgeScopeReady) &&
-    !studio.activeRun &&
     !studio.sending &&
     !studio.savingRetrieval &&
     !studio.loadingMessages;
+  const canAnswer = composerReady && !!modelReady && (cloudAnswer || studio.knowledgeScopeReady) && !studio.activeRun && !currentRunning;
+  const canSend = isReminder ? composerReady && !currentRunning && !reminderSaving : canAnswer;
   const { messages } = studio;
   const conversationKey = `${studio.workspaceId}:${studio.conversationId}`;
   const scroll = useChatScroll(conversationKey, messages, !!route.message);
+  const [searchConfig, setSearchConfig] = useState<{ workspace: string; configured: boolean | null } | null>(null);
+  const [searchStatusAttempt, setSearchStatusAttempt] = useState(0);
+  const [webResults, setWebResults] = useState<SearchState | null>(null);
+  const searchPanel = useRef<HTMLDivElement>(null);
+  const query = studio.draft.trim();
+  const visibleResults = webResults?.scope === conversationKey && webResults.query === query ? webResults : null;
+  const configured = searchConfig?.workspace === studio.workspaceId ? searchConfig?.configured : undefined;
+  const selectedWebSources = visibleResults?.status === "ready"
+    ? visibleResults.response.results.filter(source => !visibleResults.excludedUrls.includes(source.url)) : [];
+  // The backend's context calculation reserves 256 bytes and adds its system instructions.
+  const maxQuestionBytes = Math.min(16_384, studio.settings.numCtx - studio.settings.numPredict - 256 - 768);
+  const webInput = visibleResults?.status === "ready" && selectedWebSources.length
+    ? questionWithSources(query, { ...visibleResults.response, results: selectedWebSources }, visibleResults.provider, maxQuestionBytes) : null;
+  const showWebResults = visibleResults !== null && !currentReminder;
+  useEffect(() => {
+    const workspace = studio.workspaceId;
+    if (!workspace || !studio.desktop) return;
+    let current = true;
+    void webSearch("read_web_search_status", { workspaceId: workspace }).then(status => {
+      if (current) setSearchConfig({ workspace, configured: status.configured });
+    }).catch(() => {
+      if (current) setSearchConfig({ workspace, configured: null });
+    });
+    return () => { current = false; };
+  }, [studio.workspaceId, studio.desktop, searchStatusAttempt]);
+  useEffect(() => {
+    if (!showWebResults) return;
+    searchPanel.current?.scrollIntoView({ block: "start" });
+    searchPanel.current?.querySelector("h2")?.focus({ preventScroll: true });
+  }, [showWebResults]);
+  const searchWeb = (provider: WebSearchProvider) => {
+    const workspaceId = studio.workspaceId;
+    if (!workspaceId || (provider === "brave" && !configured) || !query || visibleResults?.status === "loading") return;
+    const pending: SearchState = { scope: conversationKey, query, provider, status: "loading" };
+    setWebResults(pending);
+    void webSearch("search_web", { workspaceId, query, provider }).then(response => {
+      const results = response.results.filter(source => safeSourceUrl(source.url));
+      setWebResults(current => current === pending
+        ? { ...pending, status: "ready", response: { ...response, results }, excludedUrls: [] } : current);
+    }).catch(value => {
+      setWebResults(current => current === pending ? { ...pending, status: "error", error: errorText(value) } : current);
+    });
+  };
   const historyKey = `${conversationKey}:${route.message ?? "latest"}`;
   const [historyPage, setHistoryPage] = useState({ historyKey, limit: historyPageSize, newer: 0, initialCount: null as number | null });
   const currentPage = historyPage.historyKey === historyKey
@@ -168,7 +236,7 @@ export function ChatPage({
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const evidenceToggle = useRef<HTMLButtonElement>(null);
   const [wide, setWide] = useState(() => window.innerWidth > 1100);
-  const [desktopEvidence, setDesktopEvidence] = useState(() => preference("evidence-open") !== "false");
+  const [desktopEvidence, setDesktopEvidence] = useState(() => preference("evidence-open") === "true");
   const [overlayEvidence, setOverlayEvidence] = useState(false);
   const evidenceOpen = wide ? desktopEvidence : overlayEvidence;
   const setEvidenceOpen = (open: boolean) => {
@@ -194,6 +262,8 @@ export function ChatPage({
   }, [messages]);
   const evidenceRun = studio.messages.find(message => message.role === "assistant" && message.id === route.message)?.modelRunId ?? latestRun;
 
+  const hasCitations = !!messages.find(message => message.role === "assistant" && message.modelRunId === evidenceRun)?.citations?.occurrences.length;
+
   useEffect(() => {
     if (!currentRunning) setCancelling(false);
   }, [currentRunning]);
@@ -203,7 +273,17 @@ export function ChatPage({
     return () => window.clearTimeout(timer);
   }, [copied]);
 
-  const send = async (content?: string) => {
+  const focusComposer = () => requestAnimationFrame(() => document.getElementById("message")?.focus());
+  const send = async (content?: string, withWebSources = false) => {
+    if (content === undefined && studio.workspaceId && !reminderSaving) {
+      const reminder = parseReminder(studio.draft);
+      if (reminder) {
+        setReminderContext({ workspace: studio.workspaceId, conversation: studio.conversationId, text: studio.draft });
+        setReminderError(null);
+        setReminderDraft(reminder);
+        return;
+      }
+    }
     if (cloudTurn && currentRuntime?.profile && studio.workspaceId) {
       const question = (content ?? studio.draft).trim();
       if (question) {
@@ -211,7 +291,7 @@ export function ChatPage({
         setShareGranted(false);
         setAllowRanking(false);
         setCloudDraft({
-          question, retry: content !== undefined,
+          question, retry: content !== undefined && !withWebSources, webSources: withWebSources,
           workspace: studio.workspaceId, conversation: studio.conversationId,
           selection: studio.knowledgeScope ? [] : studio.contextSelection,
           profile: currentRuntime.profile, disclosure: currentRuntime.disclosure,
@@ -224,6 +304,9 @@ export function ChatPage({
       workspace: studio.workspaceId,
       conversation: studio.conversationId,
     });
+    if (withWebSources && content && studio.workspaceId) {
+      return studio.send(undefined, undefined, { question: content, workspaceId: studio.workspaceId, conversationId: studio.conversationId });
+    }
     return studio.send(content);
   };
   const copy = useCallback(async (id: string, text: string) => {
@@ -260,7 +343,7 @@ export function ChatPage({
             )}
           </div>
           <div className="heading-actions">
-            <button ref={evidenceToggle} hidden={evidenceOpen} className="icon-button evidence-toggle" aria-label="打开回答依据" aria-expanded={evidenceOpen} aria-controls="chat-evidence" aria-haspopup={!wide ? "dialog" : undefined} title="打开回答依据" onClick={() => setEvidenceOpen(true)}><PanelRight size={17} /></button>
+            <button ref={evidenceToggle} hidden={evidenceOpen} className="icon-button evidence-toggle" aria-label="打开回答依据" aria-expanded={evidenceOpen} aria-controls="chat-evidence" aria-haspopup={!wide ? "dialog" : undefined} title="打开回答依据" onClick={() => setEvidenceOpen(true)}><PanelRight size={17} />{hasCitations && <span>查看引用</span>}</button>
             {conversation && (
               <button
                 className="icon-button"
@@ -340,16 +423,70 @@ export function ChatPage({
               ))}
 
             </div>
-          ) : (
+          ) : !currentReminder && !showWebResults ? (
             <EmptyState
               studio={studio}
               modelReady={modelReady}
               cloudAnswer={cloudAnswer}
               onCreateWorkspace={onCreateWorkspace}
             />
-          )}
+          ) : null}
+          {showWebResults && <div ref={searchPanel}>
+            <ChatWebSources state={visibleResults}
+              canAnswer={canAnswer && !!webInput?.question}
+              includedCount={webInput?.count ?? 0}
+              onDismiss={() => { setWebResults(null); focusComposer(); }}
+              onToggle={url => setWebResults(current => current?.status === "ready" ? {
+                ...current,
+                excludedUrls: current.excludedUrls.includes(url)
+                  ? current.excludedUrls.filter(value => value !== url) : [...current.excludedUrls, url],
+              } : current)}
+              onAnswer={() => {
+                if (canAnswer && webInput?.question) void send(webInput.question, true);
+              }} />
+          </div>}
+          {currentReminder && <form className="chat-reminder" aria-labelledby="chat-reminder-title" onSubmit={event => {
+            event.preventDefault();
+            const context = reminderContext;
+            if (reminderSaving || !context) return;
+            if (context.workspace !== studio.workspaceId || context.conversation !== studio.conversationId) {
+              setReminderError("当前会话已变化，请返回会话重新确认。");
+              return;
+            }
+            if (!canSaveReminder || !reminderOccurrences(currentReminder).length) {
+              setReminderError(isBriefing ? "请填写简报名称和查询词，并选择可触发的未来时间。" : "请填写提醒内容并选择可触发的未来时间。");
+              return;
+            }
+            setReminderSaving(true);
+            setReminderError(null);
+            void saveReminder(context.workspace, null, currentReminder).then(() => {
+              const composer = latestComposer.current;
+              if (context.workspace === composer.workspace && context.conversation === composer.conversation &&
+                  context.text === composer.text) studio.setDraft("");
+              setReminderDraft(null);
+              if (context.workspace === composer.workspace && context.conversation === composer.conversation) focusComposer();
+              notify(isBriefing ? "新闻简报已启用，可在任务中心查看" : "提醒已保存，可在任务中心查看");
+            }).catch(value => setReminderError(errorText(value))).finally(() => setReminderSaving(false));
+          }}>
+            <h2 id="chat-reminder-title" ref={reminderHeading} tabIndex={-1}>{isBriefing ? "确认新闻简报" : "确认提醒"}</h2>
+            {!isBriefing && <p>提醒在应用运行时送达。恢复运行时会补发最近一次迟到不超过 5 分钟的提醒，较早的提醒记为错过。</p>}
+            <div inert={reminderSaving}>
+              <ReminderFields value={currentReminder} onChange={value => {
+                setReminderDraft(value);
+                setReminderError(null);
+              }} />
+            </div>
+            {reminderError && <p className="form-error" role="alert">{reminderError}</p>}
+            <div className="dialog-actions">
+              <button className="button secondary" type="button" disabled={reminderSaving}
+                onClick={() => { setReminderDraft(null); focusComposer(); }}>取消</button>
+              <button className="button primary" disabled={reminderSaving || !canSaveReminder}>
+                {reminderSaving ? "正在保存…" : isBriefing ? "确认启用" : "确认保存"}
+              </button>
+            </div>
+          </form>}
         </div>
-        {messages.length > 0 && (scroll.showJump || end < messages.length) && (
+        {!currentReminder && messages.length > 0 && (scroll.showJump || end < messages.length) && (
           <div className="jump-latest" role="group" aria-label="历史消息导航">
             {end < messages.length && <button type="button" className="button secondary" onClick={() => {
               focusNewer.current = `message-${messages[end].id}`;
@@ -366,10 +503,10 @@ export function ChatPage({
             </button>
           </div>
         )}
-        <ChatComposer
+        {!currentReminder && <ChatComposer
           studio={studio}
           modelReady={modelReady}
-          modelName={modelName}
+          modelName={cloudAnswer && answerConnection ? modelName + " · " + cloudConnectionLabel(answerConnection) : modelName}
           cloudAnswer={cloudAnswer}
           cloudLookup={cloudLookup}
           currentRunning={currentRunning}
@@ -377,9 +514,17 @@ export function ChatPage({
           cancelling={cancelling}
           setCancelling={setCancelling}
           canSend={canSend}
+          taskDraft={taskDraft ? (taskDraft.newsQuery != null ? "briefing" : "reminder") : null}
           draftTooLong={draftTooLong}
+          searchConfigured={configured}
+          retrySearchStatus={() => {
+            setSearchConfig(null);
+            setSearchStatusAttempt(attempt => attempt + 1);
+          }}
+          searching={visibleResults?.status === "loading"}
+          searchWeb={searchWeb}
           send={send}
-        />
+        />}
         <p className="sr-only" role="status">
           {preparing ? "正在准备回答" : currentRunning ? "正在生成回答" : "当前没有生成任务"}
           {copied ? "，回答已复制" : ""}
@@ -409,17 +554,21 @@ export function ChatPage({
               rankingVersions: allowRanking
                 ? cloudDraft.disclosure.reranking?.grants.map(({ nodeId, version }) => ({ nodeId, version })) ?? [] : [],
             },
-          });
+          }, cloudDraft.webSources ? {
+            question: cloudDraft.question, workspaceId: cloudDraft.workspace, conversationId: cloudDraft.conversation,
+          } : undefined);
         }}>
           <h2 id="cloud-send-title">确认发送到云端</h2>
           <ul className="cloud-runtime-capabilities">{(Object.keys(runtimeRoles) as RuntimeRole[]).map(role => {
             const target = cloudDraft.profile[role];
             if (target.kind !== "cloud") return null;
             const connection = cloudDraft.disclosure[role]?.connection;
-            return <li key={role}><span><strong>{runtimeRoles[role]}</strong>　{connection && (cloudNames[connection.provider] ?? connection.label)} / {target.model}
+            return <li key={role}><span><strong>{runtimeRoles[role]}</strong>　{connection && (connection.provider === "compatible" ? cloudConnectionLabel(connection) : cloudNames[connection.provider] ?? connection.label)} / {target.model}
               {connection?.address && <><br />{connection.address}</>}</span></li>;
           })}</ul>
           <p>云端回答发送本次问题。向量查找启用且索引可用时发送问题。历史对话留在本机，云端服务可能计费。</p>
+          {cloudDraft.profile.generation.kind === "cloud" && <p>云端回答使用内置默认助手。个人助手指令留在本机。</p>}
+          {cloudDraft.webSources && <p>本次问题包含你选用的网页标题、链接和摘要，适用的云端服务会收到这些内容。</p>}
           {cloudDraft.profile.generation.kind === "cloud" && cloudDraft.selection.length > 0 && <label className="retrieval-switch">
             <input type="checkbox" checked={shareSelection} onChange={event => setShareSelection(event.target.checked)} />
             同时发送手动选中的 {cloudDraft.selection.length} 条知识

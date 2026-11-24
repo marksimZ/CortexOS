@@ -1,66 +1,70 @@
-/* The supplied HTML is the visual source of truth. All surfaces stay local. */
+/* Minimal, neutral system: near-black primary, one accent, borders over shadows. */
 :root {
-  --text-caption: 0.75rem;
-  --text-compact: 0.8125rem;
-  --text-control: 0.875rem;
-  --text-body: 0.9375rem;
-  --text-prose: 1rem;
-  --text-section: 1.125rem;
-  --text-heading: 1.25rem;
-  --text-display: 1.75rem;
-  --control-size: 36px;
-  --control-size-compact: 30px;
+  --text-caption: 0.6875rem;   /* 11 */
+  --text-compact: 0.75rem;     /* 12 */
+  --text-control: 0.8125rem;   /* 13 */
+  --text-body: 0.875rem;       /* 14 */
+  --text-prose: 0.9375rem;     /* 15 */
+  --text-section: 1.0625rem;   /* 17 */
+  --text-heading: 1.25rem;     /* 20 */
+  --text-display: 1.75rem;     /* 28 */
+  --control-size: 32px;
+  --control-size-compact: 28px;
   --icon-size: 16px;
-  --radius-panel: 20px;
-  --radius-control: 12px;
-  --radius-inset: 10px;
+  --radius-panel: 12px;
+  --radius-control: 8px;
+  --radius-inset: 6px;
   --menu-inset: 4px;
-  --radius-menu-item: calc(var(--radius-control) - var(--menu-inset));
+  --radius-menu-item: 6px;
   color-scheme: light;
-  --background: #eef1f7; --mist-blue: #dae2fb; --mist-green: #d4eee8;
-  --text: #1b2230; --text-secondary: #3a4456; --muted: #566073;
-  --primary: #4f5bd5; --primary-hover: #404cc4; --on-primary: #fff;
-  --success: #4fb6a8; --success-text: #1b5f57; --danger: #ad3e45; --warning: #6e470b;
-  --glass: rgb(255 255 255 / 58%); --glass-highlight: rgb(255 255 255 / 75%);
-  --surface: rgb(255 255 255 / 88%); --surface-subtle: rgb(255 255 255 / 55%);
-  --surface-hover: rgb(255 255 255 / 85%); --surface-graph: #edf2f6;
-  --line: rgb(27 34 48 / 10%); --control-border: rgb(27 34 48 / 12%);
-  --selected: rgb(79 91 213 / 9%); --chip: rgb(79 182 168 / 18%);
-  --warning-bg: rgb(227 168 79 / 16%); --danger-bg: rgb(173 62 69 / 8%);
-  --micro-raised: rgb(255 255 255 / 3%); --micro-inset: rgb(27 34 48 / 2%);
-  --scroll-thumb: rgb(71 83 111 / 32%); --scroll-thumb-hover: rgb(71 83 111 / 56%); --scroll-thumb-active: rgb(71 83 111 / 72%);
-  --shadow: 0 8px 32px rgb(40 50 90 / 8%), inset 0 1px 0 var(--glass-highlight);
-  --shadow-overlay: 0 16px 56px rgb(40 50 90 / 16%), inset 0 1px 0 var(--glass-highlight);
-  --focus-ring: var(--primary);
-  --surface-sticky: linear-gradient(var(--surface), var(--surface)), var(--background);
+  --background: #fbfbfc;
+  --text: #18181b; --text-secondary: #52525b; --muted: #75757e;
+  --primary: #18181b; --primary-hover: #2f2f36; --on-primary: #ffffff;
+  --accent: #5e6ad2; --accent-hover: #4f5ac2; --accent-soft: rgb(94 106 210 / 10%);
+  --success: #16a34a; --success-text: #15803d; --danger: #dc2626; --warning: #b45309;
+  --glass: #ffffff; --glass-highlight: rgb(255 255 255 / 0%);
+  --surface: #ffffff; --surface-subtle: #f6f6f7;
+  --surface-hover: #f1f1f3; --surface-graph: #fbfbfc;
+  --line: #e8e8ec; --line-strong: #d9d9de; --control-border: #e2e2e6;
+  --selected: #f2f2f5; --chip: rgb(94 106 210 / 10%);
+  --warning-bg: rgb(180 83 9 / 8%); --danger-bg: rgb(220 38 38 / 7%); --success-bg: rgb(22 163 74 / 9%);
+  --micro-raised: rgb(255 255 255 / 60%); --micro-inset: rgb(0 0 0 / 3%);
+  --scroll-thumb: rgb(0 0 0 / 14%); --scroll-thumb-hover: rgb(0 0 0 / 24%); --scroll-thumb-active: rgb(0 0 0 / 32%);
+  --shadow: 0 1px 2px rgb(0 0 0 / 6%);
+  --shadow-overlay: 0 12px 32px rgb(0 0 0 / 12%), 0 1px 2px rgb(0 0 0 / 6%);
+  --focus-ring: var(--accent);
+  --surface-sticky: var(--surface);
   --font-normal: 400; --font-medium: 500; --font-strong: 600;
-  --font-ui: Inter, "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
-  --ease: cubic-bezier(.22, 1, .36, 1); --spring: cubic-bezier(.2, 1.4, .5, 1);
-  --motion: 180ms; --sidebar-width: 252px; --reading-width: 45rem;
-  --knowledge-reading-width: 76ch;
-  --node-knowledge: #4fb6a8; --node-context: #8599ba; --node-hypothesis: #a899c5;
-  --node-decision: #6a83d3; --node-evidence: #5baca8; --node-conflict: #c38a23;
-  --node-event: #8b9bbb; --node-input: #bd9b67; --node-output: #4fb6a8; --node-error: #c5787e;
-  --graph-edge: #9aa6bc; --trace-order: #9aa6bc; --trace-context: #9e91bc; --trace-output: #4fb6a8;
+  --font-ui: -apple-system, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  --ease: cubic-bezier(.2, 0, 0, 1); --spring: cubic-bezier(.2, 0, 0, 1);
+  --motion: 140ms; --sidebar-width: 252px; --reading-width: 45rem;
+  --knowledge-reading-width: 68ch;
+  --node-knowledge: #3f8f7f; --node-context: #7b8494; --node-hypothesis: #8b7fae;
+  --node-decision: #5b6bb5; --node-evidence: #4a8f8a; --node-conflict: #a2741f;
+  --node-event: #7d8798; --node-input: #9a7f52; --node-output: #3f8f7f; --node-error: #b26a70;
+  --graph-edge: #b8bcc6; --trace-order: #b8bcc6; --trace-context: #9187ab; --trace-output: #3f8f7f;
   --surface-readonly: var(--micro-inset); --surface-disabled: var(--micro-inset);
 }
 :root[data-color-scheme=dark] {
   color-scheme: dark;
-  --background: #0e121c; --mist-blue: #1b2347; --mist-green: #12302f;
-  --text: #e8ecf5; --text-secondary: #c3ccdc; --muted: #9aa6bc;
-  --primary: #7f8bff; --primary-hover: #939cff; --on-primary: #101628;
-  --success: #66c9b9; --success-text: #7fe0d1; --danger: #f0a0a5; --warning: #f1c777;
-  --glass: rgb(30 36 52 / 60%); --glass-highlight: rgb(255 255 255 / 10%);
-  --surface: rgb(24 30 46 / 94%); --surface-subtle: rgb(255 255 255 / 6%);
-  --surface-hover: rgb(255 255 255 / 12%); --surface-graph: #172333;
-  --line: rgb(255 255 255 / 12%); --control-border: rgb(255 255 255 / 14%);
-  --selected: rgb(120 130 255 / 16%); --chip: rgb(79 182 168 / 22%);
-  --warning-bg: rgb(227 168 79 / 13%); --danger-bg: rgb(240 160 165 / 10%);
-  --micro-raised: rgb(255 255 255 / 3%); --micro-inset: rgb(0 0 0 / 3%);
-  --scroll-thumb: rgb(174 189 216 / 30%); --scroll-thumb-hover: rgb(174 189 216 / 50%); --scroll-thumb-active: rgb(174 189 216 / 68%);
-  --shadow: 0 8px 32px rgb(0 0 0 / 14%), inset 0 1px 0 var(--glass-highlight);
-  --shadow-overlay: 0 16px 56px rgb(0 0 0 / 28%), inset 0 1px 0 var(--glass-highlight);
-  --font-normal: 380; --font-medium: 450; --font-strong: 500;
-  --graph-edge: #7688a5;
+  --background: #0b0b0c; --text: #f4f4f5; --text-secondary: #a1a1aa; --muted: #8a8a93;
+  --primary: #fafafa; --primary-hover: #e4e4e7; --on-primary: #18181b;
+  --accent: #7c83f0; --accent-hover: #949af5; --accent-soft: rgb(124 131 240 / 14%);
+  --success: #4ade80; --success-text: #6ee7a8; --danger: #f87171; --warning: #fbbf24;
+  --glass: #141416; --glass-highlight: rgb(255 255 255 / 0%);
+  --surface: #141416; --surface-subtle: #1a1a1d;
+  --surface-hover: #202024; --surface-graph: #0f0f11;
+  --line: #26262b; --line-strong: #34343a; --control-border: #2e2e34;
+  --selected: #232329; --chip: rgb(124 131 240 / 16%);
+  --warning-bg: rgb(251 191 36 / 10%); --danger-bg: rgb(248 113 113 / 10%); --success-bg: rgb(74 222 128 / 12%);
+  --micro-raised: rgb(255 255 255 / 4%); --micro-inset: rgb(255 255 255 / 3%);
+  --scroll-thumb: rgb(255 255 255 / 14%); --scroll-thumb-hover: rgb(255 255 255 / 24%); --scroll-thumb-active: rgb(255 255 255 / 32%);
+  --shadow: 0 1px 2px rgb(0 0 0 / 50%);
+  --shadow-overlay: 0 16px 40px rgb(0 0 0 / 55%), 0 1px 2px rgb(0 0 0 / 50%);
+  --surface-sticky: var(--surface);
+  --node-knowledge: #5fb8a4; --node-context: #939daf; --node-hypothesis: #a99cc9;
+  --node-decision: #8493e0; --node-evidence: #6ab5ae; --node-conflict: #d0a052;
+  --node-event: #9aa5b7; --node-input: #c0a072; --node-output: #5fb8a4; --node-error: #d98b91;
+  --graph-edge: #3a3a42; --trace-order: #3a3a42; --trace-context: #6f6488; --trace-output: #5fb8a4;
 }

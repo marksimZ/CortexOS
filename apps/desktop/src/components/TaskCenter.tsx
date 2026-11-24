@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import { X } from "lucide-react";
 import { AppDialog } from "./AppDialog";
 import { lazyView } from "./lazyView";
+import { ReminderList } from "./ReminderList";
 
 const TaskList = lazyView(() => import("./TaskList"), module => module.TaskList);
 
@@ -22,6 +23,7 @@ export function TaskCenter({ dialog, open, onClose, desktop, workspaceId, worksp
       {open && (desktop
         ? <TaskList key={workspaceId ?? "local"} workspaceId={workspaceId} workspaceName={workspaceName} close={() => dialog.current?.close()} />
         : <p>请在桌面版查看任务与历史。</p>)}
+      {desktop && workspaceId && <ReminderList key={`reminders-${workspaceId}`} workspaceId={workspaceId} open={open} />}
     </div>
   </AppDialog>;
 }

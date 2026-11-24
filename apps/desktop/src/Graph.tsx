@@ -102,10 +102,15 @@ export const GraphPage = memo(function GraphPage({
             执行过程
           </label>
         </fieldset>
+
       </header>
       {kind === "knowledge" ? (
-        <>
-          <div className="graph-source">
+          <KnowledgeGraph
+            key={`${studio.workspaceId}:${demo}`}
+            studio={studio}
+            revision={revision}
+            demo={demo}
+            sourceControl={<div className="graph-source">
             <label htmlFor="graph-source">数据</label>
             <SelectMenu
               id="graph-source"
@@ -116,16 +121,10 @@ export const GraphPage = memo(function GraphPage({
               <option value="demo">7 节点演示</option>
             </SelectMenu>
             {demo && <strong>演示数据，不写入工作区</strong>}
-          </div>
-          <KnowledgeGraph
-            key={`${studio.workspaceId}:${demo}`}
-            studio={studio}
-            revision={revision}
-            demo={demo}
+          </div>}
             onEdit={onEdit}
             onEditEdge={onEditEdge}
           />
-        </>
       ) : (
         <ExecutionTrace key={studio.workspaceId ?? "preview"} studio={studio} />
       )}
@@ -133,6 +132,7 @@ export const GraphPage = memo(function GraphPage({
   );
 });
 function KnowledgeGraph({
+  sourceControl,
   studio,
   revision,
   demo,
@@ -142,6 +142,7 @@ function KnowledgeGraph({
   studio: GraphStudio;
   revision: number;
   demo: boolean;
+  sourceControl: React.ReactNode;
   onEdit: (request: EditKnowledge) => void;
   onEditEdge: (request: EditEdge) => void;
 }) {
@@ -492,6 +493,7 @@ function KnowledgeGraph({
   if (!demo && (!studio.desktop || !workspace))
     return (
       <div className="graph-empty">
+        {sourceControl}
         <Network size={32} />
         <h2>
           {studio.desktop ? "先选择一个工作区" : "在桌面程序中查看项目图谱"}
@@ -531,6 +533,7 @@ function KnowledgeGraph({
             ? `（${[typeFilter !== "all", statusFilter !== "all", !!since].filter(Boolean).length}）`
             : ""}
         </button>
+        {sourceControl}
         <span className="graph-visible-count" role="status">
           {loading ? "正在读取… " : ""}已加载 {visible.length} /{" "}
           {counts.totalNodes} 节点
@@ -853,6 +856,7 @@ function KnowledgeGraph({
                 selected={visibleIds.has(selected ?? "") ? selected : null}
                 camera={initialView.current?.camera ?? [0, 9, 22]}
                 target={initialView.current?.target ?? [0, 0, 0]}
+                onReady={demo ? () => api.current?.fit() : undefined}
                 apiRef={api}
                 showEdgeLabels={showEdgeLabels}
                 onSelect={select}

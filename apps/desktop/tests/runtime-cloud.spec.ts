@@ -2,6 +2,129 @@ import { expect, test } from "@playwright/test";
 
 test.use({ headless: true });
 
+test("Chinese cloud presets keep keys masked and select models per connection", async ({ page }, info) => {
+  const presets = [
+    { id: "deepseek", label: "DeepSeek 官方", address: "https://api.deepseek.com", rerank: false },
+    { id: "bailian", label: "阿里云百炼（北京）", address: "https://dashscope.aliyuncs.com/compatible-mode/v1", rerank: false },
+    { id: "siliconflow", label: "硅基流动", address: "https://api.siliconflow.cn/v1", rerank: true },
+  ];
+  await page.addInitScript(presets => {
+    const rows = new Map<string, {
+      id: string; label: string; provider: string; address: string; compatibleRerank: boolean;
+      catalogState: string; models: object[]; probes: object[]; limits: object[];
+    }>();
+    const activity: string[] = [];
+    const unexpected: string[] = [];
+    Object.assign(window, {
+      isTauri: true,
+      presetAcceptance: { activity, unexpected },
+      __TAURI_EVENT_PLUGIN_INTERNALS__: { unregisterListener() {} },
+      __TAURI_INTERNALS__: { metadata: { currentWindow: { label: "main" } }, transformCallback: () => 1, unregisterCallback() {},
+        invoke: async (command: string, args: { workspaceId?: string; connectionId?: string; input?: Record<string, unknown> }) => {
+          if (command === "bootstrap") return {
+            workspaces: [{ id: "w", name: "预设验收" }, { id: "other", name: "隔离工作区" }],
+            settings: { model: "", numCtx: 4096, numPredict: 512, temperature: .3, timeoutSeconds: 180 },
+            activeRun: null,
+          };
+          if (command === "check_ollama") return { version: "fixture", models: [] };
+          if (command === "list_conversations") return [];
+          if (command === "rag_index_status") return { index: null };
+          if (command.startsWith("plugin:")) return 1;
+          if (command === "model_cloud_privacy_rules") return { blockEmail: false, blockPhone: false };
+          if (command === "list_runtime_cloud_connections") return args.workspaceId === "w" ? [...rows.values()] : [];
+          if (args.workspaceId !== "w") throw Error("Unexpected workspace");
+          if (command === "add_runtime_cloud_connection") {
+            const input = args.input;
+            const preset = presets.find(item => item.address === input?.address);
+            if (!preset || input?.provider !== "compatible" || input.label !== preset.label
+              || input.apiKey !== "synthetic-" + preset.id || input.compatibleRerank !== preset.rerank) {
+              unexpected.push("Malformed preset payload");
+              throw Error("Malformed preset payload");
+            }
+            const row = {
+              id: preset.id, label: preset.label, provider: "compatible", address: preset.address,
+              compatibleRerank: preset.rerank, catalogState: "unconfigured",
+              models: [], probes: [], limits: [], credentialAvailable: true,
+            };
+            rows.set(row.id, row);
+            activity.push("save:" + row.id);
+            return row;
+          }
+          const row = rows.get(args.connectionId ?? "");
+          if (command === "list_model_cloud_knowledge" && row) return { grants: [], candidates: [] };
+          if (command === "refresh_runtime_cloud_catalog" && row) {
+            activity.push("catalog:" + row.id);
+            row.catalogState = "verified";
+            row.models = [{
+              id: row.id + "-catalog-fixture", generation: "listed", embedding: "unknown", reranking: "unknown",
+              maxInputTokens: null, maxOutputTokens: null,
+            }];
+            return row;
+          }
+          unexpected.push(command);
+          throw Error("Unexpected mock command: " + command);
+        },
+      },
+    });
+  }, presets);
+
+  await page.goto("/#/settings?workspace=w");
+  await page.getByRole("button", { name: "云端模型", exact: true }).click();
+  const cloud = page.getByRole("region", { name: "云端连接", exact: true });
+  const selected = cloud.getByRole("combobox", { name: "当前工作区的连接", exact: true });
+  const activity = () => page.evaluate(() => (window as unknown as {
+    presetAcceptance: { activity: string[]; unexpected: string[] };
+  }).presetAcceptance);
+  const expected: string[] = [];
+  for (const preset of presets) {
+    await cloud.getByRole("button", { name: "添加连接", exact: true }).click();
+    const key = cloud.getByLabel("API 密钥", { exact: true });
+    await key.fill("synthetic-previous-provider");
+    await cloud.getByLabel("服务商", { exact: true }).selectOption(preset.id);
+    await expect(cloud.getByLabel("服务商", { exact: true }).locator("option:checked")).toHaveText(preset.label);
+    const address = cloud.getByLabel("HTTPS 服务地址", { exact: true });
+    await expect(address).toHaveValue(preset.address);
+    await expect(address).not.toBeEditable();
+    await expect(cloud.getByRole("link", { name: "获取 API 密钥", exact: true })).toHaveAttribute("href", /^https:\/\//);
+    await page.screenshot({ path: info.outputPath(preset.id + "-setup.png") });
+    expect(await activity()).toEqual({ activity: expected, unexpected: [] });
+    await expect(key).toHaveAttribute("type", "password");
+    await expect(key).toHaveValue("");
+    await key.fill("synthetic-" + preset.id);
+    await cloud.getByRole("button", { name: "保存连接", exact: true }).click();
+    await expect(cloud.getByText("已保存连接。", { exact: true })).toBeVisible();
+    await expect(key).toHaveCount(0);
+    await expect(selected).toHaveValue(preset.id);
+    await expect(cloud.getByText(preset.address, { exact: false })).toBeVisible();
+    expected.push("save:" + preset.id);
+    expect(await activity()).toEqual({ activity: expected, unexpected: [] });
+    await cloud.getByLabel("模型标识", { exact: true }).fill(preset.id + "-manual-fixture");
+    await cloud.getByRole("button", { name: "刷新模型列表", exact: true }).click();
+    await cloud.getByLabel("模型", { exact: true }).selectOption(preset.id + "-catalog-fixture");
+    await expect(cloud.getByRole("button", { name: "验证生成回答", exact: true })).toBeVisible();
+    await expect(cloud.getByRole("button", { name: "验证重排结果", exact: true })).toHaveCount(preset.rerank ? 1 : 0);
+    expected.push("catalog:" + preset.id);
+    expect(await activity()).toEqual({ activity: expected, unexpected: [] });
+    await page.screenshot({ path: info.outputPath(preset.id + "-catalog.png") });
+  }
+  await selected.selectOption("deepseek");
+  await expect(cloud.getByLabel("模型", { exact: true })).toHaveValue("");
+  await cloud.getByLabel("模型", { exact: true }).selectOption("deepseek-catalog-fixture");
+  await page.evaluate(() => { location.hash = "/settings?workspace=other"; });
+  await expect(page.getByRole("banner").getByText("隔离工作区", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "云端模型", exact: true }).click();
+  await expect(cloud.getByText("当前工作区还没有云端连接。", { exact: true })).toBeVisible();
+  await page.evaluate(() => { location.hash = "/settings?workspace=w"; });
+  await expect(page.getByRole("banner").getByText("预设验收", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "云端模型", exact: true }).click();
+  await expect(selected).toHaveValue("deepseek");
+  const persisted = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
+  for (const { id } of presets) {
+    expect(persisted).not.toContain("synthetic-" + id);
+    await expect(page.locator("body")).not.toContainText("synthetic-" + id);
+  }
+});
+
 test("cloud capabilities require an explicit probe and keep workspace scope", async ({ page }, info) => {
   await page.addInitScript(() => {
     const settings = { model: "fixture", numCtx: 4096, numPredict: 512, temperature: .3, timeoutSeconds: 180 };
@@ -116,10 +239,13 @@ test("cloud capabilities require an explicit probe and keep workspace scope", as
       await page.screenshot({ path: info.outputPath("cloud-" + theme + "-" + width + ".png") });
     }
   }
-  const workspace = page.getByRole("combobox", { name: "当前工作区", exact: true });
-  await workspace.selectOption("other");
+  await page.evaluate(() => { location.hash = "/settings?workspace=other"; });
+  await expect(page.getByRole("banner").getByText("乙工作区", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "云端模型", exact: true }).click();
   await expect(page.getByText("当前工作区还没有云端连接。", { exact: true })).toBeVisible();
-  await workspace.selectOption("w");
+  await page.evaluate(() => { location.hash = "/settings?workspace=w"; });
+  await expect(page.getByRole("banner").getByText("甲工作区", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "云端模型", exact: true }).click();
   await expect(cloud.getByRole("combobox", { name: "当前工作区的连接" })).toHaveValue("connection");
   await page.getByRole("button", { name: "移除连接", exact: true }).click();
   await page.getByRole("button", { name: "确认移除", exact: true }).click();
@@ -164,7 +290,9 @@ test("resource panel distinguishes measured usage, unknown costs and missing GPU
   await page.screenshot({ path: info.outputPath("runtime-resources.png") });
   await page.getByLabel("记录范围", { exact: true }).selectOption("168");
   await expect(page.getByText("当前范围暂无模型用量。", { exact: true })).toBeVisible();
-  await page.getByRole("combobox", { name: "当前工作区", exact: true }).selectOption("other");
+  await page.evaluate(() => { location.hash = "/settings?workspace=other"; });
+  await expect(page.getByRole("banner").getByText("项目乙", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "资源与用量", exact: true }).click();
   await expect(page.getByText("当前范围暂无模型用量。", { exact: true })).toBeVisible();
   await expect(page.getByText("fixture-embedding", { exact: true })).toHaveCount(0);
 });

@@ -1,6 +1,57 @@
 import { expect, test } from "@playwright/test";
 import { launchNative, nativeInvoke, createWorkspace } from "./native";
 
+test("domestic cloud presets persist separately across restart", async ({}, info) => {
+  test.setTimeout(90_000);
+  const options = { endpoint: "http://127.0.0.1:1", dataDirectory: info.outputPath("data") };
+  let app = await launchNative(info, options);
+  let workspaceId = "";
+  type Row = { id: string; label: string; address: string; provider: string; compatibleRerank: boolean; credentialAvailable: boolean };
+  const list = () => nativeInvoke<Row[]>(app.page, "list_runtime_cloud_connections", { workspaceId });
+  const presets = [
+    { name: /DeepSeek/, address: "https://api.deepseek.com/" },
+    { name: /百炼/, address: "https://dashscope.aliyuncs.com/compatible-mode/v1/" },
+    { name: /硅基流动/, address: "https://api.siliconflow.cn/v1/" },
+  ];
+  try {
+    await createWorkspace(app.page, "云端预设验收");
+    workspaceId = await app.page.getByLabel("当前工作区", { exact: true }).inputValue();
+    await app.page.evaluate(id => { location.hash = "/settings?section=cloud&workspace=" + id; }, workspaceId);
+    for (const { name, address } of presets) {
+      await app.page.getByRole("button", { name: "添加连接", exact: true }).click();
+      const provider = app.page.getByLabel("服务商", { exact: true });
+      const label = await provider.getByRole("option", { name }).innerText();
+      await provider.selectOption({ label });
+      await app.page.getByLabel("API 密钥", { exact: true }).fill("synthetic-preset-key-for-native-test");
+      await app.page.getByRole("button", { name: "保存连接", exact: true }).click();
+      await expect.poll(async () => (await list()).some(row => row.address === address)).toBe(true);
+    }
+    const saved = await list();
+    expect(saved).toHaveLength(3);
+    for (const { name, address } of presets) {
+      const row = saved.find(item => item.address === address);
+      expect(row).toMatchObject({ provider: "compatible", credentialAvailable: true, compatibleRerank: address.includes("siliconflow") });
+      expect(row?.label).toMatch(name);
+    }
+    expect(JSON.stringify(saved)).not.toContain("synthetic-preset-key");
+    await app.page.screenshot({ path: info.outputPath("presets-native.png") });
+    await app.closeWindow();
+    await app.stop();
+    app = await launchNative(info, options);
+    expect(await list()).toEqual(saved);
+    const other = await nativeInvoke<{ id: string }>(app.page, "create_workspace", { name: "单独工作区" });
+    expect(await nativeInvoke(app.page, "list_runtime_cloud_connections", { workspaceId: other.id })).toEqual([]);
+  } finally {
+    try {
+      if (workspaceId && !app.page.isClosed()) {
+        for (const row of await list()) {
+          await nativeInvoke(app.page, "remove_runtime_cloud_connection", { workspaceId, connectionId: row.id });
+        }
+      }
+    } finally { await app.stop(); }
+  }
+});
+
 test("native personalized guard denies direct calls and leaves local datasets and navigation available", async ({}, info) => {
   test.setTimeout(90_000);
   const app = await launchNative(info);

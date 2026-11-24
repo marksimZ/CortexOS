@@ -156,6 +156,11 @@ export function CognitiveInspector({
             ))}
           </ol>
           <h3>查找过程与资料</h3>
+          {detail.contextManifest.assistant && <p>
+            助手版本：{detail.contextManifest.assistant.kind === "workspace"
+              ? `${detail.contextManifest.assistant.name} · 版本 ${detail.contextManifest.assistant.version}`
+              : "内置默认"}
+          </p>}
           <RetrievalInspection detail={detail} beforeLocate={() => dialog.current?.close()} showContext />
           {detail.contextManifest.modelRoute && <p>
             {detail.contextManifest.modelRoute.task === "knowledge" ? "知识问答" : "普通问答"}，

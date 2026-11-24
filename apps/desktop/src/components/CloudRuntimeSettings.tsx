@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Cloud } from "lucide-react";
+import { cloudPresetForAddress, cloudPresets } from "../cloud-presets";
 import { errorText } from "../studio";
 import { SelectMenu } from "./SelectMenu";
 import { CloudKnowledgeSettings } from "./CloudKnowledgeSettings";
@@ -22,6 +23,7 @@ const limitFields = {
 };
 const manual = "!manual";
 type Provider = keyof typeof providers;
+type ProviderChoice = Provider | typeof cloudPresets[number]["id"];
 type Capability = keyof typeof roles;
 type LimitKey = keyof typeof limitFields;
 type Limits = { model: string } & Record<LimitKey, number | null>;
@@ -38,7 +40,7 @@ const stateLabel = (value: string) => statuses[value] ?? "状态未知";
 export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [selected, setSelected] = useState("");
-  const [provider, setProvider] = useState<Provider>("openai");
+  const [provider, setProvider] = useState<ProviderChoice>("openai");
   const [adding, setAdding] = useState(false);
   const [model, setModel] = useState("");
   const [manualModel, setManualModel] = useState("");
@@ -48,6 +50,9 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
   const [limitError, setLimitError] = useState<Partial<Record<LimitKey, string>>>({});
   const [notice, setNotice] = useState("");
   const connection = connections.find(item => item.id === selected);
+  const newPreset = cloudPresets.find(item => item.id === provider);
+  const connectionPreset = cloudPresetForAddress(connection?.address);
+  const catalogFailed = Boolean(connection?.catalogCheckedAt && connection.catalogState !== "verified");
   const modelId = model === manual ? manualModel.trim() : model;
   const modelInfo = connection?.models.find(item => item.id === modelId);
   const saved = connection?.limits.find(item => item.model === modelId);
@@ -55,15 +60,15 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
   useEffect(() => {
     let active = true;
     void invoke<Connection[]>("list_runtime_cloud_connections", { workspaceId })
-      .then(rows => { if (active) { setConnections(rows); setSelected(rows[0]?.id ?? ""); } })
+      .then(rows => { if (active) { setConnections(rows); selectConnection(rows[0]); } })
       .catch(value => { if (active) setError(errorText(value)); })
       .finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
   }, [workspaceId]);
 
-  function selectConnection(value: string) {
-    setSelected(value);
-    setModel("");
+  function selectConnection(row?: Connection) {
+    setSelected(row?.id ?? "");
+    setModel(cloudPresetForAddress(row?.address) && !row?.models.length ? manual : "");
     setManualModel("");
     setPending(undefined);
     setLimitError({});
@@ -105,13 +110,15 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
     void run(async () => {
       const row = await invoke<Connection>("add_runtime_cloud_connection", {
         workspaceId, input: {
-          provider, label: fields.get("label"), apiKey: fields.get("apiKey"),
-          address: provider === "compatible" ? String(fields.get("address")).trim() : null,
-          compatibleRerank: fields.has("rerank"),
+          provider: newPreset ? "compatible" : provider,
+          label: String(fields.get("label")).trim() || newPreset?.label || "",
+          apiKey: fields.get("apiKey"),
+          address: newPreset?.address ?? (provider === "compatible" ? String(fields.get("address")).trim() : null),
+          compatibleRerank: newPreset?.reranking ?? fields.has("rerank"),
         },
       });
       setConnections(current => [...current, row]);
-      selectConnection(row.id);
+      selectConnection(row);
       form.reset();
       setProvider("openai");
       setAdding(false);
@@ -155,7 +162,8 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
       <div className="cloud-runtime-actions">
         {connection && <div className="field">
           <label htmlFor="runtime-cloud-connection">当前工作区的连接</label>
-          <SelectMenu id="runtime-cloud-connection" value={selected} disabled={busy} onChange={event => selectConnection(event.target.value)}>
+          <SelectMenu id="runtime-cloud-connection" value={selected} disabled={busy}
+            onChange={event => selectConnection(connections.find(item => item.id === event.target.value))}>
             {connections.map(item => <option value={item.id} key={item.id}>{item.label}</option>)}
           </SelectMenu>
         </div>}
@@ -167,32 +175,40 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
       {adding && <form className="settings-fields" onSubmit={add}>
         <div className="parameter-fields">
           <div className="field"><label htmlFor="runtime-cloud-provider">服务商</label>
-            <SelectMenu id="runtime-cloud-provider" value={provider} disabled={busy} onChange={event => setProvider(event.target.value as Provider)}>
+            <SelectMenu id="runtime-cloud-provider" value={provider} disabled={busy} onChange={event => setProvider(event.target.value as ProviderChoice)}>
+              {cloudPresets.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
               {Object.entries(providers).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
             </SelectMenu>
           </div>
           <div className="field"><label htmlFor="runtime-cloud-label">连接名称</label>
-            <input id="runtime-cloud-label" name="label" required maxLength={80} disabled={busy} /></div>
+            <input id="runtime-cloud-label" name="label" placeholder={newPreset?.label} required={!newPreset}
+              maxLength={80} disabled={busy} /></div>
         </div>
+        {newPreset && <div className="field"><label htmlFor="runtime-cloud-preset-address">HTTPS 服务地址</label>
+          <input id="runtime-cloud-preset-address" value={newPreset.address} readOnly /></div>}
         {provider === "compatible" && <>
           <div className="field"><label htmlFor="runtime-cloud-address">HTTPS 服务地址</label>
             <input id="runtime-cloud-address" name="address" type="url" placeholder="https://example.com/v1" required disabled={busy} /></div>
           <label><input name="rerank" type="checkbox" disabled={busy} /> 服务提供兼容的 /rerank 接口</label>
         </>}
         <div className="field"><label htmlFor="runtime-cloud-key">API 密钥</label>
-          <input id="runtime-cloud-key" name="apiKey" type="password" autoComplete="off" spellCheck={false} maxLength={1024} required disabled={busy} /></div>
+          <input key={provider} id="runtime-cloud-key" name="apiKey" type="password" autoComplete="off" spellCheck={false} maxLength={1024} required disabled={busy} />
+          {newPreset && <a href={newPreset.keyUrl} target="_blank" rel="noopener noreferrer">获取 API 密钥</a>}
+        </div>
         <button className="button primary" disabled={busy}>保存连接</button>
       </form>}
       {connection && !adding && <>
         <div className="cloud-runtime-actions">
-          <span>{providers[connection.provider]} {connection.address}</span>
+          <span>{connectionPreset?.label ?? providers[connection.provider]} {connection.address}</span>
           <button type="button" className="button text-button" disabled={busy} onClick={() => setPending("remove")}>移除连接</button>
         </div>
         {connection.credentialAvailable === false && <form className="settings-fields" onSubmit={event => bindKey(event, connection)}>
           <p>此连接需要在本机绑定密钥。</p>
           <div className="field"><label htmlFor="runtime-cloud-bind-key">API 密钥</label>
             <input key={connection.id} id="runtime-cloud-bind-key" name="apiKey" type="password" autoComplete="off"
-              spellCheck={false} maxLength={1024} required disabled={busy} /></div>
+              spellCheck={false} maxLength={1024} required disabled={busy} />
+            {connectionPreset && <a href={connectionPreset.keyUrl} target="_blank" rel="noopener noreferrer">获取 API 密钥</a>}
+          </div>
           <button className="button secondary" disabled={busy}>绑定密钥</button>
         </form>}
         {pending === "remove" && <div className="cloud-runtime-confirm">
@@ -201,7 +217,7 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
             await invoke("remove_runtime_cloud_connection", { workspaceId, connectionId: connection.id });
             const remaining = connections.filter(item => item.id !== connection.id);
             setConnections(remaining);
-            selectConnection(remaining[0]?.id ?? "");
+            selectConnection(remaining[0]);
             setNotice("已移除连接。");
           })}>确认移除</button>
           <button type="button" className="button text-button" onClick={() => setPending(undefined)}>取消</button>
@@ -217,11 +233,16 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
         </div>
         <div className="field">
           <label htmlFor="runtime-cloud-model">模型</label>
-          <SelectMenu id="runtime-cloud-model" value={model} disabled={busy} onChange={event => { setModel(event.target.value); setPending(undefined); setLimitError({}); }}>
+          <SelectMenu id="runtime-cloud-model" value={model} disabled={busy}
+            aria-describedby={catalogFailed ? "runtime-cloud-model-help" : undefined}
+            onChange={event => { setModel(event.target.value); setPending(undefined); setLimitError({}); }}>
             <option value="">选择模型</option>
             {connection.models.map(item => <option value={item.id} key={item.id}>{item.id}</option>)}
             <option value={manual}>手动输入模型标识</option>
           </SelectMenu>
+          {catalogFailed && <small id="runtime-cloud-model-help">
+            目录读取失败时，可选择「手动输入模型标识」，再验证该模型的能力。
+          </small>}
         </div>
         {model === manual && <div className="field"><label htmlFor="runtime-cloud-manual-model">模型标识</label>
           <input id="runtime-cloud-manual-model" value={manualModel} maxLength={200} disabled={busy}
@@ -230,13 +251,14 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
           {connection.probes.some(probe => probe.model === modelId && probe.capability === "embedding" && probe.state === "verified")
             && <CloudIndexSettings key={JSON.stringify(["index", connection.id, modelId])} workspaceId={workspaceId} connectionId={connection.id} model={modelId} />}
           <div className="cloud-runtime-facts">
-            <span>接口 {protocols[connection.provider]}{connection.compatibleRerank && " / Rerank"}</span>
+            <span>接口 {connectionPreset?.embedding === false ? "Chat Completions" : protocols[connection.provider]}{connection.compatibleRerank && " / Rerank"}</span>
             {modelInfo && <span>服务报告上限　输入 {modelInfo.maxInputTokens?.toLocaleString() ?? "未知"} / 输出 {modelInfo.maxOutputTokens?.toLocaleString() ?? "未知"}</span>}
           </div>
           <ul className="cloud-runtime-capabilities">
             {(Object.keys(roles) as Capability[]).map(role => {
               const probe = connection.probes.find(item => item.model === modelId && item.capability === role);
-              const unavailable = modelInfo?.[role] === "unsupported" || (role === "embedding" && connection.provider === "anthropic")
+              const unavailable = modelInfo?.[role] === "unsupported"
+                || (role === "embedding" && (connection.provider === "anthropic" || connectionPreset?.embedding === false))
                 || (role === "reranking" && !connection.compatibleRerank);
               return <li key={role}>
                 <span><strong>{roles[role]}</strong> {unavailable ? declared.unsupported : declared[modelInfo?.[role] ?? "unknown"]}

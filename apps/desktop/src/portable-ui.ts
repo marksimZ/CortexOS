@@ -25,6 +25,7 @@ function portableKey(key: string, workspaceId: string | null) {
       case "relation":
         owner = JSON.parse(decoded)[0];
         break;
+      case "assistant":
       case "harness-analysis":
       case "standard-benchmark":
         owner = decoded;

@@ -238,6 +238,7 @@ pub(super) async fn case(
         graph,
         Some(&runtime),
         Some(&json!({"reason":"fixed_experiment_arm","backup":null})),
+        false,
     )?;
     let completion = generation::execute_rag_case(
         db.clone(),

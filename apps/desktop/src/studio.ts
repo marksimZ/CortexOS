@@ -197,6 +197,7 @@ export interface RetrievalReport {
   }[];
 }
 export interface ContextManifest {
+  assistant?: { kind: "default" } | { kind: "workspace"; name: string; version: number };
   purpose?: "chat" | "benchmark";
   batchId?: string;
   benchmarkScope?: "standard" | "personalized";
@@ -458,9 +459,18 @@ export function useStudio() {
     }
   };
 
-  const send = async (override?: string, cloud?: { question: string; selection: ContextSelection[]; consent: CloudConsent; knowledgeRoute: boolean }) => {
+  const send = async (
+    override?: string,
+    cloud?: { question: string; selection: ContextSelection[]; consent: CloudConsent; knowledgeRoute: boolean },
+    composed?: { question: string; workspaceId: string; conversationId: string | null },
+  ) => {
     const workspace = view.current.workspaceId;
-    const content = (cloud?.question ?? override ?? draft).trim();
+    const conversationId = view.current.conversationId;
+    if (composed && (composed.workspaceId !== workspace || composed.conversationId !== conversationId)) {
+      reportError("当前会话已变化，请返回原会话重新确认来源。");
+      return;
+    }
+    const content = (cloud?.question ?? override ?? composed?.question ?? draft).trim();
     const selectedContext = cloud?.selection ?? contextSelection;
     if (
       !workspace ||
@@ -474,7 +484,7 @@ export function useStudio() {
     pendingSend.current = true;
     setSending(true);
     clearError();
-    let conversation = view.current.conversationId;
+    let conversation = conversationId;
     let receivingPreparation = true;
     try {
       conversation = conversation ?? (await newConversation()).id;

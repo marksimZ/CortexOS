@@ -18,4 +18,4 @@ Read `development.md`, `docs/development-standards.md` and `docs/implementation-
 - Build task-oriented layouts with lists, forms, timelines and a focused canvas; use the existing semantic CSS tokens.
 - Add privileged Tauri capabilities only for an implemented, documented need. Frontend code does not read files, databases or model services directly.
 - Record commands actually executed and distinguish browser checks, native WebView2 checks and unverified manual checks.
-- UI changes follow `docs/design/html-prototype-ui.md`, based on the user-supplied Full Prototype HTML. This replaces V3's visual direction for chat, knowledge, graph, settings and dialogs. Use the unified styles, preserve every existing operation and verify actual screenshots; graph camera controls remain interruptible.
+- UI changes follow `design.md`, based on the user-supplied Full Prototype HTML. This replaces V3's visual direction for chat, knowledge, graph, settings and dialogs. Use the unified styles, preserve every existing operation and verify actual screenshots; graph camera controls remain interruptible.

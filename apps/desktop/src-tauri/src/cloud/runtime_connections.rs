@@ -774,7 +774,7 @@ pub async fn probe_runtime_cloud_model(
                 .call(
                     &target,
                     spec,
-                    || target.endpoint.generate(&target.key, &request, timeout),
+                    || target.endpoint.probe_generation(&target.key, &request, timeout),
                     |output| {
                         let (input, output) = target.generation_tokens(&output.usage);
                         Usage {

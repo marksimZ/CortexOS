@@ -8,7 +8,7 @@ mod runtime_protocol;
 mod transport;
 #[cfg(test)]
 mod tests;
-mod vault;
+pub(crate) mod vault;
 
 use crate::models::{AppResult, now};
 use provider::{Model, OfficialProvider, ProviderAdapter};

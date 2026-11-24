@@ -49,7 +49,7 @@ export function ChatEvidence({ studio, overlay, runId, onInspect, onClose }: {
           </g>;
         })}
         <circle cx="150" cy="110" r="15" fill="var(--primary)"/><text x="150" y="140" textAnchor="middle">本次回答</text>
-      </svg> : <div className="evidence-empty"><Network size={30} strokeWidth={1.2}/><span>{!runId ? "开始对话，查看回答依据" : !detail ? "正在读取…" : "本次没有选用知识"}</span></div>}
+      </svg> : <div className="evidence-empty"><Network size={30} strokeWidth={1.2}/><span>{!runId ? "暂无回答依据" : !detail ? "正在读取…" : "本次没有选用知识"}</span></div>}
     </div>
     {error && <div className="form-error" role="alert">{error}<button className="button text-button" onClick={() => setRetry(n=>n+1)}>重新读取</button></div>}
     {detail && <details className="knowledge-disclosure" key={detail.run.id}>

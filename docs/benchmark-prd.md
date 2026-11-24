@@ -10,7 +10,7 @@ Phase 0当时只审计和设计。后续逐阶段交付，Phase 1首先实现本
 
 ## 实际起点与代码证据
 
-根目录未找到`design.md`。现有有效设计标准是[HTML参考界面规范](design/html-prototype-ui.md)和`apps/desktop/src/styles/`的Tokens；沿用它们。原始总纲是[development.md](../development.md)，当前状态以代码和[里程碑](milestone-log.md)为准。
+现有有效设计标准是[HTML参考界面规范](../design.md)和`apps/desktop/src/styles/`的Tokens；沿用它们。原始总纲是[development.md](../development.md)，当前状态以代码和[里程碑](milestone-log.md)为准。
 
 下列路径相对`apps/desktop/`，省略目录的Rust文件均在`src-tauri/src/`，行号为本次审计基线。已实现表示存在完整代码路径；历史专项结果与本轮重新执行的检查分别记录。
 

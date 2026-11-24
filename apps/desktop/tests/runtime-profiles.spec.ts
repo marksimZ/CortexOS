@@ -8,9 +8,17 @@ test("switch a workspace profile and confirm cloud transfer per message", async 
     const updatedAt = "2026-11-17T10:00:00Z";
     const settings = { model: "fixture-local", numCtx: 4096, numPredict: 512, temperature: .3, timeoutSeconds: 180 };
     const conversation = { id: "c", workspaceId: "w", title: "已有会话", autoRetrieval: true };
-    const connection = { id: "provider", label: "测试连接", address: null, provider: "openai",
+    const connection = { id: "provider", label: "测试连接", address: "https://api.deepseek.com", provider: "compatible",
       probes: [{ model: "fixture-cloud", capability: "generation", state: "verified" }] };
-    let profiles: unknown[] = [];
+    const secondConnection = { id: "second-provider", label: "备用测试连接",
+      address: "https://dashscope.aliyuncs.com/compatible-mode/v1", provider: "compatible",
+      probes: [{ model: "fixture-bailian", capability: "generation", state: "verified" }] };
+    const secondProfile = {
+      id: "second-profile", name: "百炼问答", updatedAt, mode: "cloud",
+      generation: { kind: "cloud", connectionId: secondConnection.id, model: "fixture-bailian" },
+      embedding: { kind: "off" }, reranking: { kind: "off" },
+    };
+    let profiles: { id: string }[] = [secondProfile];
     let activeId: string | null = null;
     let routing = { preference:"preferred", question:{preferred:null,alternative:null}, knowledge:{preferred:null,alternative:null}, localBackup:null } as Record<string, unknown>;
     let requests = 0;
@@ -21,13 +29,14 @@ test("switch a workspace profile and confirm cloud transfer per message", async 
       __TAURI_EVENT_PLUGIN_INTERNALS__: { unregisterListener() {} },
       __TAURI_INTERNALS__: { metadata: { currentWindow: { label: "main" } }, transformCallback: () => 1, unregisterCallback() {},
         invoke: async (command: string, args: { workspaceId?: string; profileId?: string; input?: Record<string, unknown>;
-          content?: string; cloudConsent?: Record<string, unknown>; contextSelection?: unknown[]; runId?: string; knowledge?: boolean;
+          content?: string; conversationId?: string; cloudConsent?: Record<string, unknown>; contextSelection?: unknown[]; runId?: string; knowledge?: boolean;
           onPreparing?: { onmessage: (message: { id: string; workspaceId: string; conversationId: string }) => void } }) => {
           if (command === "bootstrap") return { workspaces: [{ id: "w", name: "测试工作区" }], settings, activeRun: null };
           if (command === "check_ollama") return { version: "fixture", models: [] };
           if (command.startsWith("plugin:")) return 1;
           if (command === "get_run") return null;
           if (args.workspaceId !== "w") throw Error("Unscoped command " + command);
+          if (command === "read_web_search_status") return { configured: false };
           if (command === "list_conversations") return [conversation];
           if (command === "list_knowledge" || command === "load_messages") return [];
           if (command === "rag_index_status") return { index: null };
@@ -43,7 +52,7 @@ test("switch a workspace profile and confirm cloud transfer per message", async 
           }
           if (command === "chat_runtime_route") {
             if (args.knowledge !== true) throw Error("Wrong task classification");
-            return { profile: activeId ? profiles[0] : null, decision: { task: "knowledge" }, localBackup: null };
+            return { profile: profiles.find(profile => profile.id === activeId) ?? null, decision: { task: "knowledge" }, localBackup: null };
           }
           if (command === "model_runtime_policy") {
             if (args.input) {
@@ -54,33 +63,39 @@ test("switch a workspace profile and confirm cloud transfer per message", async 
             }
             return policy;
           }
-          if (command === "list_runtime_cloud_connections") return [connection];
+          if (command === "list_runtime_cloud_connections") return [connection, secondConnection];
           if (command === "list_model_cloud_knowledge") return {
             grants: [{ nodeId: "approved", version: 3, title: "已授权资料", available: true, grantedAt: updatedAt }], candidates: [],
           };
           if (command === "save_model_runtime_profile") {
             if (args.input?.mode !== "cloud") throw Error("Wrong profile mode");
             const result = { ...args.input, id: profileId, updatedAt };
-            profiles = [result];
+            profiles = [result, secondProfile];
             return result;
           }
           if (command === "activate_model_runtime_profile") {
-            if (args.profileId !== profileId) throw Error("Wrong profile");
-            activeId = profileId;
+            if (!profiles.some(profile => profile.id === args.profileId)) throw Error("Wrong profile");
+            activeId = args.profileId!;
             return;
           }
           if (command === "start_chat") {
-            if (args.content !== "只发送本题" || args.cloudConsent?.profileId !== profileId
+            const questions = ["只发送本题", "只发送本题", "同一会话的下一题", "切换方案后的问题"];
+            const expectedProfile = requests < 3 ? profileId : secondProfile.id;
+            if (args.content !== questions[requests] || args.conversationId !== conversation.id
+              || args.cloudConsent?.profileId !== expectedProfile
               || args.cloudConsent.updatedAt !== updatedAt || args.cloudConsent.shareSelection !== false
-              || JSON.stringify(args.cloudConsent.grantedVersions) !== JSON.stringify([{ nodeId: "approved", version: 3 }])
-              || args.contextSelection?.length !== 0 || ++requests > 2) throw Error("Missing exact consent");
+              || JSON.stringify(args.cloudConsent.grantedVersions) !== JSON.stringify(requests < 2 ? [{ nodeId: "approved", version: 3 }] : [])
+              || args.contextSelection?.length !== 0) throw Error("Missing exact consent");
+            requests++;
             if (requests === 1) {
               args.onPreparing?.onmessage({ id: "prepared", workspaceId: "w", conversationId: "c" });
               await new Promise<void>(resolve => { finishPreparation = resolve; });
               throw Error("已停止查找");
             }
-            return { id: "run", workspaceId: "w", conversationId: "c", assistantMessageId: "m", modelId: "fixture-cloud", status: "running" };
+            return { id: "run-" + requests, workspaceId: "w", conversationId: "c", assistantMessageId: "m",
+              modelId: requests < 4 ? "fixture-cloud" : "fixture-bailian", status: "running" };
           }
+          if (command === "get_chat_run_status") return "completed";
           if (command === "cancel_run") {
             if (args.runId !== "prepared" || !finishPreparation) throw Error("Wrong cancellation scope");
             finishPreparation();
@@ -122,7 +137,7 @@ test("switch a workspace profile and confirm cloud transfer per message", async 
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "确认发送到云端" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText(/OpenAI.*fixture-cloud/)).toBeVisible();
+  await expect(dialog.getByText(/DeepSeek 官方.*fixture-cloud.*https:\/\/api\.deepseek\.com/)).toBeVisible();
   await dialog.getByRole("checkbox", { name: "查找并发送此连接已获授权的相关知识" }).check();
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   await expect(draft).toHaveValue("只发送本题");
@@ -137,8 +152,32 @@ test("switch a workspace profile and confirm cloud transfer per message", async 
   await page.getByRole("button", { name: "停止查找", exact: true }).click();
   await expect(draft).toHaveValue("只发送本题");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  await expect(dialog.getByText(/DeepSeek 官方.*fixture-cloud.*https:\/\/api\.deepseek\.com/)).toBeVisible();
   await grant.check();
   await dialog.getByRole("button", { name: "确认发送", exact: true }).click();
   await expect(page.getByRole("button", { name: "停止生成", exact: true })).toBeVisible();
+  await expect(draft).toHaveValue("");
+  const send = page.getByRole("button", { name: "发送消息", exact: true });
+  await expect(send).toBeVisible();
+  await draft.fill("同一会话的下一题");
+  await send.click();
+  await expect(dialog.getByText(/DeepSeek 官方.*fixture-cloud.*https:\/\/api\.deepseek\.com/)).toBeVisible();
+  await expect(grant).not.toBeChecked();
+  await dialog.getByRole("button", { name: "确认发送", exact: true }).click();
+  await expect(draft).toHaveValue("");
+  await expect(send).toBeVisible();
+
+  await page.getByRole("link", { name: "设置", exact: true }).click();
+  await page.getByRole("button", { name: "运行方案", exact: true }).click();
+  await page.getByLabel("选择方案", { exact: true }).selectOption("second-profile");
+  await page.getByRole("button", { name: "启用方案", exact: true }).click();
+  await expect(page.getByText(/当前方案.*百炼问答/)).toBeVisible();
+  await page.getByRole("link", { name: "对话", exact: true }).click();
+  await draft.fill("切换方案后的问题");
+  await send.click();
+  await expect(dialog.getByText(/阿里云百炼（北京）.*fixture-bailian.*https:\/\/dashscope\.aliyuncs\.com\/compatible-mode\/v1/)).toBeVisible();
+  await expect(dialog.getByText(/DeepSeek 官方/)).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath("bailian-chat-consent.png") });
+  await dialog.getByRole("button", { name: "确认发送", exact: true }).click();
   await expect(draft).toHaveValue("");
 });

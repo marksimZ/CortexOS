@@ -659,6 +659,7 @@ mod tests {
                     ranking: None,
                 }),
                 None,
+                true,
             )
         };
         let question_only = prepare(std::slice::from_ref(&approved), false, &[], true).unwrap();

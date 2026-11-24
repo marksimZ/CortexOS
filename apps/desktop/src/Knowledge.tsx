@@ -72,36 +72,8 @@ export function KnowledgePage({
           ? item.latestVersion !== item.effectiveVersion
           : item.latestVersion === item.effectiveVersion)),
   );
-  return (
-    <section
-      className="standard-page knowledge-page"
-      aria-labelledby="page-title"
-    >
-      {sourcesOpen && workspace && (
-        <SourceBrowser
-          workspace={workspace}
-          onClose={() => setSourcesOpen(false)}
-          onDraft={(request) => {
-            setSourcesOpen(false);
-            onEdit(request);
-          }}
-        />
-      )}
-      <header className="page-heading">
-        <div className="knowledge-page-location">
-          <button
-            className="button secondary"
-            aria-label={listOpen ? "收起知识列表" : "展开知识列表"}
-            title={listOpen ? "收起知识列表" : "展开知识列表"}
-            aria-expanded={listOpen}
-            aria-controls="knowledge-list-sidebar"
-            onClick={() => setListOpen(!listOpen)}
-          >
-            <ListTree size={16} aria-hidden="true" />
-            知识列表
-          </button>
-          <h1 id="page-title" className="sr-only">知识</h1>
-        </div>
+  const emptyLibrary = !loading && !error && !selected && items.length === 0;
+  const actions = (
         <div className="source-actions">
           <button
             className="button secondary"
@@ -119,6 +91,38 @@ export function KnowledgePage({
             新建知识
           </button>
         </div>
+  );
+  return (
+    <section
+      className="standard-page knowledge-page"
+      aria-labelledby="page-title"
+    >
+      {sourcesOpen && workspace && (
+        <SourceBrowser
+          workspace={workspace}
+          onClose={() => setSourcesOpen(false)}
+          onDraft={(request) => {
+            setSourcesOpen(false);
+            onEdit(request);
+          }}
+        />
+      )}
+      <header className="page-heading">
+        <div className="knowledge-page-location">
+          {!emptyLibrary && <button
+            className="button secondary"
+            aria-label={listOpen ? "收起知识列表" : "展开知识列表"}
+            title={listOpen ? "收起知识列表" : "展开知识列表"}
+            aria-expanded={listOpen}
+            aria-controls="knowledge-list-sidebar"
+            onClick={() => setListOpen(!listOpen)}
+          >
+            <ListTree size={16} aria-hidden="true" />
+            知识列表
+          </button>}
+          <h1 id="page-title" className="sr-only">知识</h1>
+        </div>
+        {!emptyLibrary && actions}
       </header>
       {error && (
         <div className="error-banner" role="alert">
@@ -131,7 +135,11 @@ export function KnowledgePage({
           </button>
         </div>
       )}
-      <div
+      {emptyLibrary ? (
+        <div className="knowledge-empty library-empty"><BookOpen size={28} aria-hidden="true" /><h2>还没有知识</h2>
+          {studio.desktop && workspace ? actions : <p>{studio.desktop ? "先创建或选择工作区。" : "在桌面程序中管理知识。"}</p>}
+        </div>
+      ) : <div
         className={`knowledge-workbench ${selected ? "has-selection" : ""} ${listOpen ? "" : "list-collapsed"}`}
       >
         <aside id="knowledge-list-sidebar" className="knowledge-sidebar">
@@ -222,7 +230,7 @@ export function KnowledgePage({
           onEdit={onEdit}
           onChanged={() => setRefresh((n) => n + 1)}
         />
-      </div>
+      </div>}
     </section>
   );
 }

@@ -31,6 +31,7 @@ export function BenchmarkPage({ studio }: { studio: Studio }) {
   if(route.workspace&&route.workspace!==studio.workspaceId)return <div><p role="status">{studio.data&&!studio.data.workspaces.some(w=>w.id===route.workspace)?"链接中的工作区不存在。":"正在切换到链接中的工作区…"}</p><button className="button secondary" onClick={()=>{studio.clearError();navigate("benchmark",{workspace:studio.workspaceId});}}>返回当前工作区</button></div>;
   return <section className="standard-page benchmark-page" aria-labelledby="page-title">
     <h1 id="page-title" className="sr-only">评测</h1>
+    <div className="benchmark-mode-row">
     <nav className="benchmark-tabs" aria-label="评测类型">
       <a href={navigationHash("benchmark",{workspace:studio.workspaceId})} aria-current={!personalized&&!harness&&!rag ? "page" : undefined}>标准评测</a>
       <a href={navigationHash("benchmark",{workspace:studio.workspaceId,view:"personalized"})} aria-current={personalized ? "page" : undefined}>个性化评测</a>
@@ -38,6 +39,7 @@ export function BenchmarkPage({ studio }: { studio: Studio }) {
       <a href={navigationHash("benchmark",{workspace:studio.workspaceId,view:"rag"})} aria-current={rag ? "page" : undefined}>检索评测</a>
     </nav>
     {!harness&&!rag&&<BenchmarkLink />}
+    </div>
     <div className={`page-content benchmark-content${harness?' harness-content':''}`}>
       {rag ? <RagEvaluation desktop={studio.desktop} workspaceId={studio.workspaceId} /> : harness?<HarnessFitLab workspaceId={studio.workspaceId} desktop={studio.desktop}/>:personalized ? profileOpen ? <PersonalizedWorkbench workspaceId={studio.workspaceId} onConnection={()=>setProfileOpen(false)} /> : <CloudConnection desktop={studio.desktop} onContinue={()=>setProfileOpen(true)} /> : <StandardBenchmarks desktop={studio.desktop} workspaceId={studio.workspaceId}/>}
     </div>

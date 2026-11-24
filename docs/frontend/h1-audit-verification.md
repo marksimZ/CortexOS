@@ -21,7 +21,7 @@
 | V11 | 跨页一致性，部分成立 | 五页共用外壳和令牌，评测与项目任务局部样式独立。H1.4 统一通用交互状态。 [外壳](../../apps/desktop/src/components/AppShell.tsx) · [项目适配](../../apps/desktop/src/benchmark/harness/harness.css) |
 | V12 | 动效与滚动，部分成立 | 已有减少动态效果、流式动画和跟随规则；每次内容变化仍读布局。H1.2 用测量决定调整。 [动效](../../apps/desktop/src/styles/motion.css) · [滚动](../../apps/desktop/src/components/useChatScroll.ts) |
 | V13 | 3D 交互，已在后续代码中修复一部分 | 已有按需画布、实例几何、镜头偏好、无 WebGL 的列表入口。大型图谱的实际绘制与交互压力仍需持续监测。 [图谱](../../apps/desktop/src/Graph.tsx) · [视口](../../apps/desktop/src/GraphViewport.tsx) |
-| V14 | 完成视觉规范的统一，需进一步测试 | 本阶段记录真实视口。系统缩放、读屏、高对比度与局部超长文字还需要 Windows 手验。 [设计规范](../design/html-prototype-ui.md) · [截图](h1-ui-baseline.md) |
+| V14 | 完成视觉规范的统一，需进一步测试 | 本阶段记录真实视口。系统缩放、读屏、高对比度与局部超长文字还需要 Windows 手验。 [设计规范](../../design.md) · [截图](h1-ui-baseline.md) |
 
 ## 前端实现
 
@@ -46,4 +46,4 @@
 
 ## 实施取舍
 
-整页重写、全局状态单 Context、手工模拟下拉选项及文档级弹窗模态化会分别扩大回归范围、订阅范围、键盘兼容成本或挡住 CortexOS 自绘标题栏。H1.1 使用原生表单、保留局部弹层范围，并在密钥表单之外保存本机草稿。页面结构、接口分层与样式令牌按后续切片验收。 [现行 HTML 原型规范](../design/html-prototype-ui.md)
+整页重写、全局状态单 Context、手工模拟下拉选项及文档级弹窗模态化会分别扩大回归范围、订阅范围、键盘兼容成本或挡住 CortexOS 自绘标题栏。H1.1 使用原生表单、保留局部弹层范围，并在密钥表单之外保存本机草稿。页面结构、接口分层与样式令牌按后续切片验收。 [现行 HTML 原型规范](../../design.md)

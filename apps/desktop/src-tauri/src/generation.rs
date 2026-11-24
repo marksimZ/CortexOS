@@ -641,6 +641,7 @@ mod tests {
                     ranking: None,
                 }),
                 None,
+                true,
             )
             .unwrap();
         let original = prepared.request.clone();

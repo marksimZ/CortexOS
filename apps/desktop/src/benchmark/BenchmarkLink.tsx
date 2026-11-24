@@ -7,7 +7,7 @@ import { reportLink, reportParams } from "./reportNavigation";
 export function BenchmarkLink() {
   const dialog = useRef<HTMLDialogElement>(null);
   const [value,setValue] = useState(""),[error,setError]=useState("");
-  return <><button className="button text-button" onClick={()=>openDialog(dialog.current)}><Link2 size={16} aria-hidden="true" />打开定位链接</button>
+  return <><button type="button" className="icon-button" title="打开定位链接" aria-label="打开定位链接" aria-haspopup="dialog" onClick={()=>openDialog(dialog.current)}><Link2 size={16} aria-hidden="true" /></button>
     <AppDialog ref={dialog} className="form-dialog panel-dialog" aria-labelledby="benchmark-link-title"><form className="panel-form" onSubmit={event=>{
       event.preventDefault();
       try { const hash=reportLink(value.trim()); navigate("benchmark",Object.fromEntries(reportParams(hash))); dialog.current?.close(); setError(""); }

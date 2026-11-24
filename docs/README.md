@@ -46,7 +46,8 @@
 | [数据库契约](database-schema.md) | 数据不变量与迁移；实际结构以 SQL 为准 |
 | [开发与交互规范](development-standards.md) | 开发约束和验收要求 |
 | [Phase E／F 审计](rag-runtime-audit.md)与[实施计划](rag-runtime-plan.md) | 检索升级、证据追溯及统一本地与云端模型 |
-| [HTML 参考界面规范](design/html-prototype-ui.md) | 当前共享视觉与交互标准，替代早期 V3 |
+| [界面规范](../design.md) | 当前设计语言（Apple × Linear 极简）、组件规格与硬性规则 |
+| [极简视觉规范](design/ui-design-system.md) | 已并入根目录「当前设计语言」一节，此处仅为索引 |
 | [界面用词规范](design/plain-language.md) | 普通话表达与技术准确性 |
 | [检查方法](test-plan.md) | 专项检查入口及真实模型检查 |
 | [Windows 交付证据](windows-delivery.md) | 安装包校验、验证范围和人工待办 |

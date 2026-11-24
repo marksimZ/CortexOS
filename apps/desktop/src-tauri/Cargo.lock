@@ -435,6 +435,7 @@ version = "0.2.0"
 dependencies = [
  "chrono",
  "jsonschema",
+ "quick-xml",
  "reqwest",
  "rusqlite",
  "serde",

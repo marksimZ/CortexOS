@@ -6,7 +6,7 @@ import { RuntimeBudgetSettings } from "./RuntimeBudgetSettings";
 import { RuntimeRoutingSettings } from "./RuntimeRoutingSettings";
 import { errorText } from "../studio";
 import {
-  runtimeModes, runtimeRoles, type Profile, type ProfileInput, type Profiles,
+  cloudConnectionLabel, runtimeModes, runtimeRoles, type Profile, type ProfileInput, type Profiles,
   type RuntimeConnection, type RuntimeMode, type RuntimeRole, type Target,
 } from "../runtime-profiles";
 
@@ -181,6 +181,6 @@ function toInput(profile: Profile): ProfileInput {
 function cloudOptions(role: RuntimeRole, connections: RuntimeConnection[]): [string, Target][] {
   return connections.flatMap(connection => connection.probes
     .filter(probe => probe.capability === role && probe.state === "verified")
-    .map(probe => [connection.label + " / " + probe.model,
+    .map(probe => [cloudConnectionLabel(connection) + " / " + probe.model,
       { kind: "cloud", connectionId: connection.id, model: probe.model }]));
 }

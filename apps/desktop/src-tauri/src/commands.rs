@@ -482,6 +482,7 @@ pub async fn start_chat(
             force_graph,
             runtime.as_ref(),
             Some(&model_route),
+            true,
         )?;
         Ok((prepared, targets.generation))
     })
@@ -700,6 +701,7 @@ pub async fn preview_context(
             use_graph.unwrap_or_default(),
             runtime.as_ref(),
             Some(&decision.decision),
+            true,
         )?.manifest)
     })
     .await

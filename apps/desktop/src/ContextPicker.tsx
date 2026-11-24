@@ -170,6 +170,11 @@ export function ContextPicker({ studio, cloudAnswer = false }: { studio: Studio;
       )}
       {preview && (
         <div>
+          {preview.assistant && <p>
+            预计使用{preview.assistant.kind === "workspace"
+              ? `「${preview.assistant.name}」版本 ${preview.assistant.version}`
+              : "内置默认助手"}。
+          </p>}
           {preview.knowledgeScope?.kind === "snapshot" && <p>使用快照「{preview.knowledgeScope.name}」。
             {!!preview.knowledgeScope.unavailableCount && `有 ${preview.knowledgeScope.unavailableCount} 项的来源已停用。`}</p>}
           {preview.knowledgeScope?.kind === "branch" && <p>使用实验分支「{preview.knowledgeScope.name}」。

@@ -1,6 +1,7 @@
 import { BrandMark } from "./BrandMark";
 import { AppDialog, openDialog } from "./AppDialog";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { CircleHelp, ListChecks, PanelLeft, X, Plus } from "lucide-react";
 import type { Studio } from "../studio";
 import { navigate, type PageName } from "../navigation";
@@ -10,7 +11,7 @@ import { ConversationList } from "./ConversationList";
 import { NavigationIcon } from "./NavigationIcon";
 import { WindowControls, WindowDragRegion, handleWindowDrag } from "./WindowControls";
 import { AppearanceControl } from "./AppearanceControl";
-import { Toast } from "./Toast";
+import { notify, Toast } from "./Toast";
 import { TaskCenter } from "./TaskCenter";
 import { WorkspaceHelp } from "./WorkspaceHelp";
 export const pages = [
@@ -26,13 +27,30 @@ function Brand() {
 export function AppShell({ studio, page, openCreateWorkspace, children }: {
   studio: Studio; page: PageName; openCreateWorkspace: () => void; children: ReactNode;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [toolsCollapsed, setToolsCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = page === "chat" ? [chatCollapsed, setChatCollapsed] as const : [toolsCollapsed, setToolsCollapsed] as const;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [narrow, setNarrow] = useState(() => matchMedia("(max-width: 900px)").matches);
   const drawer = useRef<HTMLDialogElement>(null);
   const tasks = useRef<HTMLDialogElement>(null);
   const help = useRef<HTMLDialogElement>(null);
   const [tasksOpen, setTasksOpen] = useState(false);
+  const { desktop, workspaceId, reportError } = studio;
+  useEffect(() => {
+    if (!desktop || !workspaceId) return;
+    let current = true;
+    const listener = listen<{ workspaceId: string; title: string; briefStatus?: "ready" | "empty" | "failed" }>("reminder-due", ({ payload }) => {
+      if (!current || payload.workspaceId !== workspaceId) return;
+      const briefLabels = { ready: "简报已保存", empty: "本期未找到新闻", failed: "简报获取失败" };
+      const label = payload.briefStatus ? briefLabels[payload.briefStatus] : "提醒到期";
+      notify(`${label}：${payload.title}`, workspaceId);
+    }).catch(error => { if (current) reportError(error); });
+    return () => {
+      current = false;
+      void listener.then(unlisten => unlisten?.()).catch(reportError);
+    };
+  }, [desktop, workspaceId, reportError]);
   useEffect(() => {
     const query = matchMedia("(max-width: 900px)");
     const update = () => { setNarrow(query.matches); if (!query.matches) drawer.current?.close(); };
@@ -41,14 +59,17 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
   }, []);
   const conversation = studio.conversations.find(item => item.id === studio.conversationId);
   const workspace = studio.data?.workspaces.find(item => item.id === studio.workspaceId);
-  const sidebar = (mobile: boolean) => <>
-    <Brand />
-    <button className="button secondary new-thread" disabled={!studio.desktop || !studio.workspaceId || studio.loading || studio.creatingConversation || studio.sending} onClick={() => {
-      void studio.newConversation().then(item => { navigate("chat", { workspace: item.workspaceId, conversation: item.id }); drawer.current?.close(); }).catch(studio.reportError);
-    }}><Plus size={16} aria-hidden="true" />{studio.creatingConversation ? "正在创建…" : "新建对话"}</button>
+  const navigation = (mobile: boolean) => (
     <nav className="primary-navigation" aria-label={mobile ? "移动主导航" : "主导航"}>
       {pages.map(({id, label}) => <a key={id} href={`#/${id}`} title={label} aria-label={label} aria-current={page === id ? "page" : undefined} onClick={() => drawer.current?.close()}><NavigationIcon page={id} /><span>{label}</span></a>)}
     </nav>
+  );
+  const sidebar = (mobile: boolean) => <>
+    {mobile && <Brand />}
+    <button className="button secondary new-thread" disabled={!studio.desktop || !studio.workspaceId || studio.loading || studio.creatingConversation || studio.sending} onClick={() => {
+      void studio.newConversation().then(item => { navigate("chat", { workspace: item.workspaceId, conversation: item.id }); drawer.current?.close(); }).catch(studio.reportError);
+    }}><Plus size={16} aria-hidden="true" />{studio.creatingConversation ? "正在创建…" : "新建对话"}</button>
+    {mobile && navigation(true)}
     <div className="sidebar-threads"><ConversationList studio={studio} onSelect={() => drawer.current?.close()} /></div>
     <div className="sidebar-workspace">
       <WorkspaceSwitcher studio={studio} page={page} openCreateWorkspace={() => { drawer.current?.close(); openCreateWorkspace(); }} />
@@ -63,10 +84,12 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
       }
     }}>
       <header className="prototype-topbar">
-        <button className="icon-button navigation-toggle" aria-label={narrow ? "打开导航" : collapsed ? "展开全局导航" : "收起全局导航"} aria-expanded={narrow ? mobileOpen : !collapsed} aria-controls={narrow ? "mobile-navigation" : "primary-sidebar"} aria-haspopup={narrow ? "dialog" : undefined} title={narrow ? "打开导航" : collapsed ? "展开全局导航" : "收起全局导航"} onClick={() => {
+        {!narrow && <Brand />}
+        <button className="icon-button navigation-toggle" aria-label={narrow ? "打开导航" : collapsed ? "展开会话侧栏" : "收起会话侧栏"} aria-expanded={narrow ? mobileOpen : !collapsed} aria-controls={narrow ? "mobile-navigation" : "primary-sidebar"} aria-haspopup={narrow ? "dialog" : undefined} title={narrow ? "打开导航" : collapsed ? "展开会话侧栏" : "收起会话侧栏"} onClick={() => {
           if (narrow) { openDialog(drawer.current); setMobileOpen(true); } else setCollapsed(!collapsed);
         }}><PanelLeft size={18} /></button>
-        <div className="topbar-title"><strong>{page === "chat" ? conversation?.title ?? "新的对话" : pages.find(item => item.id === page)?.label}</strong><span>{workspace?.name ?? "本地工作区"}</span></div>
+        {!narrow && navigation(false)}
+        <div className="topbar-title">{(narrow || page !== "settings") && <strong>{page === "chat" ? conversation?.title ?? "新的对话" : pages.find(item => item.id === page)?.label}</strong>}<span>{workspace?.name ?? "本地工作区"}</span></div>
         {studio.desktop ? <WindowDragRegion onError={studio.reportError} /> : <span className="topbar-spacer" />}
         <ModelStatus studio={studio} />
         <button className="icon-button" type="button" aria-label="任务中心" title="任务中心" aria-haspopup="dialog" onClick={() => {
@@ -91,6 +114,6 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
     </AppDialog>
     <TaskCenter dialog={tasks} open={tasksOpen} onClose={() => setTasksOpen(false)} desktop={studio.desktop} workspaceId={studio.workspaceId} workspaceName={workspace?.name} />
     <WorkspaceHelp dialog={help} page={page} />
-    <Toast />
+    <Toast workspaceId={workspaceId} />
   </div>;
 }

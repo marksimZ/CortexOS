@@ -1,6 +1,6 @@
 # Phase H0 发布阻断项
 
-验收日期为 2026-11-20。依据 [G5 发布验收](../optimization/phase-g5-release-validation.md)、[Phase G 验收记录](../optimization/phase-g-acceptance.md)、[G0 基线](../optimization/performance-baseline.md)、[G 优化路线](../optimization/optimization-roadmap.md) 和 [开发规范](../../development.md)。仓库工作区与 Git 历史均未找到 `design.md`，界面沿用 [HTML 原型规范](../design/html-prototype-ui.md)。
+验收日期为 2026-11-20。依据 [G5 发布验收](../optimization/phase-g5-release-validation.md)、[Phase G 验收记录](../optimization/phase-g-acceptance.md)、[G0 基线](../optimization/performance-baseline.md)、[G 优化路线](../optimization/optimization-roadmap.md) 和 [开发规范](../../development.md)。仓库工作区与 Git 历史均未找到 `design.md`，界面沿用 [HTML 原型规范](../../design.md)。
 
 | 问题 | 状态 | 发布影响 |
 | --- | --- | --- |

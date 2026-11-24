@@ -19,9 +19,11 @@ import { StorageInventory } from "./components/StorageInventory";
 import { DataPortability } from "./components/DataPortability";
 import { LocalDiagnostics } from "./components/LocalDiagnostics";
 import { AppUpdates } from "./components/AppUpdates";
+import { AssistantSettingsPanel } from "./components/AssistantSettingsPanel";
 import { navigate, useNavigation } from "./navigation";
 
 const sections = [
+  ["assistant", "我的助手"],
   ["model", "模型连接"],
   ["cloud", "云端模型"],
   ["profiles", "运行方案"],
@@ -66,6 +68,12 @@ export function SettingsPage({ studio }: { studio: Studio }) {
             </button>
           ))}
         </nav>
+        <section id="assistant-section" hidden={section !== "assistant"} className="settings-section" aria-labelledby="assistant-settings-title">
+          {section === "assistant" && (studio.desktop && studio.workspaceId
+            ? <AssistantSettingsPanel key={studio.workspaceId} workspaceId={studio.workspaceId} focusSearch={route.params.get("focus") === "web-search"} />
+            : <div className="section-description"><h2 id="assistant-settings-title">我的助手</h2>
+              <p>{studio.desktop ? "请先选择工作区。" : "请在桌面版中管理个人助手。"}</p></div>)}
+        </section>
         <section
           id="model-section"
           hidden={section !== "model"}

@@ -1,4 +1,5 @@
 import type { ContextSelection } from "./studio";
+import { cloudPresetForAddress } from "./cloud-presets";
 
 export const runtimeModes = { local: "本地", cloud: "云端", hybrid: "混合" } as const;
 export const runtimeRoles = { generation: "生成回答", embedding: "生成向量", reranking: "重排结果" } as const;
@@ -24,6 +25,13 @@ export type RuntimeConnection = {
   address: string | null;
   probes: { model: string; capability: RuntimeRole; state: string }[];
 };
+export function cloudConnectionLabel(connection: RuntimeConnection): string {
+  const preset = connection.provider === "compatible" && cloudPresetForAddress(connection.address);
+  return preset && preset.label !== connection.label
+    ? connection.label + "（" + preset.label + "）"
+    : connection.label;
+}
+
 export type CloudConsent = {
   profileId: string;
   updatedAt: string;
@@ -38,6 +46,7 @@ export type CloudDraft = {
   conversation: string | null;
   question: string;
   retry: boolean;
+  webSources?: boolean;
   selection: ContextSelection[];
   profile: Profile;
   disclosure: CloudDisclosure;

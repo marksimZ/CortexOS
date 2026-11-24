@@ -64,13 +64,26 @@ impl Endpoint {
         Ok(models)
     }
 
-    pub(super) async fn generate(
+    pub(super) async fn probe_generation(
         &self,
         key: &str,
         input: &CompletionInput,
         timeout: Duration,
     ) -> CloudResult<CompletionOutput> {
-        let (url, request) = self.generation_wire(input)?;
+        let (url, mut request) = self.generation_wire(input)?;
+        // Leave the production request at the model's default thinking setting.
+        // The 64-token probe needs room for the visible answer on DeepSeek.
+        if self.base().is_some_and(|base| {
+            base.host_str() == Some("api.deepseek.com")
+                && base.port().is_none()
+                && matches!(base.path(), "/" | "/v1/")
+        }) && matches!(
+            input.model.as_str(),
+            "deepseek-flash" | "deepseek-v4-pro" | "deepseek-v4-flash" | "deepseek-v4-flash-vision-exp"
+        )
+        {
+            request["thinking"] = json!({"type":"disabled"});
+        }
         self.send_generation(key, &url, &request, timeout).await
     }
 
@@ -216,7 +229,12 @@ impl Endpoint {
             scores,
             response
                 .pointer("/meta/billed_units/input_tokens")
-                .and_then(Value::as_u64),
+                .and_then(Value::as_u64)
+                .or_else(|| {
+                    response
+                        .pointer("/tokens/input_tokens")
+                        .and_then(Value::as_u64)
+                }),
         ))
     }
 }
@@ -310,6 +328,127 @@ fn ordered<'a>(rows: &'a Value, count: usize, field: &str) -> CloudResult<Vec<&'
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn runtime_cloud_compatible_routes_against_http_fixture() {
+        use crate::model_runtime::http_fixture::serve_with_authorization;
+
+        let fixed_destinations = [
+            ("https://api.deepseek.com", "", "deepseek-flash"),
+            (
+                "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "/compatible-mode/v1",
+                "qwen-plus",
+            ),
+            (
+                "https://api.siliconflow.cn/v1",
+                "/v1",
+                "deepseek-ai/DeepSeek-V4-Flash",
+            ),
+        ];
+        let (fixture, server) = serve_with_authorization(8, move |index, path, auth, body| {
+            assert_eq!(auth, Some("Bearer fixture-key"));
+            let response = match index {
+                0..=5 => {
+                    let (_, prefix, model) = fixed_destinations[index / 2];
+                    if index % 2 == 0 {
+                        assert_eq!(path, format!("{prefix}/models"));
+                        assert!(body.is_null());
+                        json!({"data":[{"id":model}]})
+                    } else {
+                        assert_eq!(path, format!("{prefix}/chat/completions"));
+                        assert_eq!(
+                            body,
+                            json!({"model":model,"messages":[{"role":"system","content":"Synthetic instructions."},{"role":"user","content":"Answer with OK."}],"max_tokens":64})
+                        );
+                        json!({"choices":[{"finish_reason":"stop","message":{"content":"OK","reasoning_content":"fixture reasoning"}}],"usage":{"prompt_tokens":8,"completion_tokens":3}})
+                    }
+                }
+                6 => {
+                    assert_eq!(path, "/v1/embeddings");
+                    assert_eq!(
+                        body,
+                        json!({"model":"BAAI/bge-large-zh-v1.5","input":["first","second"],"encoding_format":"float"})
+                    );
+                    json!({"data":[{"index":1,"embedding":[0,1]},{"index":0,"embedding":[3,4]}],"usage":{"prompt_tokens":8}})
+                }
+                7 => {
+                    assert_eq!(path, "/v1/rerank");
+                    assert_eq!(
+                        body,
+                        json!({"model":"Qwen/Qwen3-Reranker-8B","documents":["first","second"],"query":"fixture","top_n":2})
+                    );
+                    json!({"results":[{"index":1,"relevance_score":0.9},{"index":0,"relevance_score":0.1}],"tokens":{"input_tokens":12,"output_tokens":0}})
+                }
+                _ => unreachable!(),
+            };
+            (200, response)
+        });
+        let timeout = Duration::from_secs(5);
+        for (address, prefix, model) in fixed_destinations {
+            let endpoint = Endpoint::compatible(address, false).unwrap();
+            let request = CompletionInput {
+                model: model.into(),
+                system: "Synthetic instructions.".into(),
+                prompt: "Answer with OK.".into(),
+                max_output_tokens: 64,
+                schema: None,
+                tools: vec![],
+            };
+            let (url, body) = endpoint.generation_wire(&request).unwrap();
+            assert_eq!(url, format!("{address}/chat/completions"));
+            let loopback = Endpoint::Compatible {
+                base: fixture.join(&format!("{prefix}/")).unwrap(),
+                rerank: false,
+            };
+            let models = loopback.catalog("fixture-key").await.unwrap();
+            assert_eq!(models[0].id, model);
+            assert_eq!(models[0].generation, "unknown");
+            let url = loopback.base().unwrap().join("chat/completions").unwrap();
+            let output = endpoint
+                .send_generation("fixture-key", url.as_str(), &body, timeout)
+                .await
+                .unwrap();
+            assert_eq!(output.text, "OK");
+            assert!(
+                !serde_json::to_string(&output)
+                    .unwrap()
+                    .contains("fixture reasoning")
+            );
+        }
+        let siliconflow = Endpoint::Compatible {
+            base: fixture.join("v1/").unwrap(),
+            rerank: true,
+        };
+        let documents = ["first".to_owned(), "second".to_owned()];
+        assert_eq!(
+            siliconflow
+                .embed(
+                    "fixture-key",
+                    "BAAI/bge-large-zh-v1.5",
+                    &documents,
+                    None,
+                    timeout
+                )
+                .await
+                .unwrap(),
+            (vec![vec![0.6, 0.8], vec![0.0, 1.0]], Some(8))
+        );
+        assert_eq!(
+            siliconflow
+                .rerank(
+                    "fixture-key",
+                    "Qwen/Qwen3-Reranker-8B",
+                    "fixture",
+                    &documents,
+                    timeout
+                )
+                .await
+                .unwrap(),
+            (vec![0.1, 0.9], Some(12))
+        );
+        server.join().unwrap();
+    }
 
     #[test]
     fn runtime_cloud_protocol_checks_object_shape_and_order() {

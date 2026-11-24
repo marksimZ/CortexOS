@@ -8,4 +8,4 @@
 | H1.3 | 将类型化 IPC 从复用最高的领域渐进迁移。保留旧命令和数据契约，覆盖返回定位和异步结果归属。工程规范以独立提交落地。 |
 | H1.4 | 按用例统一语义令牌、状态、文本与控件尺寸。以 H1.0 的浅暗截图和实际键盘操作为验收对照。 |
 
-H1.0–H1.4 已交付。[H1.4 验收](h1-4-acceptance.md) 记录视觉与交互结果，[H1.3 验收](h1-3-acceptance.md) 记录接口和工程检查，[H1.2 验收](h1-2-acceptance.md) 与 [H1.1 验收](h1-1-acceptance.md) 保留前两轮结果。本阶段性能输入为合成文本和固定回复。现行视觉规范见 [HTML 原型](../design/html-prototype-ui.md)，正式发布条件见 [H0 发布决定](../release/h0-release-decision.md)。
+H1.0–H1.4 已交付。[H1.4 验收](h1-4-acceptance.md) 记录视觉与交互结果，[H1.3 验收](h1-3-acceptance.md) 记录接口和工程检查，[H1.2 验收](h1-2-acceptance.md) 与 [H1.1 验收](h1-1-acceptance.md) 保留前两轮结果。本阶段性能输入为合成文本和固定回复。现行视觉规范见 [HTML 原型](../../design.md)，正式发布条件见 [H0 发布决定](../release/h0-release-decision.md)。

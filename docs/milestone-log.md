@@ -1,5 +1,61 @@
 # 里程碑记录
 
+## 2026-11-24 国内云端模型预设
+
+- 工作区的“设置 → 云端模型”新增 DeepSeek 官方、阿里云百炼（北京）和硅基流动。复用已有兼容协议、按连接绑定的 Windows 凭据与模型用途验证。切换服务商清空已输入的密钥。运行方案与聊天显示连接、预设和模型，每次发送沿用云端授权范围。配置按既有格式保存，无数据库迁移。
+- DeepSeek 官方提供生成验证，已知支持关闭思考的模型在固定短文本验证时采用非思考模式。日常聊天采用服务商默认设置。百炼预设提供生成和向量验证，硅基流动另提供重排序验证。目录失败保留错误，可手填模型标识。云端聊天使用非流式接口，能力通过验证后才出现在相应运行方案的模型选择中。
+- 桌面目录执行 `npm.cmd run build`，前端类型检查与构建通过。根目录执行 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop` 和 `git diff --check`。专项协议检查 `cargo test --locked --offline --manifest-path apps/desktop/src-tauri/Cargo.toml --lib runtime_cloud_compatible_routes_against_http_fixture` 一项通过，回环服务核对三家目录与生成请求的地址路径和认证、输出解析及硅基流动向量与重排。
+- Edge 模拟 IPC 在桌面目录运行 `npm.cmd run test:smoke -- --project=edge runtime-cloud.spec.ts runtime-profiles.spec.ts --output=../../artifacts/cloud-presets/edge-final`，四项通过。覆盖各预设保存、模型选择、知识库用途与显式验证、同会话逐次确认及切换运行方案。截图位于 `artifacts/cloud-presets/`。
+- 原生 WebView2 在桌面目录设置 `CORTEXOS_NATIVE_ONLY=1` 后执行 `node node_modules/@playwright/test/cli.js test --project=desktop cloud-native.spec.ts -g "domestic cloud" --output=../../artifacts/cloud-presets/native`，一项通过。使用隔离数据和占位凭据，验证三家连接可并存、重启仍可从凭据管理器读取、工作区分离及清理。
+- 厂商账号实网试聊与实际计费仍待具备对应 API 凭据后验证。本次没有使用真实凭据或调用模型。开发版停在首批预设验收点。
+
+## 2026-11-24 一句话创建定时新闻简报
+
+- 聊天识别定时资讯请求，预览查询词、频率和本地时间，确认后保存。到期读取 Bing News 公开 RSS，每期在工作区保存至多五条标题、来源摘要与原文链接。任务中心可改期、暂停、取消以及展开历史。应用运行期间执行调度，重启沿用提醒补记规则。
+- Schema 29 按计划和到期时间去重，保存当期查询词、结果与错误。网络请求位于数据库事务之外；上次退出时仍在查询的记录显示中断。代码复核修正了前端查询词字段反序列化以及普通提醒历史读取可空状态的问题。
+- 桌面目录执行 `npm.cmd run build`、`npm.cmd run format:check`，根目录执行 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop` 和 `git diff --check`。Edge 模拟 IPC 检查 450×768 下的简报、空结果、失败和无历史四种界面。
+- Windows WebView2 使用隔离数据库与本机 RSS 替身，在桌面目录设置 `CORTEXOS_NATIVE_ONLY=1` 后运行 `node node_modules/@playwright/test/cli.js test --project=desktop reminders-native.spec.ts --output=../../artifacts/scheduled-briefs/native`，两项通过。关闭测试实例后调整隔离计划时间以验证到期，覆盖保存、空结果、服务失败、重启去重、中断恢复、工作区隔离与普通提醒回归。本片未运行单元测试或调用模型。真实 RSS 连通性见同日上一切片。
+- 当前验收点已完成。后续工作流为从工作区已确认进展生成周报草稿。
+
+## 2026-11-24 免密钥公开新闻与新版前端验收
+
+- 聊天复用现行 Apple × Linear 输入区和来源列表。未配凭据时直接读取 Bing News 公开 RSS；已配置 Brave 的工作区可在两种服务间选择。配置读取失败时明确提示，可重读或手动选择公开新闻。结果和随问题发送的参考文字标明实际来源服务。Rust 从固定 HTTPS 端点读取 RSS，复用锁定的 quick-xml，解析标题、原文链接、摘要并过滤重复项。无需新增 Tauri 权限或数据库迁移。
+- 用通用查询探测发现带 `mkt=zh-CN` 的端点在当前网络重定向首页，最终请求仅携带 `q` 和 `format=rss`。独立 Python HTTP 读取“人工智能”取得 HTTP 200 和 12 个 RSS 条目。
+- 在桌面目录运行 `npm.cmd run build`，含类型检查；`npm.cmd run format:check` 初次标出 API 文件，执行 `node node_modules/prettier/bin/prettier.cjs --write src/api/web-search.ts` 后复验通过。根目录执行 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`、`git diff --check`。
+- Edge 模拟 IPC：Vite 1427 与临时脚本 `node .public-news-browser-check.mjs` 在 1366×768、450×768 核对无密钥、配置／移除 Brave、主动切换、空结果和错误。新版 Windows WebView2：在桌面目录设置 `CORTEXOS_NATIVE_ONLY=1`、`CORTEXOS_PUBLIC_NEWS_LIVE=1` 后执行 `node node_modules/@playwright/test/cli.js test --project=desktop web-search-native.spec.ts --output=../../artifacts/workflow-public-news/native`，2 项通过。替身检查无凭据请求、实体与原文 URL 解析及 Brave 回归。真实公开查询在未配置密钥、无模型的工作区显示五条来源，已核对 1366×768 浅色与 850×640 深色截图。未运行单元测试或调用真实模型。
+- 本切片停在交互式新闻读取验收点。定时简报尚待接入；来源覆盖与语言取决于上游返回，本片不抓取全文。
+
+## 2026-11-23 聊天联网资讯查询
+
+- 在“设置 → 我的助手 → 网页搜索”按工作区管理 Brave Search 密钥。三个新增 IPC 命令分别读取配置状态、保存／移除凭据及执行查询。生产搜索仅向固定的 HTTPS 搜索端点发送查询，返回最多五条去重的标题、原文链接和摘要。应用内不抓取结果网页全文。普通发送、提醒和联网查询各有独立入口；“依据来源回答”沿用当前助手与云端披露，聊天历史保留实际附带的来源节选。
+- 在桌面目录执行 `npm.cmd run build`（含类型检查）。`npm.cmd run format:check` 初次提示新 API 文件格式，使用 `node node_modules/prettier/bin/prettier.cjs --write src/api/web-search.ts` 后复验通过。根目录 `git diff --check`、`cargo check --locked --offline --manifest-path apps/desktop/src-tauri/Cargo.toml` 与 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop` 通过。
+- Edge：Vite 1427 端口、临时脚本 `node .web-search-browser-check.mjs --chat` 和模拟 IPC 验证 1366×768 与 450×768 下的密钥配置、空结果、读取失败、勾选来源与发送失败保留草稿。代码级专项检查覆盖默认 4K 配置下五条长中文摘要的截取与超长链接省略。
+- Windows WebView2：桌面目录设置 `CORTEXOS_NATIVE_ONLY=1`，执行 `node node_modules/@playwright/test/cli.js test --project=desktop web-search-native.spec.ts --output=../../artifacts/workflow-web-search/native`，1 项通过。隔离凭据与两个本地协议替身核对工作区边界、仅发送本题、近期查询参数、URL 去重、可空摘要、429 反馈、模型接收与持久历史一致。浏览器及原生截图在 `artifacts/workflow-web-search/`。
+- 本片未使用真实 Brave 账户、执行模型推理或运行单元测试。实际搜索质量与在线额度待使用有效密钥核验。下一步为定时简报复用搜索；本片停在交互式查询验收点。
+
+## 2026-11-23 个人助手版本
+
+- 设置中的“我的助手”支持按工作区编辑草稿、发布并启用、查看和切换历史版本、恢复内置默认。Schema 28 保存版本与生效指针，四个主窗口命令用于本工作区读取、保存、发布和启用。聊天请求组装计入指令预算；本地生成保留实际系统消息与助手标识，处理记录展示该次选择。云端生成与固定检索评测沿用内置指令。助手草稿缓存沿用备份的工作区归属过滤。已确认聊天没有联网搜索和页面抓取工具，订阅资讯与搜索分期写入实施计划。
+- 在桌面目录运行 `npm.cmd run build`（含类型检查）。`npm.cmd run format:check` 首次发现新 API 文件格式问题，执行 `node node_modules/prettier/bin/prettier.cjs --write src/api/assistant.ts` 后复验通过。根目录 `git diff --check`、`cargo check --locked --offline --manifest-path apps/desktop/src-tauri/Cargo.toml` 和 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop` 通过。SQLite 内存专项覆盖版本、默认值、工作区外键与级联清理。
+- Edge 模拟 IPC：桌面目录 `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 1427 --strictPort` 和临时脚本 `node .assistant-browser-check.mjs`，核对 1366×768 和 450×768 下草稿恢复、错误重试、版本切换及工作区边界。截图在 `artifacts/personal-assistant/`。
+- Windows WebView2：在桌面目录设置 `CORTEXOS_NATIVE_ONLY=1` 后执行 `node node_modules/@playwright/test/cli.js test --project=desktop personal-assistant-native.spec.ts --output=../../artifacts/personal-assistant/native-final`，1 项通过。首次检查的固定 HTTP 替身缺少 GGUF 元数据，被已有模型来源校验拒绝；补齐替身元数据后，从 UI 发布 v1、保存不同的草稿，依次核对 v1、v2、回退 v1、内置默认的四次真实 HTTP 请求、历史快照与隔离。截图位于该输出目录。未执行单元测试、真实推理或外部资讯请求。
+- 本片达到本地请求与版本管理验收点。输出质量、真实模型负载及资讯来源接入尚未验证。下一工作流交付点为定时生成带依据的草稿。
+
+## 2026-11-22 工作流首版第一切片：应用内定时提醒
+
+- 对话支持常见中文提醒指令、本机时间与可编辑草案预览；确认才写入。任务中心支持查看、改期、暂停、恢复、取消及最近 100 条提醒记录。Schema 27 增加按工作区归属的计划和运行记录；主窗口新增的三个命令仅用于列出、保存和修改提醒。进程内调度每五秒检查，单个到期时刻以事务和唯一约束去重。退出或休眠后回到应用时，五分钟以内可补发最近一期，多个旧周期合并记为错过。
+- 编译与静态检查：在桌面目录执行 `npm.cmd run build`（含 TypeScript）、`npm.cmd run lint`、`npm.cmd run format:check`；根目录执行 `git diff --check`、`cargo check --offline --locked --manifest-path apps/desktop/src-tauri/Cargo.toml` 和 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`。均通过；ESLint 仍有警告，Vite 提示部分分包较大。
+- 浏览器检查：在桌面目录以 `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 1427 --strictPort` 启动 Vite，临时脚本 `node .reminder-browser-check.mjs` 以模拟 IPC 在 Edge 核对 1366×768 与 450×768 的编辑、空状态、读取失败与恢复、取消确认、工作区隔离及到期提示，截图在 `artifacts/workflow-reminders/`。另以 Python SQLite 内存库核对外键及去重约束。
+- Windows WebView2：桌面目录设置 `CORTEXOS_NATIVE_ONLY=1`，运行 `node node_modules/@playwright/test/cli.js test --project=desktop reminders-native.spec.ts --output=../../artifacts/workflow-reminders/native`，1 项通过。隔离数据目录与不可用模型地址下，普通问题保持离线限制，工作日提醒能预览且确认前数据库为空；原生界面实测保存、暂停、改期、恢复、取消；IPC 验证跨区隔离。实际未来的单次提醒跨重启仅交付一次，隔离库内预置的逾期样例记录为错过，再次重启两条历史不重复。已查看原生草案、任务中心及浏览器截图。未运行单元测试或调用模型。
+- 本片停在人工体验验收。下一片为可发布的个人助手版本，其后接入定时生成周报草稿。未实测物理休眠、切换系统时区或夏令时跃迁，完全退出后持续唤醒属于后续后台运行范围。
+
+## 2026-11-22 H5 Windows x64 公开预发行
+
+- 从已验收的 `350ef8a` 建立独立构建目录。先运行 `npm.cmd run build`，再运行 `scripts/release-dry-run.ps1 -Version 0.2.1-rc.4`。最终 NSIS 安装器为 7,017,245 字节，校验 11 项安装文件和 39 个内嵌资源路径，Authenticode 状态为 `NotSigned`。
+- 独立依赖副本的清单纳入 85 项 npm 和 262 项 Rust 运行依赖。随包声明和四份 MPL 源码归档通过一致性核对。候选包 SHA-256 为 `1CCA4EACFE1582D15A5A58C36638FAD423815336249076D9C33DB3979141298D`。
+- Windows 沙盒用最终包通过 4 项全新安装、首次启动、重装保留和显式卸载检查。从 `0.2.0` 升级的最终包复验在沙盒共享目录中断后终止，保留未验证。上一候选包的升级证据见 [H4 安装矩阵](release/h4-install-upgrade-validation.md)。
+- 经维护者批准公开此次预发行。标签指向 `350ef8a`，GitHub 的安装器、校验文件和两份第三方材料共 4 个附件已核对，公开下载安装器的 SHA-256 与本地一致。发布记录为 `artifacts/h5-release-src/artifacts/rc4-final/github-publication.json`。 [GitHub Release](https://github.com/marksimZ/CortexOS/releases/tag/v0.2.1-rc.4)
+
 ## 2026-11-21 Phase H5 产品体验验收
 
 - 在空工作区加入本机、云端、恢复及跳过引导。标题栏加入任务中心与按需帮助。任务中心复用队列与历史记录，保留现有个性化评测准入。
@@ -2892,3 +2948,32 @@ Markdown用原文存储，不改变请求或证据；不支持数学公式/代�
 仍待用户实际窗口手感复验；没有新的千节点性能、系统150%、读屏、模型长时、安装升级结果，不标第5项全部完成。
 
 最终补记：npm.cmd run tauri -- build --bundles nsis单独完成，Rust2分24秒；当前安装包2,949,609字节，SHA256为1c067bed99cf0e22a738272a067a36eaad3d5f30fe682d09f6fa1d24825d3c23，NotSigned。更新本机manifest与Windows交付文档。Start-Process启动最终正式Release，WaitForInputIdle后原生窗口可见、标题正确（进程19148）；SetForegroundWindow=false，不绕过前台限制。新窗口留给用户操作，未操作知识或自动代替人工验收。提交前git diff --check通过（仅既有CRLF提示），确认独立仓库与credential.helper=manager，Gittoken.txt仍忽略且未读取。
+
+### 2026-11-22 全界面原型视觉接入
+
+真实前端接入顶部五页导航、页面边框、消息与输入区域、设置分类布局。执行 npm.cmd --prefix apps/desktop run build，通过类型检查与生产构建。使用 Node / Playwright 在 Edge 载入构建产物，切换五页、检查图谱画布就绪、切换深色与 800px 抽屉导航。实际截图位于 artifacts/ui-prototype-integration/。上述验证为浏览器预览；本次未执行原生 WebView2 或模型调用。
+
+### 2026-11-22 五页视觉层级微调
+
+知识库空状态集中显示可用操作；对话依据栏尊重手动偏好；定位链接合并到评测类型行；演示图首次取景使用范围适配，数据来源紧邻计数；宽窗设置页精简重复标题。执行 npm.cmd --prefix apps/desktop run build，通过类型检查与构建。使用 Edge 加载生产产物，验证五页、知识空状态、依据展开偏好重载、图谱画布就绪与评测链接弹窗。截图位于 artifacts/ui-hierarchy/。本轮为浏览器验证，未调用模型或验证原生窗口。
+
+### 2026-11-24 极简视觉重构（令牌、控件与页面层）
+
+用户要求整体更换视觉语言，采用 Apple × Linear 的极简风格，保留全部功能与接口。本轮重写 `styles/tokens.css`、`styles/layout.css`、`styles/controls.css`、`styles/motion.css`、`markdown.css`，并修改 `styles/features.css`、`benchmark/benchmark.css`、`benchmark/harness/harness.css`。DOM 结构、类名、`aria-*`、路由与快捷键未改动。
+
+- 主操作改为高对比实心，品牌色降级为 `--accent`；删除玻璃模糊、内高光、渐变与逐行 inset 分割线。
+- 侧栏统一为 252px（此前样式为 224px，与 `chat-design.spec.ts`、`knowledge-layout.spec.ts` 断言的 252px 不一致，本轮按测试与参考 HTML 统一）。知识列表 290px、正文 860px 保持不变。
+- `text-bloom` 动画名保留（`prototype-ui.spec.ts` 有断言），但去掉模糊滤镜只保留透明度过渡。
+
+实际命令与结果（目录 `apps/desktop`）：
+
+- `npm run build`：类型检查与生产构建通过（Vite 6.87s，仅既有大块提示）。
+- `cargo build`（`src-tauri`）：1m07s 通过，用于预热 `tauri dev`。
+- `node --experimental-strip-types .capture-native.ts`：以 `tauri dev` 启动原生 WebView2，创建测试工作区并保存、确认一条知识，截图浅深两套五页。实测 1366/1600/1920 下 `.prototype-sidebar` 252px、`.knowledge-sidebar` 290px、知识正文 860px（断言上限 861）、无横向溢出。
+- `node --experimental-strip-types .capture-chat.ts`：用本地假 NDJSON 服务（固定文本，未加载任何模型）完成一次发送，截图消息排版；助手消息无容器、操作行默认弱化。
+- Playwright 浏览器检查：1366/900/560 三档 × 五页，`documentElement.scrollWidth` 均未超过视口；900px 以下顶栏导航按既有断点隐藏。
+- `npx playwright test tests/knowledge-layout.spec.ts --project=desktop`：失败于 `waitForURL(tauri.localhost)` 超时。原因是本轮 `cargo build` 生成的 dev-profile 二进制指向 `devUrl`（127.0.0.1:1420）而非内嵌资源，属构建方式问题，不是样式断言失败；原生断言改由上面的 `tauri dev` 会话直接核对。以 `tauri build --debug` 产出的包重跑该用例仍待执行。
+
+截图：`artifacts/ui-redesign/before`（改造前）、`artifacts/ui-redesign/s1`（浏览器与原生）、`artifacts/ui-redesign/native`（真实数据页面）。临时截图脚本 `.capture-native.ts`、`.capture-chat.ts` 已在验证后删除。
+
+未验证：打包安装后的原生窗口未重新走查；任务中心、执行过程面板、数据可迁移对话框等次级界面只做了继承样式，未逐页截图；系统 150% 缩放与读屏未复测。

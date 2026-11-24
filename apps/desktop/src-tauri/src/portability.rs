@@ -271,7 +271,7 @@ fn ui_key_allowed(key: &str, id: Option<&str>) -> bool {
             .ok()
             .and_then(|parts| parts.first()?.as_str().map(matches_owner))
             .unwrap_or(false),
-        "harness-analysis" | "standard-benchmark" => matches_owner(&key),
+        "assistant" | "harness-analysis" | "standard-benchmark" => matches_owner(&key),
         "chat" | "dataset-review" | "benchmark-profile" | "programming" | "task-review"
         | "workspace-handoff" => key
             .split_once(':')

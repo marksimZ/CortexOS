@@ -12,6 +12,27 @@ pub struct WindowsVault {
     target: String,
 }
 impl WindowsVault {
+    pub(crate) fn for_web_search(
+        database: &std::path::Path,
+        workspace: &str,
+        fixture: bool,
+    ) -> Self {
+        use sha2::{Digest, Sha256};
+        let mut hash = Sha256::new();
+        hash.update(database.as_os_str().as_encoded_bytes());
+        hash.update(b"\0");
+        hash.update(workspace.as_bytes());
+        let scope = if fixture {
+            "fixture"
+        } else if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        };
+        Self {
+            target: format!("CortexOS/BraveSearch/v1/{scope}/{:x}", hash.finalize()),
+        }
+    }
     #[cfg(test)]
     pub fn test_target(target: String) -> Self {
         Self { target }
@@ -51,7 +72,7 @@ impl WindowsVault {
 
 #[cfg(windows)]
 impl WindowsVault {
-    pub(super) fn read_payload<T: serde::de::DeserializeOwned>(&self) -> AppResult<Option<T>> {
+    pub(crate) fn read_payload<T: serde::de::DeserializeOwned>(&self) -> AppResult<Option<T>> {
         use windows_sys::Win32::{Foundation::*, Security::Credentials::*};
         let target: Vec<u16> = self.target.encode_utf16().chain(Some(0)).collect();
         let mut pointer = std::ptr::null_mut();
@@ -84,7 +105,7 @@ impl WindowsVault {
             result.map(Some)
         }
     }
-    pub(super) fn write_payload(&self, value: &impl serde::Serialize) -> AppResult<()> {
+    pub(crate) fn write_payload(&self, value: &impl serde::Serialize) -> AppResult<()> {
         use windows_sys::Win32::Security::Credentials::*;
         let mut blob = Zeroizing::new(serde_json::to_vec(value).map_err(|_| vault_error())?);
         if blob.len() > 2560 {
@@ -105,7 +126,7 @@ impl WindowsVault {
             Ok(())
         }
     }
-    pub(super) fn erase(&self) -> AppResult<()> {
+    pub(crate) fn erase(&self) -> AppResult<()> {
         use windows_sys::Win32::{Foundation::*, Security::Credentials::*};
         let target: Vec<u16> = self.target.encode_utf16().chain(Some(0)).collect();
         if unsafe { CredDeleteW(target.as_ptr(), CRED_TYPE_GENERIC, 0) } != 0
@@ -119,13 +140,13 @@ impl WindowsVault {
 }
 #[cfg(not(windows))]
 impl WindowsVault {
-    pub(super) fn read_payload<T: serde::de::DeserializeOwned>(&self) -> AppResult<Option<T>> {
+    pub(crate) fn read_payload<T: serde::de::DeserializeOwned>(&self) -> AppResult<Option<T>> {
         Err(vault_error())
     }
-    pub(super) fn write_payload(&self, _: &impl serde::Serialize) -> AppResult<()> {
+    pub(crate) fn write_payload(&self, _: &impl serde::Serialize) -> AppResult<()> {
         Err(vault_error())
     }
-    pub(super) fn erase(&self) -> AppResult<()> {
+    pub(crate) fn erase(&self) -> AppResult<()> {
         Err(vault_error())
     }
 }

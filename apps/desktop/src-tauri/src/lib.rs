@@ -20,13 +20,16 @@ mod runtime_profiles;
 mod runtime_usage;
 mod local_runtime;
 mod ollama;
+mod personal_assistant;
 mod portability;
 mod retrieval;
 mod rag;
+mod reminders;
 mod source_chunks;
 mod sources;
 mod storage;
 mod tasks;
+mod web_search;
 #[cfg(windows)]
 mod updates;
 
@@ -73,12 +76,14 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
-            let mut directory = app.path().app_data_dir()?;
+            let default_directory = app.path().app_data_dir()?;
+            let mut directory = default_directory.clone();
             #[cfg(debug_assertions)]
             if let Ok(value) = std::env::var("CORTEXOS_TEST_DATA_DIR") {
                 directory = std::path::PathBuf::from(value);
             }
             let state = commands::AppState::new(&directory);
+            app.manage(web_search::WebSearch::new(&default_directory));
             #[cfg(windows)]
             if primary_window.is_some() && state.database.is_ok() {
                 storage::recovery::before_webview(app.handle(), &directory);
@@ -89,6 +94,7 @@ pub fn run() {
             if let Some(window) = &primary_window {
                 tauri::WebviewWindowBuilder::from_config(app.handle(), window)?.build()?;
             }
+            reminders::start_scheduler(app.handle(), app.state::<commands::AppState>().inner());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -105,6 +111,16 @@ pub fn run() {
             task_center::read_live_tasks,
             task_center::read_task_history,
             task_center::cancel_waiting_task,
+            reminders::list_reminders,
+            reminders::save_reminder,
+            reminders::set_reminder_state,
+            personal_assistant::read_assistant,
+            personal_assistant::save_assistant_draft,
+            personal_assistant::publish_assistant,
+            personal_assistant::activate_assistant,
+            web_search::read_web_search_status,
+            web_search::save_web_search_key,
+            web_search::search_web,
             portability::backup_preview,
             portability::backup_save,
             portability::backup_open,
