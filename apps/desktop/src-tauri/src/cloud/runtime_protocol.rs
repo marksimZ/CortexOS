@@ -70,7 +70,8 @@ impl Endpoint {
         input: &CompletionInput,
         timeout: Duration,
     ) -> CloudResult<CompletionOutput> {
-        let (url, mut request) = self.generation_wire(input)?;
+        let messages = [crate::models::ChatMessage { role: "user".into(), content: input.prompt.clone() }];
+        let (url, mut request) = self.generation_chat_wire(&input.model, &messages, input.max_output_tokens)?;
         // Leave the production request at the model's default thinking setting.
         // The 64-token probe needs room for the visible answer on DeepSeek.
         if self.base().is_some_and(|base| {
@@ -84,7 +85,7 @@ impl Endpoint {
         {
             request["thinking"] = json!({"type":"disabled"});
         }
-        self.send_generation(key, &url, &request, timeout).await
+        self.send_generation_stream(key, &url, &request, timeout, &mut |_| {}).await
     }
 
     pub(super) fn generation_wire(&self, input: &CompletionInput) -> CloudResult<(String, Value)> {
@@ -108,6 +109,161 @@ impl Endpoint {
             }
         }
         Ok((url, request))
+    }
+
+    pub(super) fn generation_chat_wire(
+        &self,
+        model: &str,
+        messages: &[crate::models::ChatMessage],
+        max_output_tokens: u32,
+    ) -> CloudResult<(String, Value)> {
+        let system = messages
+            .iter()
+            .filter(|m| m.role == "system")
+            .map(|m| m.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let turns: Vec<_> = messages.iter().filter(|m| m.role != "system").collect();
+        if let Some(base) = self.base() {
+            let url = base
+                .join("chat/completions")
+                .map_err(|_| INVALID)?
+                .to_string();
+            let request = json!({
+                "model": model,
+                "messages": messages,
+                "stream": true,
+                "stream_options": {"include_usage":true},
+                "max_tokens": max_output_tokens,
+            });
+            return Ok((url, request));
+        }
+        match self.protocol() {
+            Provider::Openai => {
+                let input: Vec<Value> = turns
+                    .iter()
+                    .map(|m| json!({"role": m.role, "content": m.content}))
+                    .collect();
+                Ok((
+                    "https://api.openai.com/v1/responses".into(),
+                    json!({
+                        "model": model,
+                        "stream": true,
+                        "instructions": system,
+                        "input": input,
+                        "max_output_tokens": max_output_tokens,
+                        "store": false
+                    }),
+                ))
+            }
+            Provider::Anthropic => {
+                let wire_msgs: Vec<Value> = turns
+                    .iter()
+                    .map(|m| json!({"role": m.role, "content": m.content}))
+                    .collect();
+                Ok((
+                    "https://api.anthropic.com/v1/messages".into(),
+                    json!({
+                        "model": model,
+                        "system": system,
+                        "stream": true,
+                        "messages": wire_msgs,
+                        "max_tokens": max_output_tokens
+                    }),
+                ))
+            }
+            Provider::Gemini => {
+                let clean = model.strip_prefix("models/").unwrap_or(model);
+                if clean.contains('/') || clean.contains(':') || clean.starts_with('.') {
+                    return Err(INVALID);
+                }
+                let contents: Vec<Value> = turns
+                    .iter()
+                    .map(|m| {
+                        let role = if m.role == "assistant" { "model" } else { "user" };
+                        json!({"role": role, "parts": [{"text": m.content}]})
+                    })
+                    .collect();
+                Ok((
+                    format!("https://generativelanguage.googleapis.com/v1beta/models/{clean}:streamGenerateContent?alt=sse"),
+                    json!({
+                        "systemInstruction": {"parts": [{"text": system}]},
+                        "contents": contents,
+                        "generationConfig": {"maxOutputTokens": max_output_tokens}
+                    }),
+                ))
+            }
+        }
+    }
+
+    pub(super) async fn send_generation_stream(
+        &self,
+        key: &str,
+        url: &str,
+        request: &Value,
+        timeout: Duration,
+        on_delta: &mut (dyn FnMut(&str) + Send),
+    ) -> CloudResult<CompletionOutput> {
+        let hash =
+            crate::benchmark::dataset::hash(&serde_json::to_vec(request).map_err(|_| INVALID)?);
+        let start = Instant::now();
+        let client = super::transport::JSON_CLIENT
+            .as_ref()
+            .map_err(|error| *error)?;
+        let mut response = completion::authenticate(
+            client.post(url).timeout(timeout).json(request), self.protocol(), key,
+        )?
+            .send()
+            .await
+            .map_err(|_| ConnectionState::NetworkUnavailable)?;
+        let status = response.status().as_u16();
+        if status != 200 {
+            let mut err_bytes = Vec::new();
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|_| ConnectionState::NetworkUnavailable)?
+            {
+                if err_bytes.len() + chunk.len() > (1 << 20) {
+                    break;
+                }
+                err_bytes.extend_from_slice(&chunk);
+            }
+            let body = serde_json::from_slice(&err_bytes).unwrap_or(Value::Null);
+            return Err(super::provider::classify(status, &body));
+        }
+        let is_sse = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|ct| ct.to_ascii_lowercase().contains("text/event-stream"));
+        if !is_sse {
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|_| ConnectionState::NetworkUnavailable)?
+            {
+                if bytes.len() + chunk.len() > (2 << 20) {
+                    return Err(INVALID);
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            let raw: Value = serde_json::from_slice(&bytes).map_err(|_| INVALID)?;
+            let adapted = if self.base().is_some() { compatible_completion(&raw)? } else { raw };
+            let output = completion::parse(
+                self.protocol(),
+                &adapted,
+                start.elapsed().as_millis() as u64,
+                hash,
+            )?;
+            let checked = completion::checked_output(output, key)?;
+            if !checked.text.is_empty() {
+                on_delta(&checked.text);
+            }
+            return Ok(checked);
+        }
+        super::chat_stream::read(response, self.base().is_none().then(|| self.protocol()), key, start, hash, on_delta).await
     }
 
     pub(super) async fn send_generation(

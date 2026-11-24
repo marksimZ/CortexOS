@@ -347,24 +347,33 @@ async fn attempt_cloud_chat(
     timeout_seconds: u64,
     mut cancel: watch::Receiver<bool>,
     meter: &crate::runtime_usage::Meter,
+    notify: &mut (dyn FnMut(StreamUpdate) + Send),
 ) -> Attempt {
     let run = &prepared.run;
     let purpose = ExecutionPurpose::Chat;
     let provider = target.connection.provider.name();
     let timeout = Duration::from_secs(timeout_seconds);
+    let mut streamed = String::new();
+    let mut seq = 0u64;
     let result = if *cancel.borrow() {
         None
     } else {
         let call = async {
             let dispatch = &prepared.manifest["cloudTransfer"];
             let knowledge = crate::cloud::privacy::context_versions(&prepared.manifest)?;
+            let mut on_delta = |delta: &str| {
+                streamed.push_str(delta);
+                seq += 1;
+                notify(update(run, seq, &streamed, "running", None));
+            };
             let output = target
-                .generate(
+                .generate_stream(
                     &prepared.request,
                     timeout,
                     meter,
                     Some(dispatch),
                     &knowledge,
+                    &mut on_delta,
                 )
                 .await?;
             let recorded = run.clone();
@@ -402,13 +411,13 @@ async fn attempt_cloud_chat(
             )
         }
         Some(Err(error)) => (
-            String::new(),
+            streamed,
             "failed",
             Some(error),
             json!({"provider":provider}),
         ),
         None => (
-            String::new(),
+            streamed,
             "cancelled",
             None,
             json!({"provider":provider}),
@@ -416,7 +425,7 @@ async fn attempt_cloud_chat(
     };
     Attempt {
         content,
-        seq: 0,
+        seq,
         status,
         message,
         metrics,
@@ -431,7 +440,7 @@ pub(crate) async fn execute_chat(
     settings: ModelSettings,
     backup: Option<String>,
     cancel: watch::Receiver<bool>,
-    mut notify: impl FnMut(StreamUpdate),
+    mut notify: impl FnMut(StreamUpdate) + Send,
 ) -> Completion {
     let mut attempt = if let Some(target) = &cloud {
         let meter=crate::runtime_usage::Meter::new(database.clone(),prepared.run.workspace_id.clone(),prepared.run.id.clone(),"chat");
@@ -442,6 +451,7 @@ pub(crate) async fn execute_chat(
             settings.timeout_seconds,
             cancel.clone(),
             &meter,
+            &mut notify,
         )
         .await
     } else if let Some(provider) = &provider {
@@ -518,7 +528,8 @@ pub(crate) async fn execute_rag_case(
     settings: &ModelSettings, meter: &crate::runtime_usage::Meter, cancel: watch::Receiver<bool>,
 ) -> Completion {
     let attempt = if let Some(target)=cloud {
-        attempt_cloud_chat(database.clone(),target,&prepared,settings.timeout_seconds,cancel,meter).await
+        let mut noop = |_: StreamUpdate| {};
+        attempt_cloud_chat(database.clone(),target,&prepared,settings.timeout_seconds,cancel,meter,&mut noop).await
     } else if let Some(provider)=provider {
         attempt_local(database.clone(),provider,&prepared,settings,&InspectionPolicy::Chat,cancel,0,&mut |_|{}).await
     } else {
@@ -599,6 +610,107 @@ mod tests {
         model_runtime::http_fixture,
         runtime_profiles::{ChatRuntime, CloudChat, Profile},
     };
+
+    #[tokio::test]
+    async fn cloud_chat_loopback_preserves_roles_and_excludes_private_lineage() {
+        use crate::{knowledge::SaveKnowledge, models::ContextSelection};
+        use rusqlite::params;
+
+        let db = Arc::new(Database::rag_evaluation_database().unwrap());
+        let workspace = db.create_workspace("合成共享范围").unwrap().id;
+        let conversation = db.create_conversation(&workspace).unwrap().id;
+        let other = db.create_conversation(&workspace).unwrap().id;
+        let create_knowledge = |title: &str, content: &str| {
+            let node_id = db.save_knowledge(SaveKnowledge {
+                workspace_id: workspace.clone(),
+                node_id: None,
+                expected_revision: None,
+                title: title.into(),
+                kind: "knowledge".into(),
+                content: content.into(),
+                change_reason: "synthetic fixture".into(),
+                source_message_id: None,
+                source_excerpt: None,
+            }).unwrap();
+            ContextSelection { node_id, version: 1 }
+        };
+        let private = create_knowledge("private probe", "PRIVATE-NODE-BODY");
+        let shared = create_knowledge("launch dependency", "PUBLIC-MEMORY-BODY");
+        let related = create_knowledge("connected reference", "PUBLIC-RELATED-BODY");
+        for to in [&private, &related] {
+            db.save_knowledge_edge(crate::graph::SaveEdge {
+                workspace_id: workspace.clone(), edge_id: None, expected_version: None,
+                from_node_id: shared.node_id.clone(), to_node_id: to.node_id.clone(),
+                relation: "supports".into(), active: true, change_reason: "synthetic fixture".into(),
+            }).unwrap();
+        }
+        {
+            let conn = db.connection().unwrap();
+            conn.execute("INSERT INTO knowledge_local_only VALUES(?1,?2,1,?3)",
+                params![workspace,private.node_id,now()]).unwrap();
+            conn.execute("INSERT INTO assistant_versions VALUES(?1,1,'Fixture','WORKSPACE-INSTRUCTIONS')", [&workspace]).unwrap();
+            conn.execute("INSERT INTO assistant_drafts VALUES(?1,'Fixture','WORKSPACE-INSTRUCTIONS',1)", [&workspace]).unwrap();
+            crate::memory::write_persona(&conn, &mut crate::memory::GlobalPersona {
+                rules: vec!["APPROVED-GLOBAL-RULE".into()],
+                ..Default::default()
+            }).unwrap();
+        }
+        let local = ModelSettings::default();
+        let record_local = |chat: &str, question: &str, answer: &str, selected: &[ContextSelection]| {
+            let run = db.prepare_context_run(&new_id(), &workspace, chat, question, &local, selected, false).unwrap();
+            db.finish(&run.run, answer, "completed", None, json!({})).unwrap();
+        };
+        record_local(&conversation, "private origin", "PRIVATE-HISTORY-ANSWER", std::slice::from_ref(&private));
+        record_local(&conversation, "local follow-up", "PRIVATE-DESCENDANT-ANSWER", &[]);
+        record_local(&other, "private episode", "PRIVATE-EPISODE-ANSWER", std::slice::from_ref(&private));
+        // Introduce an independent completed turn with no inherited private context.
+        let clean = db.create_conversation(&workspace).unwrap().id;
+        let safe_turn = db.prepare_context_run(&new_id(), &workspace, &clean, "safe opening", &local, &[], false).unwrap();
+        db.finish(&safe_turn.run, "PUBLIC-HISTORY-ANSWER", "completed", None, json!({})).unwrap();
+
+        let captured = Arc::new(std::sync::Mutex::new(None));
+        let observed = captured.clone();
+        let (url, server) = http_fixture::serve(1, move |_, path, body| {
+            assert_eq!(path, "/chat/completions");
+            *observed.lock().unwrap() = Some(body);
+            (200, json!({"choices":[{"message":{"content":"synthetic response"},"finish_reason":"stop"}]}))
+        });
+        let target = CloudTarget::loopback_test(url, "remote");
+        let profile: Profile = serde_json::from_value(json!({"id":new_id(),"updatedAt":now(),
+            "name":"Fixture","mode":"cloud","generation":{"kind":"cloud","model":"remote","connectionId":target.connection.id},
+            "embedding":{"kind":"off"},"reranking":{"kind":"off"}})).unwrap();
+        let settings = ModelSettings { model: "remote".into(), ..ModelSettings::default() };
+        let prepare = |chat: &str, selected: &[ContextSelection], preview: bool| {
+            db.prepare_chat_runtime(&new_id(), &workspace, chat, "launch dependency", &settings, selected,
+                preview, None, None, true, Some(&ChatRuntime {
+                    profile: &profile,
+                    cloud: Some(CloudChat { target: &target, share_selection: true,
+                        granted_versions: &[], public_fixture: false }),
+                    ranking: None,
+                }), None, true)
+        };
+        assert!(prepare(&conversation, std::slice::from_ref(&private), true).is_err());
+        let private_preview = prepare(&conversation, &[], true).unwrap().request.to_string();
+        assert!(!private_preview.contains("PRIVATE-HISTORY-ANSWER"));
+        assert!(!private_preview.contains("PRIVATE-DESCENDANT-ANSWER"));
+        assert!(!private_preview.contains("PRIVATE-EPISODE-ANSWER"));
+        let prepared = prepare(&clean, &[], false).unwrap();
+        let expected = prepared.request["body"].clone();
+        let (_keep, cancel) = watch::channel(false);
+        let result = execute_chat(db.clone(), None, Some(target), prepared, settings, None, cancel, |_| {}).await;
+        assert_eq!(result.update.status, "completed", "{:?}", result.update.error_message);
+        server.join().unwrap();
+        let body = captured.lock().unwrap().take().unwrap();
+        assert_eq!(body, expected);
+        let raw = body.to_string();
+        for expected in ["APPROVED-GLOBAL-RULE", "WORKSPACE-INSTRUCTIONS", "PUBLIC-MEMORY-BODY", "PUBLIC-RELATED-BODY", "PUBLIC-HISTORY-ANSWER"] {
+            assert!(raw.contains(expected), "missing {expected}");
+        }
+        assert!(!raw.contains("PRIVATE-"));
+        let messages = body["messages"].as_array().unwrap();
+        assert!(messages.iter().any(|message| message["role"] == "assistant" && message["content"] == "PUBLIC-HISTORY-ANSWER"));
+        assert_eq!(messages.last().unwrap()["content"], "launch dependency");
+    }
 
     #[tokio::test]
     async fn chat_fallback_keeps_both_snapshots_and_uses_only_local_backup() {

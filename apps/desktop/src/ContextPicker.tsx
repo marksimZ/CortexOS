@@ -2,10 +2,12 @@ import { chat, type ContextCursor, type ContextOption } from "./api/chat";
 import { useEffect, useRef, useState } from "react";
 import { errorText, localDay, type ContextManifest, type Studio } from "./studio";
 import { RetrievalSummary } from "./components/RetrievalSummary";
-import { KnowledgeScopePicker } from "./components/KnowledgeScopePicker";
 import { KnowledgeGraphOptions } from "./components/KnowledgeGraphOptions";
+import type { GenerationTarget } from "./runtime-profiles";
 
-export function ContextPicker({ studio, cloudAnswer = false }: { studio: Studio; cloudAnswer?: boolean }) {
+export function ContextPicker({ studio, cloudAnswer = false, generationTarget }: {
+  studio: Studio; cloudAnswer?: boolean; generationTarget?: GenerationTarget | null;
+}) {
   const previewGeneration = useRef(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<ContextOption[]>([]);
@@ -65,12 +67,8 @@ export function ContextPicker({ studio, cloudAnswer = false }: { studio: Studio;
       if (event.target !== event.currentTarget) return;
       setOpen(event.currentTarget.open);
     }}>
-      <summary>{studio.knowledgeScope
-        ? studio.knowledgeScope.kind === "branch" ? "在实验分支查找"
-          : studio.knowledgeScope.kind === "snapshot" ? "按知识快照查找" : `按 ${studio.knowledgeScope.date || "事实日期"} 查找`
-        : `手动选择：${studio.contextSelection.length} 项知识`}</summary>
-      <KnowledgeScopePicker studio={studio} />
-      <KnowledgeGraphOptions key={JSON.stringify(studio.knowledgeScope)} studio={studio} />
+      <summary>{`手动选择：${studio.contextSelection.length} 项知识`}</summary>
+      <KnowledgeGraphOptions key="current" studio={studio} />
       {!studio.knowledgeScope ? <>
       <div className="context-toolbar">
         <span>
@@ -98,7 +96,7 @@ export function ContextPicker({ studio, cloudAnswer = false }: { studio: Studio;
               <input
                 type="checkbox"
                 checked={!!selected}
-                disabled={busy || studio.sending}
+                disabled={busy || studio.sending || (!!item.localOnly && cloudAnswer && !selected)}
                 onChange={(event) => {
                   studio.setContextSelection(
                     event.target.checked
@@ -114,6 +112,7 @@ export function ContextPicker({ studio, cloudAnswer = false }: { studio: Studio;
               />
               <span>
                 {item.title} <strong>当前使用 v{item.effectiveVersion}</strong>
+                {item.localOnly && " · 仅限本地"}
                 {item.latestVersion !== item.effectiveVersion && "，有新草稿"}
                 {selected &&
                   selected.version !== item.effectiveVersion &&
@@ -150,6 +149,7 @@ export function ContextPicker({ studio, cloudAnswer = false }: { studio: Studio;
             contextSelection: studio.knowledgeScope ? [] : studio.contextSelection,
             knowledgeScope: studio.knowledgeScope,
             useGraph: studio.useGraph,
+            generationTarget: generationTarget ?? undefined,
           })
             .then((value) => {
               if (generation === previewGeneration.current) setPreview(value);

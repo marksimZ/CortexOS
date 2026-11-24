@@ -42,15 +42,26 @@ pub(crate) fn check_text(text: &str) -> AppResult<()> {
     Ok(())
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct Rules {
-    block_email: bool,
-    block_phone: bool,
+    pub(crate) block_email: bool,
+    pub(crate) block_phone: bool,
+    pub(crate) sync_memory_and_history: bool,
+}
+
+impl Default for Rules {
+    fn default() -> Self {
+        Self {
+            block_email: false,
+            block_phone: false,
+            sync_memory_and_history: true,
+        }
+    }
 }
 
 impl Rules {
-    fn read(c: &Connection, workspace: &str) -> AppResult<Self> {
+    pub(crate) fn read(c: &Connection, workspace: &str) -> AppResult<Self> {
         let raw: Option<String> = c
             .query_row(
                 "SELECT config_json FROM model_cloud_privacy WHERE workspace_id=?1",
@@ -170,6 +181,7 @@ pub(crate) fn context_versions(manifest: &serde_json::Value) -> AppResult<Vec<Tr
         .as_array()
         .into_iter()
         .flatten()
+        .chain(manifest["inheritedKnowledgeRefs"].as_array().into_iter().flatten())
         .map(|reference| {
             Ok(TransferVersion {
                 node_id: reference["nodeId"]
@@ -183,14 +195,72 @@ pub(crate) fn context_versions(manifest: &serde_json::Value) -> AppResult<Vec<Tr
         .collect()
 }
 
+pub(crate) fn run_transfer_lineage(
+    c: &Connection,
+    workspace: &str,
+    run: Option<&str>,
+) -> AppResult<Option<std::collections::BTreeSet<(String, i64)>>> {
+    let Some(run) = run else { return Ok(None); };
+    let saved: Option<(String, bool)> = c.query_row(
+        "SELECT r.context_manifest_json, COALESCE(s.request_json NOT LIKE '%本工作区近期其他会话的情景摘要%',0)
+         FROM execution_runs r LEFT JOIN context_snapshots s ON s.run_id=r.id
+         WHERE r.workspace_id=?1 AND r.id=?2 AND r.status='completed'",
+        params![workspace, run],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    ).optional().map_err(error)?;
+    let Some((saved, no_legacy_episode)) = saved else { return Ok(None); };
+    let manifest: serde_json::Value = serde_json::from_str(&saved).map_err(json_error)?;
+    // Legacy snapshots only identify independent turns. Their descendants may already
+    // contain prior assistant text with no knowledge provenance.
+    let known_legacy_turn = manifest["transferLineageKnown"].is_null()
+        && no_legacy_episode
+        && manifest["messageRefs"].as_array().is_some_and(|refs| refs.len() == 1);
+    if manifest["transferLineageKnown"] != true && !known_legacy_turn {
+        return Ok(None);
+    }
+    Ok(Some(context_versions(&manifest)?.into_iter()
+        .map(|reference| (reference.node_id, reference.version))
+        .collect()))
+}
+
+pub(crate) fn lineage_is_shareable(
+    c: &Connection,
+    workspace: &str,
+    versions: Option<&std::collections::BTreeSet<(String, i64)>>,
+) -> AppResult<bool> {
+    let Some(versions) = versions else { return Ok(false); };
+    for (node, version) in versions {
+        if is_local_only(c, workspace, node)? || !is_current(c, workspace, node, *version)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 pub(crate) fn verify_transfer(
     c: &Connection,
     workspace: &str,
     connection: &str,
     versions: &[TransferVersion],
 ) -> AppResult<()> {
+    verify_chat_transfer(c, workspace, connection, versions, false)
+}
+
+pub(crate) fn verify_chat_transfer(
+    c: &Connection,
+    workspace: &str,
+    connection: &str,
+    versions: &[TransferVersion],
+    sync_context: bool,
+) -> AppResult<()> {
+    if sync_context && !Rules::read(c, workspace)?.sync_memory_and_history {
+        return Err("云端记忆与历史同步已关闭，请重新准备问题。".into());
+    }
     for version in versions {
-        let allowed = if version.requires_grant {
+        if is_local_only(c, workspace, &version.node_id)? {
+            return Err("部分知识已标记为“仅限本地”，无法发送到云端。".into());
+        }
+        let allowed = if version.requires_grant && !sync_context {
             permitted(c, workspace, connection, &version.node_id, version.version)?
         } else {
             is_current(c, workspace, &version.node_id, version.version)?
@@ -202,6 +272,17 @@ pub(crate) fn verify_transfer(
     Ok(())
 }
 
+pub(crate) fn is_local_only(c: &Connection, workspace: &str, node: &str) -> AppResult<bool> {
+    c.query_row(
+        "SELECT local_only FROM knowledge_local_only WHERE workspace_id=?1 AND node_id=?2",
+        params![workspace, node],
+        |r| r.get::<_, bool>(0),
+    )
+    .optional()
+    .map_err(error)
+    .map(Option::unwrap_or_default)
+}
+
 pub(crate) fn permitted(
     c: &Connection,
     workspace: &str,
@@ -209,11 +290,45 @@ pub(crate) fn permitted(
     node: &str,
     version: i64,
 ) -> AppResult<bool> {
+    if is_local_only(c, workspace, node)? {
+        return Ok(false);
+    }
     let granted = c.query_row(
         "SELECT EXISTS(SELECT 1 FROM model_cloud_knowledge WHERE workspace_id=?1 AND connection_id=?2 AND node_id=?3 AND version=?4)",
         params![workspace, connection, node, version], |r|r.get::<_,bool>(0),
     ).map_err(error)?;
     Ok(granted && is_current(c, workspace, node, version)?)
+}
+
+#[tauri::command]
+pub async fn set_knowledge_local_only(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    node_id: String,
+    local_only: bool,
+) -> AppResult<()> {
+    blocking(state.database.clone()?, move |db| {
+        let c = db.connection()?;
+        crate::benchmark::dataset::require_workspace(&c, &workspace_id)?;
+        let exists: bool = c
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM knowledge_nodes WHERE workspace_id=?1 AND id=?2)",
+                params![workspace_id, node_id],
+                |r| r.get(0),
+            )
+            .map_err(error)?;
+        if !exists {
+            return Err("知识不存在，或不属于当前工作区。".into());
+        }
+        c.execute(
+            "INSERT INTO knowledge_local_only(workspace_id,node_id,local_only,updated_at) VALUES(?1,?2,?3,?4)
+             ON CONFLICT(workspace_id,node_id) DO UPDATE SET local_only=excluded.local_only,updated_at=excluded.updated_at",
+            params![workspace_id, node_id, local_only, now()],
+        )
+        .map_err(error)?;
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -235,7 +350,8 @@ pub async fn list_model_cloud_knowledge(
         )).map_err(error)?;
         let grants = rows.map(|row| {
             let (node_id, version, title, granted_at) = row.map_err(error)?;
-            let available = is_current(&c, &workspace_id, &node_id, version)?;
+            let available = !is_local_only(&c, &workspace_id, &node_id)?
+                && is_current(&c, &workspace_id, &node_id, version)?;
             Ok(Grant { node_id, version, title, granted_at, available })
         }).collect::<AppResult<Vec<_>>>()?;
         let mut candidates = Vec::new();
@@ -247,6 +363,8 @@ pub async fn list_model_cloud_knowledge(
                     AND g.connection_id=?2 AND g.node_id=n.node_id AND g.version=n.version)
                 AND NOT EXISTS(SELECT 1 FROM knowledge_source_links l JOIN source_documents s ON s.id=l.source_id
                     WHERE l.node_id=n.node_id AND l.knowledge_version=n.version AND s.enabled=0)
+                AND NOT EXISTS(SELECT 1 FROM knowledge_local_only p
+                    WHERE p.workspace_id=n.workspace_id AND p.node_id=n.node_id AND p.local_only=1)
                 ORDER BY v.title,n.node_id LIMIT 2000"
             ).map_err(error)?;
             let rows = stmt.query_map(params![workspace_id,connection_id], |row| Ok(Candidate {
@@ -274,6 +392,9 @@ pub async fn set_model_cloud_knowledge(
         let c = db.connection()?;
         runtime_connections::get(&c, &workspace_id, &connection_id)?;
         if allowed {
+            if is_local_only(&c, &workspace_id, &selection.node_id)? {
+                return Err("仅限本地的知识无法授权发送到云端。".into());
+            }
             if !is_current(&c, &workspace_id, &selection.node_id, selection.version)? {
                 return Err("请选择当前工作区已经生效的知识版本。".into());
             }

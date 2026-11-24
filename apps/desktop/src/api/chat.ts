@@ -4,6 +4,7 @@ import type {
   ChatRuntimeRoute,
   CloudConsent,
   CloudKnowledgeGrant,
+  GenerationTarget,
   RuntimeConnection,
 } from "../runtime-profiles";
 import type {
@@ -31,6 +32,7 @@ type ContextArgs = WorkspaceArgs & {
 };
 export type ContextCursor = { id: string; updatedAt: string };
 export type ContextOption = ContextCursor & {
+  localOnly?: boolean;
   title: string;
   latestVersion: number;
   effectiveVersion: number;
@@ -59,6 +61,7 @@ export const chat = createClient<{
       ConversationArgs & {
         cloudConsent?: CloudConsent;
         useKnowledgeRoute?: boolean;
+        generationTarget?: GenerationTarget;
         onPreparing: Channel<RunPreparing>;
         onUpdate: Channel<StreamUpdate>;
       },
@@ -69,11 +72,11 @@ export const chat = createClient<{
     ContextOptionsPage
   >;
   preview_context: Command<
-    ContextArgs & { conversationId: string | null },
+    ContextArgs & { conversationId: string | null; generationTarget?: GenerationTarget },
     ContextManifest
   >;
   chat_runtime_route: Command<
-    WorkspaceArgs & { knowledge: boolean },
+    WorkspaceArgs & { knowledge: boolean; generationTarget?: GenerationTarget },
     ChatRuntimeRoute
   >;
   list_runtime_cloud_connections: Command<WorkspaceArgs, RuntimeConnection[]>;

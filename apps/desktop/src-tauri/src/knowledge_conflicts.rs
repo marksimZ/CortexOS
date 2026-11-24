@@ -14,6 +14,7 @@ pub(crate) fn find(
     workspace: &str,
     scope: Option<&Resolved>,
     seeds: &BTreeSet<String>,
+    exclude_local_only: bool,
 ) -> AppResult<(Vec<Conflict>, bool)> {
     let seeds: Vec<_> = seeds.iter().cloned().collect();
     graph::relations(
@@ -23,6 +24,7 @@ pub(crate) fn find(
         Some(&seeds),
         Some("contradicts"),
         MAX_CONFLICTS,
+        exclude_local_only,
     )
 }
 

@@ -11,9 +11,7 @@ import {
   useState,
 } from "react";
 import {
-  BookOpen,
   Focus,
-  GitBranch,
   List,
   Network,
   RotateCcw,
@@ -24,12 +22,9 @@ import { KnowledgeInspector } from "./Knowledge";
 import { kinds, type EditKnowledge } from "./knowledge-types";
 import type { EditEdge } from "./RelationshipEditor";
 import { navigate, useNavigation } from "./navigation";
-import { ExecutionTrace } from "./ExecutionTrace";
 import { errorText, type GraphStudio } from "./studio";
 import {
   defaultPositions,
-  demoContents,
-  demoGraph,
   shapes,
   type GraphData,
   type Point,
@@ -70,99 +65,47 @@ export const GraphPage = memo(function GraphPage({
   onEdit: (request: EditKnowledge) => void;
   onEditEdge: (request: EditEdge) => void;
 }) {
-  const route = useNavigation();
-  const kind = route.mode;
-  const setKind = (mode: string) =>
-    navigate("graph", { workspace: studio.workspaceId, mode });
-  const [demo, setDemo] = useState(!studio.desktop);
   return (
     <section className="standard-page graph-page" aria-labelledby="page-title">
       <header className="page-heading">
         <h1 id="page-title" className="sr-only">图谱</h1>
-        <fieldset className="segmented-control">
-          <legend className="sr-only">图谱类型</legend>
-          <label>
-            <input
-              type="radio"
-              name="graph"
-              checked={kind === "knowledge"}
-              onChange={() => setKind("knowledge")}
-            />
-            <BookOpen size={15} />
-            知识关系
-          </label>
-          <label>
-            <input
-              type="radio"
-              name="graph"
-              checked={kind === "execution"}
-              onChange={() => setKind("execution")}
-            />
-            <GitBranch size={15} />
-            执行过程
-          </label>
-        </fieldset>
-
       </header>
-      {kind === "knowledge" ? (
-          <KnowledgeGraph
-            key={`${studio.workspaceId}:${demo}`}
-            studio={studio}
-            revision={revision}
-            demo={demo}
-            sourceControl={<div className="graph-source">
-            <label htmlFor="graph-source">数据</label>
-            <SelectMenu
-              id="graph-source"
-              value={demo ? "demo" : "workspace"}
-              onChange={(event) => setDemo(event.target.value === "demo")}
-            >
-              <option value="workspace">当前工作区</option>
-              <option value="demo">7 节点演示</option>
-            </SelectMenu>
-            {demo && <strong>演示数据，不写入工作区</strong>}
-          </div>}
-            onEdit={onEdit}
-            onEditEdge={onEditEdge}
-          />
-      ) : (
-        <ExecutionTrace key={studio.workspaceId ?? "preview"} studio={studio} />
-      )}
+      <KnowledgeGraph
+        key={studio.workspaceId ?? "preview"}
+        studio={studio}
+        revision={revision}
+        onEdit={onEdit}
+        onEditEdge={onEditEdge}
+      />
     </section>
   );
 });
 function KnowledgeGraph({
-  sourceControl,
   studio,
   revision,
-  demo,
   onEdit,
   onEditEdge,
 }: {
   studio: GraphStudio;
   revision: number;
-  demo: boolean;
-  sourceControl: React.ReactNode;
   onEdit: (request: EditKnowledge) => void;
   onEditEdge: (request: EditEdge) => void;
 }) {
+  const demo = false;
+  const sourceControl = null;
   const route = useNavigation();
   const workspace = studio.workspaceId;
-  const browseKey = `${demo ? "demo" : "workspace"}:${workspace ?? "preview"}`;
+  const browseKey = `workspace:${workspace ?? "preview"}`;
   const previousBrowse = sessionBrowse.get(browseKey);
-  const [graph, setGraph] = useState<GraphData | null>(demo ? demoGraph : null);
-  const [positions, setPositions] = useState<Record<string, Point>>(
-    demo ? defaultPositions(demoGraph.nodes) : {},
-  );
+  const [graph, setGraph] = useState<GraphData | null>(null);
+  const [positions, setPositions] = useState<Record<string, Point>>({});
   const [selected, setSelected] = useState<string | null>(route.node);
-  const [catalog, setCatalog] = useState<Record<string, GraphNode>>(
-    demo ? Object.fromEntries(demoGraph.nodes.map((n) => [n.id, n])) : {},
-  );
+  const [catalog, setCatalog] = useState<Record<string, GraphNode>>({});
   const [nodeLimit, setNodeLimit] = useState(200);
   const [counts, setCounts] = useState({
-    totalNodes: demo ? demoGraph.nodes.length : 0,
-    matchingNodes: demo ? demoGraph.nodes.length : 0,
-    rangeNodes: demo ? demoGraph.nodes.length : 0,
+    totalNodes: 0,
+    matchingNodes: 0,
+    rangeNodes: 0,
     centers: [] as GraphCenter[],
     origins: {} as Record<string, string[]>,
   });
@@ -258,9 +201,7 @@ function KnowledgeGraph({
   const [saving, setSaving] = useState(false);
   const [unsaved, setUnsaved] = useState(false);
   const [saved, setSaved] = useState(false);
-  const initialView = useRef<GraphData["view"] | null>(
-    demo ? demoGraph.view : null,
-  );
+  const initialView = useRef<GraphData["view"] | null>(null);
   const viewVersion = useRef(0);
   const api = useRef<ViewportApi>(null);
   const onFailure = useCallback(() => setFailed(true), []);
@@ -498,7 +439,7 @@ function KnowledgeGraph({
         <h2>
           {studio.desktop ? "先选择一个工作区" : "在桌面程序中查看项目图谱"}
         </h2>
-        <p>可切换到 7 节点演示体验操作。</p>
+        <p>在对话或知识页沉淀记忆后，这里会展示你的知识关系网络。</p>
       </div>
     );
   return (
@@ -994,30 +935,19 @@ function KnowledgeGraph({
                 </button>
               )}
             </div>
-            {demo ? (
-              <div className="demo-inspector">
-                <span className="knowledge-kind">
-                  {kinds[selectedNode.kind]} / 演示节点
-                </span>
-                <h2>{selectedNode.title}</h2>
-                <p>{demoContents[selectedNode.id]}</p>
-                <p className="small-note">演示内容不可编辑，不写入工作区。</p>
-              </div>
-            ) : (
-              <KnowledgeInspector
-                studio={studio}
-                workspace={workspace}
-                selected={selected}
-                requestedVersion={route.version}
-                revision={revision + refresh}
-                onBack={() => {
-                  api.current?.exitFocus();
-                  closeInspector();
-                }}
-                onEdit={(request) => onEdit({ ...request, returnTo: "graph" })}
-                onChanged={() => setRefresh((n) => n + 1)}
-              />
-            )}
+            <KnowledgeInspector
+              studio={studio}
+              workspace={workspace}
+              selected={selected}
+              requestedVersion={route.version}
+              revision={revision + refresh}
+              onBack={() => {
+                api.current?.exitFocus();
+                closeInspector();
+              }}
+              onEdit={(request) => onEdit({ ...request, returnTo: "graph" })}
+              onChanged={() => setRefresh((n) => n + 1)}
+            />
             {expansions !== null && visibleIds.has(selectedNode.id) && (
               <details className="node-display-sources">
                 <summary>显示范围</summary>

@@ -18,6 +18,7 @@ pub struct KnowledgeNode {
     pub revision: i64,
     pub updated_at: String,
     pub source_message_id: Option<String>,
+    pub local_only: bool,
 }
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,6 +59,7 @@ pub struct KnowledgeDetail {
 #[serde(rename_all = "camelCase")]
 pub struct ContextOption {
     id: String,
+    local_only: bool,
     title: String,
     latest_version: i64,
     effective_version: i64,
@@ -96,7 +98,7 @@ fn error(_: rusqlite::Error) -> String {
 fn missing() -> String {
     "知识不存在，或不属于当前工作区。".into()
 }
-pub(crate) const COLUMNS: &str = "n.id,n.workspace_id,v.title,v.kind,n.latest_version,n.effective_version,n.revision,n.updated_at,n.source_message_id";
+pub(crate) const COLUMNS: &str = "n.id,n.workspace_id,v.title,v.kind,n.latest_version,n.effective_version,n.revision,n.updated_at,n.source_message_id,COALESCE((SELECT p.local_only FROM knowledge_local_only p WHERE p.workspace_id=n.workspace_id AND p.node_id=n.id),0)";
 pub(crate) fn node(row: &rusqlite::Row<'_>) -> rusqlite::Result<KnowledgeNode> {
     Ok(KnowledgeNode {
         id: row.get(0)?,
@@ -108,6 +110,7 @@ pub(crate) fn node(row: &rusqlite::Row<'_>) -> rusqlite::Result<KnowledgeNode> {
         revision: row.get(6)?,
         updated_at: row.get(7)?,
         source_message_id: row.get(8)?,
+        local_only: row.get(9)?,
     })
 }
 fn read_node(connection: &Connection, workspace: &str, id: &str) -> AppResult<KnowledgeNode> {
@@ -131,9 +134,10 @@ impl Database {
         check_date(day)?;
         let connection = self.connection()?;
         let mut statement = connection.prepare(&format!(
-            "SELECT n.id,v.title,n.latest_version,v.version,n.updated_at
+            "SELECT n.id,v.title,n.latest_version,v.version,n.updated_at,COALESCE(p.local_only,0)
              FROM knowledge_nodes n
              JOIN knowledge_versions v ON v.node_id=n.id AND v.version=n.effective_version
+             LEFT JOIN knowledge_local_only p ON p.workspace_id=n.workspace_id AND p.node_id=n.id
              LEFT JOIN knowledge_validity d ON d.node_id=v.node_id AND d.version=v.version
              WHERE n.workspace_id=?1 AND {SUPPORTED} AND {SOURCE_AVAILABLE}
                AND (d.valid_from IS NULL OR d.valid_from<=?2)
@@ -149,6 +153,7 @@ impl Database {
                 latest_version: row.get(2)?,
                 effective_version: row.get(3)?,
                 updated_at: row.get(4)?,
+                local_only: row.get(5)?,
             }),
         ).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
         let has_more = items.len() > PAGE_SIZE;
@@ -371,6 +376,12 @@ impl Database {
             .map_err(error)?;
         } else if version > 1 {
             tx.execute("INSERT INTO knowledge_source_links SELECT node_id,?2,source_id,source_version,start_line,end_line,excerpt FROM knowledge_source_links WHERE node_id=?1 AND knowledge_version=?2-1",params![id,version]).map_err(error)?;
+        }
+        // User-authored and imported knowledge becomes effective immediately and enters retrieval.
+        if crate::sources::available(&tx, &id, version)? {
+            tx.execute("INSERT INTO knowledge_approval_events(id,node_id,version,actor,created_at) VALUES(?1,?2,?3,'user',?4)",params![new_id(),id,version,timestamp]).map_err(error)?;
+            tx.execute("UPDATE knowledge_nodes SET effective_version=?2,revision=revision+1,updated_at=?3 WHERE id=?1",params![id,version,timestamp]).map_err(error)?;
+            crate::retrieval::index_node(&tx, &id)?;
         }
         tx.commit().map_err(error)?;
         Ok(id)

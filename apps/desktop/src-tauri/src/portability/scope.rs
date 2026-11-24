@@ -18,7 +18,7 @@ fn predicate(table: &str, direct: bool, schema: &str) -> AppResult<String> {
     } else {
         match table {
             "schema_migrations" => "?1 IS ?1",
-            "app_settings" => "?1 IS NOT ?1",
+            "app_settings" | "global_persona" => "?1 IS NOT ?1",
             "workspaces" => "id IS ?1",
             "benchmark_datasets" => DATASETS,
             "benchmark_cases" => {
@@ -137,7 +137,7 @@ pub(super) fn copy_workspace(
     for (table, direct) in tables {
         let rule = predicate(&table, direct, "incoming")?;
         let additional = match table.as_str() {
-            "app_settings" => continue,
+            "app_settings" | "global_persona" => continue,
             "schema_migrations" if !fresh => continue,
             "schema_migrations" => {
                 tx.execute("DELETE FROM main.schema_migrations", [])

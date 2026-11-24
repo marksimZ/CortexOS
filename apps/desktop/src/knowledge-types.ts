@@ -19,6 +19,7 @@ export interface KnowledgeNode {
   revision: number;
   updatedAt: string;
   sourceMessageId: string | null;
+  localOnly?: boolean;
 }
 interface Version {
   version: number;

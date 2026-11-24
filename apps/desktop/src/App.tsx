@@ -1,6 +1,5 @@
 import { closeDraftWindow, useDraftWindow } from "./draft-store";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { benchmarkReturn } from "./benchmark/reportNavigation";
 import { AppDialog, openDialog } from "./components/AppDialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
@@ -24,7 +23,6 @@ const KnowledgeEditor = lazyView(() => import("./KnowledgeEditor"), (module) => 
 const GraphPage = lazyView(() => import("./Graph"), (module) => module.GraphPage);
 const RelationshipEditor = lazyView(() => import("./RelationshipEditor"), (module) => module.RelationshipEditor);
 const SettingsPage = lazyView(() => import("./Settings"), (module) => module.SettingsPage);
-const BenchmarkPage = lazyView(() => import("./benchmark/BenchmarkPage"), (module) => module.BenchmarkPage);
 
 export default function App() {
   const studio = useStudio();
@@ -47,7 +45,7 @@ export default function App() {
   const [knowledgeRevision, setKnowledgeRevision] = useState(0);
   const route = useNavigation();
   const page = route.page;
-  const returnTarget=route.back?.startsWith("#/benchmark?")?benchmarkReturn(route.back,route.workspace,route.run):route.back;
+  const returnTarget = route.back;
   const { conversation: routeConversation, workspace: routeWorkspace } = route;
   const knownWorkspace = studio.data?.workspaces.some(item => item.id === routeWorkspace);
   useEffect(() => {
@@ -132,7 +130,7 @@ export default function App() {
         )}
         {returnTarget && (
           <a className="button text-button return-to-trace" href={returnTarget}>
-            {returnTarget.startsWith("#/benchmark?")?"返回评测结果":returnTarget.startsWith("#/chat?") ? "返回回答" : "返回执行轨迹"}
+            {returnTarget.startsWith("#/chat?") ? "返回回答" : "返回知识图谱"}
           </a>
         )}
         <ErrorBoundary key={page} scope="page">
@@ -178,7 +176,6 @@ export default function App() {
           />
         )}
         {page === "settings" && <SettingsPage studio={studio} />}
-        {page === "benchmark" && <BenchmarkPage studio={studio} />}
         </ErrorBoundary>
       </main>
       {edgeEdit && (

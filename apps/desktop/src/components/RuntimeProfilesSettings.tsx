@@ -179,7 +179,8 @@ function toInput(profile: Profile): ProfileInput {
 }
 
 function cloudOptions(role: RuntimeRole, connections: RuntimeConnection[]): [string, Target][] {
-  return connections.flatMap(connection => connection.probes
+  return connections.filter(connection => connection.credentialAvailable !== false && connection.catalogState !== "invalid_credential")
+    .flatMap(connection => connection.probes
     .filter(probe => probe.capability === role && probe.state === "verified")
     .map(probe => [cloudConnectionLabel(connection) + " / " + probe.model,
       { kind: "cloud", connectionId: connection.id, model: probe.model }]));

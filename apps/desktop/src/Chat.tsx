@@ -3,11 +3,12 @@ import { saveReminder, type ReminderInput } from "./api/reminders";
 import { webSearch, type WebSearchProvider } from "./api/web-search";
 import { parseReminder, reminderOccurrences } from "./reminder-draft";
 import { AppDialog, openDialog } from "./components/AppDialog";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ChevronUp, PanelRight, Pencil } from "lucide-react";
 import { navigate, useNavigation } from "./navigation";
 import { ChatMessage } from "./components/ChatMessage";
 import { ChatComposer } from "./components/ChatComposer";
+import { MemoryCandidatesBar } from "./components/MemoryCandidatesBar";
 import { ChatWebSources, questionWithSources, safeSourceUrl, type SearchState } from "./components/ChatWebSources";
 import { ReminderFields } from "./components/ReminderFields";
 import { EmptyState } from "./components/EmptyState";
@@ -18,13 +19,27 @@ import { PaneDivider, splitStyle } from "./components/PaneDivider";
 import { notify } from "./components/Toast";
 import { errorText, preference, remember, type Message, type Studio } from "./studio";
 import { cloudConnectionLabel, runtimeRoles, type CloudDisclosure, type CloudDraft, type CloudKnowledgeGrant, type Profile,
-  type RuntimeRole } from "./runtime-profiles";
+  type GenerationTarget, type RuntimeConnection, type RuntimeRole } from "./runtime-profiles";
 
 const historyPageSize = 60;
 
 const cloudNames: Record<string, string> = {
   openai: "OpenAI", anthropic: "Anthropic", gemini: "Google Gemini", compatible: "OpenAI 兼容服务",
 };
+
+function savedGeneration(workspace: string | null): GenerationTarget | undefined {
+  if (!workspace) return;
+  try {
+    const choice: Partial<GenerationTarget> | null = JSON.parse(preference(`workspace:${workspace}:generation-model`) ?? "null");
+    if (!choice || typeof choice.model !== "string" || !choice.model) return;
+    if (choice.kind === "local") return { kind: "local", model: choice.model };
+    if (choice.kind === "cloud" && typeof choice.connectionId === "string" && choice.connectionId) {
+      return { kind: "cloud", connectionId: choice.connectionId, model: choice.model };
+    }
+  } catch {
+    return undefined;
+  }
+}
 
 export function ChatPage({
   studio,
@@ -42,33 +57,72 @@ export function ChatPage({
   const preparing = studio.preparingRun?.conversationId === studio.conversationId && !studio.activeRun;
   const currentRunning = preparing || studio.activeRun?.conversationId === studio.conversationId;
   const knowledgeRoute = studio.autoRetrieval || !!studio.knowledgeScope || !!studio.contextSelection.length || studio.useGraph;
-  const [runtime, setRuntime] = useState<{ workspace: string; knowledgeRoute: boolean; profile?: Profile; localBackup: string | null; disclosure: CloudDisclosure }>();
-  const currentRuntime = runtime?.workspace === studio.workspaceId && runtime.knowledgeRoute === knowledgeRoute ? runtime : undefined;
+  const [modelChoice, setModelChoice] = useState<{ workspace: string; target?: GenerationTarget }>();
+  const savedTarget = useMemo(() => savedGeneration(studio.workspaceId), [studio.workspaceId]);
+  const generationTarget = modelChoice?.workspace === studio.workspaceId ? modelChoice?.target : savedTarget;
+  const chooseGeneration = (target?: GenerationTarget) => {
+    const workspace = studio.workspaceId;
+    if (!workspace) return;
+    setModelChoice({ workspace, target });
+    remember(`workspace:${workspace}:generation-model`, target ? JSON.stringify(target) : "");
+  };
+  const [runtimeAttempt, setRuntimeAttempt] = useState(0);
+  const [runtime, setRuntime] = useState<{
+    workspace: string; knowledgeRoute: boolean; generationTarget?: GenerationTarget; attempt: number;
+    profile?: Profile; localBackup?: string | null; disclosure: CloudDisclosure; syncMemory: boolean; error?: string;
+  }>();
+  const currentRuntime = runtime?.workspace === studio.workspaceId && runtime.knowledgeRoute === knowledgeRoute
+    && runtime.generationTarget === generationTarget && runtime.attempt === runtimeAttempt ? runtime : undefined;
+  const [connections, setConnections] = useState<{ workspace: string; rows?: RuntimeConnection[]; error?: string }>();
+  const cloudConnections = connections?.workspace === studio.workspaceId ? connections : undefined;
   const target = currentRuntime?.profile?.generation;
-  const cloudAnswer = target?.kind === "cloud";
+  const cloudAnswer = (target ?? generationTarget)?.kind === "cloud";
   const cloudLookup = currentRuntime?.profile?.embedding.kind === "cloud" || currentRuntime?.profile?.reranking.kind === "cloud";
   const cloudTurn = cloudAnswer || cloudLookup;
-  const modelName = (target?.kind !== "off" ? target?.model : null) ?? studio.settings.model;
+  const modelName = (target?.kind !== "off" ? target?.model : null) ?? generationTarget?.model ?? studio.settings.model;
   const answerConnection = currentRuntime?.disclosure.generation?.connection;
-  const modelReady = cloudAnswer
-    ? currentRuntime?.disclosure.generation?.connection.probes.some(item => item.model === modelName && item.capability === "generation" && item.state === "verified")
-    : studio.health?.models.some(model => model.name === modelName || model.name === currentRuntime?.localBackup);
+  const modelReady = currentRuntime && !currentRuntime.error && (cloudAnswer
+    ? answerConnection?.credentialAvailable !== false && answerConnection?.catalogState !== "invalid_credential" && !!answerConnection
+    : studio.health?.models.some(model => model.name === modelName || model.name === currentRuntime?.localBackup));
+  const modelUnavailable = currentRuntime && !modelReady && (cloudAnswer || !!generationTarget)
+    ? `所选${cloudAnswer ? "云端" : "本机"}模型当前不可用，请检查连接或重新选择。`
+    : undefined;
   const cloudDialog = useRef<HTMLDialogElement>(null);
   const [cloudDraft, setCloudDraft] = useState<CloudDraft>();
   const [shareSelection, setShareSelection] = useState(false);
   const [shareGranted, setShareGranted] = useState(false);
   const [allowRanking, setAllowRanking] = useState(false);
+  const cloudSyncDefault = currentRuntime?.syncMemory === true;
   useEffect(() => {
     const workspace = studio.workspaceId;
     if (!studio.desktop || !workspace) return;
     let current = true;
-    void chat("chat_runtime_route", { workspaceId: workspace, knowledge: knowledgeRoute }).then(async selected => {
+    void chat("list_runtime_cloud_connections", { workspaceId: workspace }).then(
+      rows => { if (current) setConnections({ workspace, rows }); },
+      error => { if (current) setConnections({ workspace, error: errorText(error) }); },
+    );
+    return () => { current = false; };
+  }, [studio.desktop, studio.workspaceId, runtimeAttempt]);
+  useEffect(() => {
+    const workspace = studio.workspaceId;
+    if (!studio.desktop || !workspace) return;
+    let current = true;
+    const scope = { workspace, knowledgeRoute, generationTarget, attempt: runtimeAttempt };
+    void chat("chat_runtime_route", { workspaceId: workspace, knowledge: knowledgeRoute,
+      ...(generationTarget ? { generationTarget } : {}),
+    }).then(async selected => {
       if (!current) return;
       const profile = selected.profile ?? undefined;
       const disclosure: CloudDisclosure = {};
       const roles = Object.keys(runtimeRoles) as RuntimeRole[];
+      let syncMemory = false;
       if (profile && roles.some(role => profile[role].kind === "cloud")) {
-        const rows = await chat("list_runtime_cloud_connections", { workspaceId: workspace });
+        const { invoke } = await import("@tauri-apps/api/core");
+        const [rows, rules] = await Promise.all([
+          chat("list_runtime_cloud_connections", { workspaceId: workspace }),
+          invoke<{ syncMemoryAndHistory?: boolean }>("model_cloud_privacy_rules", { workspaceId: workspace, input: null }),
+        ]);
+        syncMemory = rules.syncMemoryAndHistory === true;
         const grants = new Map<string, Promise<CloudKnowledgeGrant[]>>();
         await Promise.all(roles.map(async role => {
           const target = profile[role];
@@ -87,10 +141,12 @@ export function ChatPage({
           disclosure[role] = { connection, grants: allowed };
         }));
       }
-      if (current) setRuntime({ workspace, knowledgeRoute, profile, localBackup: selected.localBackup, disclosure });
-    }).catch(() => {});
+      if (current) setRuntime({ ...scope, profile, localBackup: selected.localBackup, disclosure, syncMemory });
+    }).catch(error => {
+      if (current) setRuntime({ ...scope, disclosure: {}, syncMemory: false, error: errorText(error) });
+    });
     return () => { current = false; };
-  }, [studio.desktop, studio.workspaceId, knowledgeRoute, studio.settings]);
+  }, [studio.desktop, studio.workspaceId, knowledgeRoute, studio.settings, generationTarget, runtimeAttempt]);
   useEffect(() => {
     if (cloudDraft) openDialog(cloudDialog.current);
   }, [cloudDraft]);
@@ -284,9 +340,27 @@ export function ChatPage({
         return;
       }
     }
+    if (!modelReady || currentRunning) return;
     if (cloudTurn && currentRuntime?.profile && studio.workspaceId) {
       const question = (content ?? studio.draft).trim();
       if (question) {
+        if (cloudSyncDefault) {
+          navigate("chat", { workspace: studio.workspaceId, conversation: studio.conversationId });
+          return studio.send(content !== undefined && !withWebSources ? question : undefined, {
+            question,
+            knowledgeRoute,
+            selection: studio.contextSelection,
+            consent: {
+              profileId: currentRuntime.profile.id,
+              updatedAt: currentRuntime.profile.updatedAt,
+              shareSelection: true,
+              grantedVersions: currentRuntime.disclosure.generation?.grants.map(({ nodeId, version }) => ({ nodeId, version })) ?? [],
+              rankingVersions: currentRuntime.disclosure.reranking?.grants.map(({ nodeId, version }) => ({ nodeId, version })) ?? [],
+            },
+          }, withWebSources ? {
+            question, workspaceId: studio.workspaceId, conversationId: studio.conversationId,
+          } : undefined, generationTarget);
+        }
         setShareSelection(false);
         setShareGranted(false);
         setAllowRanking(false);
@@ -295,7 +369,7 @@ export function ChatPage({
           workspace: studio.workspaceId, conversation: studio.conversationId,
           selection: studio.knowledgeScope ? [] : studio.contextSelection,
           profile: currentRuntime.profile, disclosure: currentRuntime.disclosure,
-          knowledgeRoute,
+          knowledgeRoute, generationTarget,
         });
       }
       return;
@@ -305,9 +379,9 @@ export function ChatPage({
       conversation: studio.conversationId,
     });
     if (withWebSources && content && studio.workspaceId) {
-      return studio.send(undefined, undefined, { question: content, workspaceId: studio.workspaceId, conversationId: studio.conversationId });
+      return studio.send(undefined, undefined, { question: content, workspaceId: studio.workspaceId, conversationId: studio.conversationId }, generationTarget);
     }
-    return studio.send(content);
+    return studio.send(content, undefined, undefined, generationTarget);
   };
   const copy = useCallback(async (id: string, text: string) => {
     try {
@@ -406,21 +480,53 @@ export function ChatPage({
                 <ChevronUp size={16} aria-hidden="true" />
                 加载更早的消息（还有 {start} 条）
               </button>}
-              {messages.slice(start, end).map((message) => (
-                <ChatMessage
-                  key={message.id}
-                  message={message}
-                  stream={studio.chatStream}
-                  located={route.message === message.id}
-                  copied={copied === message.id}
-                  copy={copy}
-                  onSaveKnowledge={onSaveKnowledge}
-                  setSelectedRun={setSelectedRun}
-                  canRetry={canRetry}
-                  reportError={studio.reportError}
-                  retry={retry}
-                />
-              ))}
+              {messages.slice(start, end).map((message, offset) => {
+                const index = start + offset;
+                let switchedFrom: string | null = null;
+                if (message.role === "user" && message.modelId) {
+                  for (let prev = index - 1; prev >= 0; prev--) {
+                    const prevModel = messages[prev].modelId;
+                    if (prevModel) {
+                      if (prevModel !== message.modelId) switchedFrom = prevModel;
+                      break;
+                    }
+                  }
+                }
+                return (
+                  <Fragment key={message.id}>
+                    {switchedFrom && (
+                      <div
+                        className="model-switch-notice"
+                        role="status"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          margin: "12px 0 4px",
+                          color: "var(--text-muted, var(--muted))",
+                          fontSize: "0.8rem",
+                        }}
+                      >
+                        <span style={{ flex: 1, height: "1px", background: "var(--border-subtle, var(--border))" }} />
+                        <span>模型已从【{switchedFrom}】切换至【{message.modelId}】</span>
+                        <span style={{ flex: 1, height: "1px", background: "var(--border-subtle, var(--border))" }} />
+                      </div>
+                    )}
+                    <ChatMessage
+                      message={message}
+                      stream={studio.chatStream}
+                      located={route.message === message.id}
+                      copied={copied === message.id}
+                      copy={copy}
+                      onSaveKnowledge={onSaveKnowledge}
+                      setSelectedRun={setSelectedRun}
+                      canRetry={canRetry}
+                      reportError={studio.reportError}
+                      retry={retry}
+                    />
+                  </Fragment>
+                );
+              })}
 
             </div>
           ) : !currentReminder && !showWebResults ? (
@@ -503,12 +609,27 @@ export function ChatPage({
             </button>
           </div>
         )}
+        {!currentReminder && studio.desktop && (
+          <MemoryCandidatesBar
+            workspaceId={studio.workspaceId}
+            conversationId={studio.conversationId}
+            refreshKey={messages.filter(m => m.role === "assistant" && m.status === "completed").length}
+          />
+        )}
         {!currentReminder && <ChatComposer
           studio={studio}
-          modelReady={modelReady}
           modelName={cloudAnswer && answerConnection ? modelName + " · " + cloudConnectionLabel(answerConnection) : modelName}
+          generationTarget={generationTarget}
+          chooseGeneration={chooseGeneration}
+          connections={cloudConnections?.rows ?? []}
+          modelError={currentRuntime?.error ?? modelUnavailable ?? cloudConnections?.error}
+          retryModels={() => {
+            setRuntimeAttempt(attempt => attempt + 1);
+            void studio.checkConnection();
+          }}
           cloudAnswer={cloudAnswer}
           cloudLookup={cloudLookup}
+          cloudSyncDefault={cloudSyncDefault}
           currentRunning={currentRunning}
           preparing={preparing}
           cancelling={cancelling}
@@ -556,7 +677,7 @@ export function ChatPage({
             },
           }, cloudDraft.webSources ? {
             question: cloudDraft.question, workspaceId: cloudDraft.workspace, conversationId: cloudDraft.conversation,
-          } : undefined);
+          } : undefined, cloudDraft.generationTarget);
         }}>
           <h2 id="cloud-send-title">确认发送到云端</h2>
           <ul className="cloud-runtime-capabilities">{(Object.keys(runtimeRoles) as RuntimeRole[]).map(role => {

@@ -347,6 +347,7 @@ pub async fn start_chat(
     use_graph: Option<bool>,
     cloud_consent: Option<crate::runtime_profiles::CloudConsent>,
     use_knowledge_route: Option<bool>,
+    generation_target: Option<crate::runtime_profiles::Target>,
     on_preparing: Channel<RunPreparing>,
     on_update: Channel<StreamUpdate>,
 ) -> AppResult<RunSummary> {
@@ -356,6 +357,12 @@ pub async fn start_chat(
     let lease = state.claim_task(&id, &workspace_id, crate::tasks::TaskKind::Chat)?;
     let _ = on_preparing.send(RunPreparing { id:id.clone(), workspace_id:workspace_id.clone(), conversation_id:conversation_id.clone() });
     let (ws, chat) = (workspace_id.clone(),conversation_id.clone());
+    let manual_selection = generation_target.is_some();
+    let manual_cloud_guard = if manual_selection {
+        Some(state.runtime_cloud.clone().try_lock_owned().map_err(|_| "正在处理另一项云端设置。")?)
+    } else {
+        None
+    };
     let explicit_context = knowledge_scope.is_some() || use_graph==Some(true)
         || context_selection.as_ref().is_some_and(|items|!items.is_empty());
     let (mut settings, decision) = blocking(database.clone(), move |db| {
@@ -363,15 +370,29 @@ pub async fn start_chat(
         let c = db.connection()?;
         let knowledge = crate::retrieval::enabled(&c,&ws,&chat)? || explicit_context
             || use_knowledge_route == Some(true);
-        let decision = crate::runtime_profiles::routing::select(&c,&ws,knowledge,&settings)?;
+        let decision = crate::runtime_profiles::routing::select_generation(&c,&ws,knowledge,&settings,generation_target)?;
         Ok((settings,decision))
     }).await?;
     let crate::runtime_profiles::routing::Selection { profile:runtime, decision:model_route, local_backup } = decision;
     let (consent, cloud_guard) = if let Some(profile) = runtime.as_ref().filter(|profile| profile.has_cloud_target()) {
-        let consent = profile.cloud_consent(cloud_consent)?;
-        let guard = state.runtime_cloud.clone().try_lock_owned().map_err(|_| "正在处理另一项云端设置。")?;
+        let sync_default = blocking(database.clone(), {
+            let ws = workspace_id.clone();
+            move |db| Ok(crate::cloud::privacy::Rules::read(&*db.connection()?, &ws)?.sync_memory_and_history)
+        }).await?;
+        let consent = if manual_selection || cloud_consent.is_some() {
+            profile.cloud_consent(cloud_consent)?
+        } else if sync_default {
+            crate::runtime_profiles::CloudConsent::implicit(profile)
+        } else {
+            profile.cloud_consent(None)?
+        };
+        let guard = match manual_cloud_guard {
+            Some(guard) => guard,
+            None => state.runtime_cloud.clone().try_lock_owned().map_err(|_| "正在处理另一项云端设置。")?,
+        };
         (Some(consent),Some(guard))
     } else {
+        drop(manual_cloud_guard);
         if cloud_consent.is_some() { return Err("运行方案已变化，请重新确认发送。".into()); }
         (None,None)
     };
@@ -398,11 +419,19 @@ pub async fn start_chat(
     let force_graph = use_graph.unwrap_or_default();
     let selection = context_selection.unwrap_or_default();
     let manual = !selection.is_empty();
-    let cloud_lookup = targets.generation.as_ref().map(|_|consent.as_ref().is_some_and(|v|!v.granted_versions.is_empty()));
+    let cloud_lookup = targets.generation.as_ref().map(|_| {
+        consent.as_ref().is_some_and(|v| !v.granted_versions.is_empty())
+    });
     let (route, runtime) = blocking(database.clone(), move |db| {
         let c = db.connection()?;
-        let enabled = cloud_lookup.unwrap_or(crate::retrieval::enabled(&c, &workspace, &conversation)?);
-        let graph_mode = if cloud_lookup.is_some() {crate::retrieval::GraphMode::Disabled} else {force_graph.into()};
+        let sync_all = crate::cloud::privacy::Rules::read(&c, &workspace)?.sync_memory_and_history;
+        let conv_enabled = crate::retrieval::enabled(&c, &workspace, &conversation)?;
+        let enabled = match cloud_lookup {
+            Some(_) if sync_all => conv_enabled,
+            Some(explicit) => explicit,
+            None => conv_enabled,
+        };
+        let graph_mode = if cloud_lookup.is_some() && !sync_all {crate::retrieval::GraphMode::Disabled} else {force_graph.into()};
         let route = crate::retrieval::route(&c,&workspace,&text,enabled,scoped && cloud_lookup.is_none(),graph_mode,manual)?
             .with_runtime(&c,&workspace,runtime.as_ref())?;
         Ok((route,runtime))
@@ -657,6 +686,7 @@ pub async fn preview_context(
     context_selection: Vec<ContextSelection>,
     knowledge_scope: Option<crate::knowledge_scope::Request>,
     use_graph: Option<bool>,
+    generation_target: Option<crate::runtime_profiles::Target>,
 ) -> AppResult<serde_json::Value> {
     blocking(state.database.clone()?, move |db| {
         use crate::runtime_profiles::{ChatRuntime, CloudChat, Target};
@@ -668,7 +698,7 @@ pub async fn preview_context(
                 _ => true,
             };
             let knowledge = automatic || !context_selection.is_empty() || knowledge_scope.is_some() || use_graph==Some(true);
-            crate::runtime_profiles::routing::select(&c,&workspace_id,knowledge,&settings)?
+            crate::runtime_profiles::routing::select_generation(&c,&workspace_id,knowledge,&settings,generation_target)?
         };
         let profile = decision.profile;
         let cloud = match profile.as_ref().map(|item| &item.input.generation) {
@@ -825,7 +855,7 @@ pub async fn choose_source(
                         .file()
                         .set_parent(&window)
                         .set_title("选择资料文件")
-                        .add_filter("UTF-8 文本", &["txt", "md"])
+                        .add_filter("文档与代码", crate::sources::SUPPORTED_EXTENSIONS)
                         .blocking_pick_file()
                         .map(|file| file.into_path().map_err(|_| "请选择本地文件。".to_string()))
                         .transpose()?
@@ -845,6 +875,34 @@ pub async fn choose_source(
         .map_err(|_| "文件预览忙，请重试。".to_string())? = pending;
     Ok(preview)
 }
+#[tauri::command]
+pub async fn import_source_folder(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> AppResult<Option<crate::sources::FolderSyncReport>> {
+    use tauri::Manager;
+    use tauri_plugin_dialog::DialogExt;
+    let database = state.database.clone()?;
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<Option<crate::sources::FolderSyncReport>> {
+        database.source_previous(&workspace_id, "")?;
+        let window = app.get_webview_window("main").ok_or("主窗口不存在。")?;
+        let picked = app
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .set_title("选择要同步到当前工作区的本地文件夹")
+            .blocking_pick_folder()
+            .map(|folder| folder.into_path().map_err(|_| "请选择本地文件夹。".to_string()))
+            .transpose()?;
+        picked
+            .map(|dir| crate::sources::sync_folder(&dir, &workspace_id, &database))
+            .transpose()
+    })
+    .await
+    .map_err(|_| "文件夹同步未完成，请重试。".to_string())?
+}
+
 #[tauri::command]
 pub async fn commit_source(
     state: State<'_, AppState>,

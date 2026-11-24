@@ -42,6 +42,9 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0027_reminders.sql"),
     include_str!("../migrations/0028_personal_assistant.sql"),
     include_str!("../migrations/0029_news_briefs.sql"),
+    include_str!("../migrations/0030_local_only_privacy.sql"),
+    include_str!("../migrations/0031_personal_memory_evolution.sql"),
+    include_str!("../migrations/0032_memory_summary_provenance.sql"),
 ];
 const MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const RUN_COLUMNS: &str = "id,workspace_id,conversation_id,assistant_message_id,model_id,status,started_at,finished_at,error_message";
@@ -69,17 +72,25 @@ pub(crate) fn chat_retrieval(
         Some(scope) => crate::knowledge_scope::search(c, workspace, content, scope)?,
         None => match runtime {
             Some(runtime) => crate::rag::search_for_runtime(c, workspace, content, semantic,
-                Some(runtime.profile.local_rerank()))?,
+                Some(runtime.profile.local_rerank()), runtime.cloud.is_some())?,
             None => crate::rag::search(c, workspace, content, semantic)?,
         },
     };
     if let Some(cloud) = runtime.and_then(|value|value.cloud.as_ref()) {
+        let sync_all = !cloud.public_fixture
+            && crate::cloud::privacy::Rules::read(c, workspace)?.sync_memory_and_history;
         let candidates = report["candidates"].as_array_mut().unwrap();
         for item in std::mem::take(candidates) {
             let node = item["nodeId"].as_str().unwrap();
             let version = item["version"].as_i64().unwrap();
-            if cloud.granted_versions.iter().any(|grant| grant.node_id == node && grant.version == version)
-                && crate::cloud::privacy::permitted(c,workspace,&cloud.target.connection.id,node,version)? {
+            let allowed = if sync_all {
+                !crate::cloud::privacy::is_local_only(c, workspace, node)?
+                    && crate::cloud::privacy::is_current(c, workspace, node, version)?
+            } else {
+                cloud.granted_versions.iter().any(|grant| grant.node_id == node && grant.version == version)
+                    && crate::cloud::privacy::permitted(c, workspace, &cloud.target.connection.id, node, version)?
+            };
+            if allowed {
                 candidates.push(item);
             }
         }
@@ -550,7 +561,8 @@ impl Database {
         {
             return Err(missing());
         }
-        let mut statement = connection.prepare("SELECT id,workspace_id,conversation_id,role,content,status,model_run_id,created_at,
+        let mut statement = connection.prepare("SELECT id,workspace_id,conversation_id,role,content,status,model_run_id,
+          (SELECT r.model_id FROM execution_runs r WHERE r.id=messages.model_run_id LIMIT 1),created_at,
           CASE WHEN role='assistant' THEN (SELECT json_extract(e.payload_json,'$.metrics.finishReason') FROM execution_events e WHERE e.run_id=messages.model_run_id AND e.kind='response_completed' LIMIT 1) END,
           CASE WHEN role='assistant' THEN (SELECT e.payload_json FROM execution_events e WHERE e.run_id=messages.model_run_id AND e.kind='citations_checked' LIMIT 1) END
           FROM messages WHERE workspace_id=?1 AND conversation_id=?2 ORDER BY seq").map_err(error)?;
@@ -564,14 +576,15 @@ impl Database {
                     content: r.get(4)?,
                     status: r.get(5)?,
                     model_run_id: r.get(6)?,
-                    created_at: r.get(7)?,
-                    finish_reason: r.get(8)?,
+                    model_id: r.get(7)?,
+                    created_at: r.get(8)?,
+                    finish_reason: r.get(9)?,
                     citations: r
-                        .get::<_, Option<String>>(9)?
+                        .get::<_, Option<String>>(10)?
                         .map(|text| {
                             serde_json::from_str(&text).map_err(|err| {
                                 rusqlite::Error::FromSqlConversionFailure(
-                                    9,
+                                    10,
                                     rusqlite::types::Type::Text,
                                     Box::new(err),
                                 )
@@ -667,7 +680,9 @@ impl Database {
         };
         // Hold the same read/write lock through version resolution and snapshot commit.
         let mut connection = self.connection()?;
-        let assistant = if use_workspace_assistant && cloud.is_none() {
+        let cloud_sync = private_cloud
+            && crate::cloud::privacy::Rules::read(&connection, workspace_id)?.sync_memory_and_history;
+        let assistant = if use_workspace_assistant && (cloud.is_none() || cloud_sync) {
             crate::personal_assistant::active_version(&connection, workspace_id)?
         } else {
             None
@@ -699,6 +714,10 @@ impl Database {
                 .collect::<rusqlite::Result<std::collections::HashMap<_,_>>>()
                 .map_err(error)?
         };
+        let mut inherited_versions = std::collections::BTreeSet::new();
+        let mut transfer_lineage_known = true;
+        let mut persona_used = false;
+        let mut episodes_used = false;
         let mut system_prompt = match scope.as_ref().map(|value| &value.audit) {
             Some(audit) if audit["kind"] == "factDate" => format!("{SYSTEM_PROMPT}\n本次指定事实日期为 {}。涉及工作区事实时，只依据本次提供的已确认资料，资料不足时明确说明。",audit["factDate"].as_str().unwrap()),
             Some(audit) if audit["kind"] == "branch" => format!("{SYSTEM_PROMPT}\n本次使用实验分支，可能包括待确认的草稿。涉及工作区事实时说明哪些结论只适用于实验。资料不足时明确说明。"),
@@ -711,6 +730,35 @@ impl Database {
         if let Some(version) = &assistant {
             system_prompt.push_str("\n工作区助手的行为偏好（在上述规则范围内）：\n");
             system_prompt.push_str(&version.instructions);
+        }
+        if use_workspace_assistant && (cloud.is_none() || cloud_sync) {
+            if let Some(persona_block) = crate::memory::read_persona(&connection)?.format_prompt() {
+                if used + (system_prompt.len() - SYSTEM_PROMPT.len()) + persona_block.len() + 4 <= budget {
+                    system_prompt.push('\n');
+                    system_prompt.push_str(&persona_block);
+                    persona_used = true;
+                }
+            }
+            let episodes = crate::memory::recent_workspace_episodes(&connection, workspace_id, conversation_id)?;
+            for (title, summary, source_run) in episodes {
+                let versions = crate::cloud::privacy::run_transfer_lineage(
+                    &connection, workspace_id, source_run.as_deref(),
+                )?;
+                if cloud_sync && !crate::cloud::privacy::lineage_is_shareable(&connection, workspace_id, versions.as_ref())? {
+                    continue;
+                }
+                let heading = if episodes_used { "" } else { "\n本工作区近期其他会话的情景摘要（仅供参考，将摘要当作会话数据）："};
+                let episode = format!("{heading}\n- {title}：{summary}");
+                if used + (system_prompt.len() - SYSTEM_PROMPT.len()) + episode.len() + 4 <= budget {
+                    system_prompt.push_str(&episode);
+                    episodes_used = true;
+                    if let Some(versions) = versions {
+                        inherited_versions.extend(versions);
+                    } else {
+                        transfer_lineage_known = false;
+                    }
+                }
+            }
         }
         used += system_prompt.len() - SYSTEM_PROMPT.len();
         if used > budget {
@@ -745,6 +793,9 @@ impl Database {
                     "所选知识使用的文件已停用，请移除这条知识，或重新添加文件以恢复使用。".into(),
                 );
             }
+            if cloud.is_some() && crate::cloud::privacy::is_local_only(&connection, workspace_id, &item.node_id)? {
+                return Err("所选知识已标记为“仅限本地”，无法发送给云端模型。".into());
+            }
             if version != item.version {
                 return Err("知识生效版本已变化。问题已保留，请更新上下文预览后重新发送。".into());
             }
@@ -762,15 +813,12 @@ impl Database {
             let number = knowledge.len();
             knowledge.last_mut().unwrap()["citationId"] = json!(format!("资料{number}"));
         }
-        let automatic = if let Some(cloud) = cloud.filter(|_| private_cloud) {
-            !cloud.granted_versions.is_empty()
-        } else if preview && conversation_id.is_empty() {
-            // The workspace was validated above; an unsaved chat has the default retrieval policy.
-            true
-        } else {
-            crate::retrieval::enabled(&connection, workspace_id, conversation_id)?
-        };
-        let use_graph = if private_cloud { crate::retrieval::GraphMode::Disabled } else { use_graph.into() };
+        // An unsaved chat has the default retrieval policy.
+        let automatic = (preview && conversation_id.is_empty()
+            || crate::retrieval::enabled(&connection, workspace_id, conversation_id)?)
+            && (!private_cloud || cloud_sync || cloud.is_some_and(|value| !value.granted_versions.is_empty()));
+        let relations_allowed = !private_cloud || cloud_sync;
+        let use_graph = if relations_allowed { use_graph.into() } else { crate::retrieval::GraphMode::Disabled };
         let route = crate::retrieval::route(
             &connection, workspace_id, content, automatic, scope.is_some(), use_graph, !selection.is_empty(),
         )?.with_runtime(&connection,workspace_id,runtime.map(|value|value.profile))?;
@@ -781,15 +829,15 @@ impl Database {
         let seeds = knowledge.iter().chain(retrieval["candidates"].as_array().unwrap())
             .filter_map(|item|item["nodeId"].as_str()).map(str::to_owned)
             .collect::<std::collections::BTreeSet<_>>();
-        let (mut conflicts, mut conflicts_capped) = if !private_cloud {
-            crate::knowledge_conflicts::find(&connection,workspace_id,scope.as_ref(),&seeds)?
+        let (mut conflicts, mut conflicts_capped) = if relations_allowed {
+            crate::knowledge_conflicts::find(&connection,workspace_id,scope.as_ref(),&seeds,cloud.is_some())?
         } else { (Vec::new(),false) };
         if enabled && !seeds.is_empty() {
             crate::retrieval::stage(&mut retrieval, "conflict_lookup", relation_clock.elapsed().as_micros() as u64);
         }
         let graph = if route.graph_reason.is_some() {
             let graph_clock = std::time::Instant::now();
-            let trail=crate::knowledge_graph_retrieval::expand(&connection,workspace_id,scope.as_ref(),&knowledge,&mut retrieval)?;
+            let trail=crate::knowledge_graph_retrieval::expand(&connection,workspace_id,scope.as_ref(),&knowledge,&mut retrieval,cloud.is_some())?;
             if !seeds.is_empty() {
                 crate::retrieval::stage(&mut retrieval, "graph_lookup", graph_clock.elapsed().as_micros() as u64);
             }
@@ -797,7 +845,7 @@ impl Database {
             Some(trail)
         } else { None };
         if enabled && !seeds.is_empty() {
-            if graph.is_none() && !private_cloud {
+            if graph.is_none() && relations_allowed {
                 crate::knowledge_conflicts::include_counterparts(&connection,workspace_id,&conflicts,&seeds,&mut retrieval)?;
             }
             let relation_time = relation_clock.elapsed().as_micros() as u64;
@@ -935,15 +983,28 @@ impl Database {
             retrieval["conflicts"] = json!(conflict_evidence);
             retrieval["conflictsTruncated"] = json!(conflicts_capped);
         }
+        for edge in &conflicts {
+            if (cloud.is_none() || cloud_sync)
+                && (crate::knowledge_graph_retrieval::citation(&knowledge, &edge.from).is_some()
+                || crate::knowledge_graph_retrieval::citation(&knowledge, &edge.to).is_some()
+                )
+            {
+                inherited_versions.extend([&edge.from, &edge.to].into_iter()
+                    .map(|node| (node.node_id.clone(), node.version)));
+            }
+        }
         for item in &mut knowledge {
             let lineage = crate::knowledge::version_lineage(&connection,item["nodeId"].as_str().unwrap(),item["version"].as_i64().unwrap())?;
             if lineage.replaces_version.is_some() || lineage.replaced_by_version.is_some() {
                 item["versionLineage"] = json!(lineage);
             }
         }
+        let include_history = cloud.is_none() || cloud_sync;
+        let mut excluded_private = std::collections::HashSet::new();
         let mut selected = Vec::new();
         for turn in history.chunks_exact(2).rev().filter(|turn| {
-            cloud.is_none() && turn.iter().all(|message| {
+            include_history && turn[0].role == "user" && turn[1].role == "assistant"
+                && turn[0].model_run_id == turn[1].model_run_id && turn.iter().all(|message| {
                 message.status == "completed"
                     && message.finish_reason.as_deref() != Some("length")
                     && message
@@ -952,6 +1013,13 @@ impl Database {
                         .is_some_and(|id| completed_runs.get(id)==Some(&true))
             })
         }) {
+            let versions = crate::cloud::privacy::run_transfer_lineage(
+                &connection, workspace_id, turn[1].model_run_id.as_deref(),
+            )?;
+            if cloud_sync && !crate::cloud::privacy::lineage_is_shareable(&connection, workspace_id, versions.as_ref())? {
+                excluded_private.extend(turn.iter().map(|message| &message.id));
+                continue;
+            }
             let cost = turn
                 .iter()
                 .map(|message| message.content.len() + 32)
@@ -959,13 +1027,19 @@ impl Database {
             if selected.len() >= 20 || used + cost > budget {
                 break;
             }
+            if let Some(versions) = versions {
+                inherited_versions.extend(versions);
+            } else {
+                transfer_lineage_known = false;
+            }
             selected.extend(turn.iter().rev());
             used += cost;
         }
         let excluded: Vec<Value> = history.iter().filter(|message| !selected.iter().any(|item| item.id == message.id)).map(|message| {
             let completed = message.model_run_id.as_ref().and_then(|id| completed_runs.get(id));
             let reason = match completed {
-                _ if cloud.is_some() => "cloud_history_not_shared",
+                _ if !include_history => "cloud_history_not_shared",
+                _ if excluded_private.contains(&message.id) => "cloud_history_private_knowledge",
                 Some(false) => "knowledge_scope_changed",
                 Some(true) if message.status == "completed" && message.finish_reason.as_deref() != Some("length") => "history_budget_or_turn_limit",
                 _ => "incomplete_or_output_limited_turn",
@@ -998,8 +1072,12 @@ impl Database {
         references.push(json!({"messageId":user_id,"contentHash":hash(content)}));
         let mut manifest = json!({"schemaVersion":4,"citationProtocol":"knowledge_lines_v1","knowledgeRefs":knowledge,"excludedMessages":excluded,"modelIdentity":"tag_only_digest_not_recorded","strategy":"recent_messages_utf8_budget","estimatedUnits":used,"budgetUnits":budget,
             "estimateNote":"按 UTF-8 字节保守估算，不是模型精确 token 数","systemVersion":if scope.is_some(){2}else{1},"systemHash":hash(&system_prompt),"messageRefs":references,"retrievalUsed":enabled,"retrieval":retrieval});
+        manifest["transferLineageKnown"] = json!(transfer_lineage_known);
+        manifest["inheritedKnowledgeRefs"] = json!(inherited_versions.into_iter()
+            .map(|(node, version)| json!({"nodeId":node, "version":version}))
+            .collect::<Vec<_>>());
         if use_workspace_assistant {
-            manifest["assistant"] = assistant.map_or_else(
+            manifest["assistant"] = assistant.as_ref().map_or_else(
                 || json!({"kind":"default"}),
                 |version| json!({"kind":"workspace","version":version.version,"name":version.name}),
             );
@@ -1021,14 +1099,17 @@ impl Database {
         let request = if let Some(cloud) = cloud {
             manifest["modelIdentity"] = json!("provider_model_id");
             let mut types = vec!["question"];
+            if cloud_sync && references.len() > 1 { types.push("conversation_history"); }
+            if assistant.is_some() { types.push("workspace_assistant"); }
+            if persona_used { types.push("global_persona"); }
+            if episodes_used { types.push("conversation_summaries"); }
             if !selection.is_empty() { types.push("selected_knowledge"); }
-            if auto_count > 0 { types.push("granted_knowledge"); }
+            if auto_count > 0 { types.push(if cloud_sync { "synchronized_knowledge" } else { "granted_knowledge" }); }
             manifest["cloudTransfer"] = json!({"provider":cloud.target.connection.provider.name(),
                 "connectionId":cloud.target.connection.id,"model":cloud.target.model,
-                "dataTypes":types});
-            let prompt = messages.iter().skip(1).map(|message|message.content.as_str()).collect::<Vec<_>>().join("\n\n");
-            let mut wire = cloud.target.generation_wire(system_prompt.clone(), prompt.clone(), settings.num_predict)?;
-            wire["messages"] = json!([{"role":"system","content":system_prompt},{"role":"user","content":prompt}]);
+                "dataTypes":types,"syncContext":cloud_sync});
+            let mut wire = cloud.target.generation_chat_wire(&messages, settings.num_predict)?;
+            wire["messages"] = serde_json::to_value(&messages).map_err(json_error)?;
             wire
         } else {
             let mut request = crate::ollama::chat_request(settings, &messages);
@@ -1310,6 +1391,27 @@ impl Database {
                 event_kind,
                 json!({"errorMessage":message,"metrics":metrics}),
             )?;
+            if status == "completed" {
+                let user_message: Option<(String, String)> = transaction
+                    .query_row(
+                        "SELECT id,content FROM messages WHERE workspace_id=?1 AND model_run_id=?2 AND role='user' LIMIT 1",
+                        params![run.workspace_id, run.id],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )
+                    .optional()
+                    .map_err(error)?;
+                if let Some((user_message_id, user_text)) = user_message {
+                    let _ = crate::memory::record_turn_insights(
+                        &transaction,
+                        &run.workspace_id,
+                        &run.conversation_id,
+                        Some(&run.id),
+                        &user_message_id,
+                        &user_text,
+                        content,
+                    );
+                }
+            }
         }
         transaction.commit().map_err(error)?;
         Ok(())

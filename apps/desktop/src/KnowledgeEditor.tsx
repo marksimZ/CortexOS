@@ -297,9 +297,7 @@ export function KnowledgeEditor({
           </div>
           <footer className="dialog-actions panel-footer">
             <span className="editor-status">
-              {request.detail?.node.effectiveVersion
-                ? `保存草稿后，当前确认版本仍为 v${request.detail.node.effectiveVersion}`
-                : "保存为待确认草稿"}
+              保存后直接生效并纳入对话检索
             </span>
             <button
               type="button"
@@ -310,7 +308,7 @@ export function KnowledgeEditor({
               取消
             </button>
             <button className="button primary" disabled={saving}>
-              {saving ? "正在保存…" : "保存草稿"}
+              {saving ? "正在保存…" : "保存并生效"}
             </button>
           </footer>
         </form>

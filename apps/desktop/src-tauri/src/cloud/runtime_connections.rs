@@ -152,6 +152,12 @@ impl RuntimeConnection {
         self.limits.iter().find(|limits| limits.model == model)
     }
 
+    pub(crate) fn can_generate(&self, model: &str) -> bool {
+        valid_model(model)
+            && self.catalog_state != ConnectionState::InvalidCredential
+            && self.supports(model, Capability::Generation)
+    }
+
     pub(crate) fn verified_capability(
         &self,
         model: &str,
@@ -261,8 +267,13 @@ pub(crate) fn resolve_target(
     capability: Capability,
 ) -> AppResult<CloudTarget> {
     let connection = get(&*db.connection()?, workspace, connection_id)?;
-    if connection.verified_capability(model, capability).is_none() {
-        return Err("所选云端模型未通过本次所需的能力验证。".into());
+    let allowed = if capability == Capability::Generation {
+        connection.can_generate(model)
+    } else {
+        connection.verified_capability(model, capability).is_some()
+    };
+    if !allowed {
+        return Err("所选云端模型未通过本次所需的能力验证，或连接凭据无效。".into());
     }
     let endpoint = connection.endpoint()?;
     let key = credential(db, workspace, &connection)?;
@@ -403,14 +414,16 @@ impl CloudTarget {
         }
     }
 
-    pub(crate) fn generation_wire(
+    pub(crate) fn generation_chat_wire(
         &self,
-        system: String,
-        prompt: String,
+        messages: &[crate::models::ChatMessage],
         output_tokens: u32,
     ) -> AppResult<Value> {
-        self.check_external_text(&system)?;
-        self.check_external_text(&prompt)?;
+        let mut input_bytes = 0u64;
+        for message in messages {
+            self.check_external_text(&message.content)?;
+            input_bytes = input_bytes.saturating_add(message.content.len() as u64);
+        }
         let saved = self
             .connection
             .limits
@@ -421,7 +434,6 @@ impl CloudTarget {
             .models
             .iter()
             .find(|model| model["id"] == self.model);
-        let input_bytes = (system.len() + prompt.len()) as u64;
         let input_max = [
             saved.and_then(|item| item.max_input_tokens),
             listed.and_then(|item| item["maxInputTokens"].as_u64()),
@@ -448,14 +460,7 @@ impl CloudTarget {
         }
         let (url, body) = self
             .endpoint
-            .generation_wire(&super::completion::CompletionInput {
-                model: self.model.clone(),
-                system,
-                prompt,
-                max_output_tokens: output_tokens,
-                schema: None,
-                tools: vec![],
-            })
+            .generation_chat_wire(&self.model, messages, output_tokens)
             .map_err(request_error)?;
         if serde_json::to_string(&body)
             .map_err(json_error)?
@@ -466,13 +471,14 @@ impl CloudTarget {
         Ok(json!({"url":url,"body":body}))
     }
 
-    pub(crate) async fn generate(
+    pub(crate) async fn generate_stream(
         &self,
         wire: &Value,
         timeout: Duration,
         meter: &crate::runtime_usage::Meter,
         trace: Option<&Value>,
         knowledge: &[super::privacy::TransferVersion],
+        on_delta: &mut (dyn FnMut(&str) + Send),
     ) -> AppResult<super::completion::CompletionOutput> {
         let url = wire["url"].as_str().ok_or("云端请求地址未准备。")?;
         use crate::runtime_usage::{Call, Usage};
@@ -495,6 +501,7 @@ impl CloudTarget {
             .and_then(|trace| trace["dataTypes"].as_array())
             .map(|fields| fields.iter().filter_map(Value::as_str).collect())
             .unwrap_or_else(|| vec!["fixed_test_text"]);
+        let delta_cell = tokio::sync::Mutex::new(on_delta);
         meter
             .call(
                 self,
@@ -508,7 +515,22 @@ impl CloudTarget {
                     knowledge,
                     texts: &texts,
                 },
-                || self.endpoint.send_generation(&self.key, url, body, timeout),
+                || async {
+                    let mut guard = delta_cell.lock().await;
+                    let mut visible = false;
+                    let mut forward = |delta: &str| {
+                        visible = true;
+                        guard(delta);
+                    };
+                    let result = self.endpoint
+                        .send_generation_stream(&self.key, url, body, timeout, &mut forward)
+                        .await;
+                    if visible && matches!(result, Err(ConnectionState::RateLimited)) {
+                        Err(ConnectionState::NetworkUnavailable)
+                    } else {
+                        result
+                    }
+                },
                 |output| {
                     let (input, output) = self.generation_tokens(&output.usage);
                     Usage {

@@ -338,13 +338,14 @@ pub(crate) async fn query(
 }
 
 pub(crate) fn search(c: &Connection, workspace: &str, text: &str, query: Option<&Query>) -> AppResult<Value> {
-    search_for_runtime(c, workspace, text, query, None)
+    search_for_runtime(c, workspace, text, query, None, false)
 }
 
 pub(crate) fn search_for_runtime(
     c: &Connection, workspace: &str, text: &str, query: Option<&Query>, rerank: Option<bool>,
+    exclude_local_only: bool,
 ) -> AppResult<Value> {
-    let mut report = search_candidates(c, workspace, text, query)?;
+    let mut report = search_candidates(c, workspace, text, query, exclude_local_only)?;
     let rank = rerank.unwrap_or_else(|| {
         query.is_some_and(|query| query.profile.rerank) && report["semanticStatus"] == "completed"
     });
@@ -360,9 +361,10 @@ fn search_candidates(
     workspace: &str,
     text: &str,
     query: Option<&Query>,
+    exclude_local_only: bool,
 ) -> AppResult<Value> {
     let clock = Instant::now();
-    let mut report = crate::retrieval::search(c, workspace, text)?;
+    let mut report = crate::retrieval::search_with_privacy(c, workspace, text, exclude_local_only)?;
     let Some(query) = query else {
         return Ok(report);
     };
@@ -407,11 +409,13 @@ fn search_candidates(
     } else { (VECTOR_JOIN.to_owned(), "") };
     let sql = format!(
         "SELECT n.node_id,v.version,v.title,v.kind,COALESCE(ch.body,v.content),r.vector,r.content_hash,r.chunk_id
-         {KNOWLEDGE} {vector_join} {ELIGIBLE} AND {LIVE_VECTOR} {grants_filter}"
+         {KNOWLEDGE} {vector_join} {ELIGIBLE} AND {LIVE_VECTOR} {grants_filter}
+         AND (NOT ?3 OR NOT EXISTS(SELECT 1 FROM knowledge_local_only p
+              WHERE p.workspace_id=n.workspace_id AND p.node_id=n.node_id AND p.local_only=1))"
     );
     let mut statement = c.prepare(&sql).map_err(error)?;
     let mut rows = statement
-        .query(params![workspace, query.profile.id])
+        .query(params![workspace, query.profile.id, exclude_local_only || cloud.is_some()])
         .map_err(error)?;
     struct Hit {
         score: f64,

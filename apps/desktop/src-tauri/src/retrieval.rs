@@ -364,6 +364,12 @@ pub(crate) fn stage(report: &mut Value, kind: &str, elapsed_micros: u64) {
 }
 
 pub fn search(connection: &Connection, workspace: &str, query: &str) -> AppResult<Value> {
+    search_with_privacy(connection, workspace, query, false)
+}
+
+pub(crate) fn search_with_privacy(
+    connection: &Connection, workspace: &str, query: &str, exclude_local_only: bool,
+) -> AppResult<Value> {
     let started = now();
     let clock = std::time::Instant::now();
     let (tokens, truncated) = query_terms(query);
@@ -382,6 +388,8 @@ pub fn search(connection: &Connection, workspace: &str, query: &str) -> AppResul
                 JOIN knowledge_nodes n ON n.id=f.node_id AND n.workspace_id=f.workspace_id
                 JOIN rag_current_knowledge v ON v.workspace_id=n.workspace_id AND v.node_id=n.id AND v.version=f.version
                 WHERE knowledge_fts MATCH ?1 AND n.workspace_id=?2
+                  AND (NOT ?3 OR NOT EXISTS(SELECT 1 FROM knowledge_local_only p
+                       WHERE p.workspace_id=n.workspace_id AND p.node_id=n.id AND p.local_only=1))
                   AND NOT EXISTS(SELECT 1 FROM knowledge_source_links l JOIN source_documents s ON s.id=l.source_id
                                  WHERE l.node_id=n.id AND l.knowledge_version=v.version AND s.enabled=0)
              ), ranked AS (
@@ -395,7 +403,7 @@ pub fn search(connection: &Connection, workspace: &str, query: &str) -> AppResul
              WHERE h.rank=1 AND (h.chunk_id IS NULL OR ch.id IS NOT NULL)
              ORDER BY h.score,h.node_id LIMIT 21"
         ).map_err(error)?;
-        candidates = statement.query_map(params![expression,workspace], |row| {
+        candidates = statement.query_map(params![expression,workspace,exclude_local_only], |row| {
             let mut item = json!({"nodeId":row.get::<_,String>(0)?,"version":row.get::<_,i64>(1)?,"title":row.get::<_,String>(2)?,"kind":row.get::<_,String>(3)?,"content":row.get::<_,String>(4)?,"score":row.get::<_,f64>(5)?,"included":false,"reason":"pending_budget","costUnits":0});
             if let Some(chunk_id) = row.get::<_, Option<String>>(6)? {
                 item["chunkId"] = json!(chunk_id);

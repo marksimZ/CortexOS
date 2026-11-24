@@ -1,4 +1,5 @@
 pub mod completion;
+mod chat_stream;
 #[cfg(test)]
 mod completion_tests;
 mod provider;

@@ -278,7 +278,11 @@ impl Meter {
         let mut c = self.database.connection()?;
         let tx = c.transaction().map_err(error)?;
         if self.fixture.is_none() {
-            crate::cloud::privacy::verify_transfer(&tx,&self.workspace,&target.connection.id,spec.knowledge)?;
+            let sync_context = spec.generation_trace
+                .is_some_and(|trace| trace["syncContext"] == true);
+            crate::cloud::privacy::verify_chat_transfer(
+                &tx, &self.workspace, &target.connection.id, spec.knowledge, sync_context,
+            )?;
         }
         crate::cloud::privacy::check_workspace(&tx, &self.workspace, spec.texts)?;
         let policy = Policy::read(&tx, &self.workspace)?;

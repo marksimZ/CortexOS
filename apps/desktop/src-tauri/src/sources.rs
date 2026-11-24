@@ -68,6 +68,181 @@ pub struct PendingSource {
     pub created: Instant,
 }
 
+pub const SUPPORTED_EXTENSIONS: &[&str] = &[
+    "txt", "md", "docx", "csv", "json", "toml", "yaml", "yml",
+    "rs", "ts", "tsx", "js", "jsx", "py", "go", "java", "c", "cpp", "h", "html", "css", "sql",
+];
+
+fn extract_docx_text(bytes: &[u8]) -> AppResult<String> {
+    let cursor = std::io::Cursor::new(bytes);
+    let mut archive = zip::ZipArchive::new(cursor).map_err(|_| "无法解析 .docx 文档结构。".to_string())?;
+    let mut xml_bytes = Vec::new();
+    {
+        let doc = archive
+            .by_name("word/document.xml")
+            .map_err(|_| ".docx 文件缺少正文内容。".to_string())?;
+        doc.take(4 * 1024 * 1024 + 1)
+            .read_to_end(&mut xml_bytes)
+            .map_err(|_| "读取 .docx 正文失败。".to_string())?;
+    }
+    if xml_bytes.len() > 4 * 1024 * 1024 {
+        return Err(".docx 解压后的正文过大，请精简后重试。".into());
+    }
+    let xml_str = std::str::from_utf8(&xml_bytes).map_err(|_| ".docx 正文编码无效。".to_string())?;
+    let mut reader = quick_xml::Reader::from_str(xml_str);
+    reader.config_mut().trim_text(false);
+    let mut paragraphs = Vec::new();
+    let mut current = String::new();
+    let mut in_text = false;
+    loop {
+        match reader.read_event() {
+            Ok(quick_xml::events::Event::Start(e)) => {
+                let local = e.local_name();
+                if local.as_ref() == "t" {
+                    in_text = true;
+                } else if local.as_ref() == "br" {
+                    current.push('\n');
+                }
+            }
+            Ok(quick_xml::events::Event::Empty(e)) => {
+                let local = e.local_name();
+                if local.as_ref() == "br" {
+                    current.push('\n');
+                } else if local.as_ref() == "tab" {
+                    current.push('\t');
+                }
+            }
+            Ok(quick_xml::events::Event::Text(e)) if in_text => {
+                let raw = e.as_ref();
+                let decoded = raw
+                    .replace("&amp;", "&")
+                    .replace("&lt;", "<")
+                    .replace("&gt;", ">")
+                    .replace("&quot;", "\"")
+                    .replace("&apos;", "'");
+                current.push_str(&decoded);
+            }
+            Ok(quick_xml::events::Event::End(e)) => {
+                let local = e.local_name();
+                if local.as_ref() == "t" {
+                    in_text = false;
+                } else if local.as_ref() == "p" {
+                    let trimmed = current.trim_end();
+                    if !trimmed.is_empty() {
+                        paragraphs.push(trimmed.to_owned());
+                    }
+                    current.clear();
+                }
+            }
+            Ok(quick_xml::events::Event::Eof) => break,
+            Err(_) => return Err(".docx 正文 XML 格式异常。".into()),
+            _ => {}
+        }
+    }
+    if !current.trim().is_empty() {
+        paragraphs.push(current.trim_end().to_owned());
+    }
+    let joined = paragraphs.join("\n");
+    if joined.trim().is_empty() {
+        return Err(".docx 文档中没有可提取的文字内容。".into());
+    }
+    Ok(joined)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderSyncReport {
+    pub folder: String,
+    pub imported: usize,
+    pub updated: usize,
+    pub unchanged: usize,
+    pub skipped: usize,
+}
+
+pub fn sync_folder(root: &Path, workspace: &str, db: &Database) -> AppResult<FolderSyncReport> {
+    if !root.is_absolute() || !root.is_dir() {
+        return Err("请选择有效的本地文件夹。".into());
+    }
+    for parent in root.ancestors() {
+        let meta = std::fs::symlink_metadata(parent)
+            .map_err(|_| "无法访问所选文件夹，请检查权限。".to_string())?;
+        if meta.file_type().is_symlink() {
+            return Err("不支持通过符号链接同步文件夹，请选择实际目录。".into());
+        }
+    }
+    let canonical = std::fs::canonicalize(root).map_err(|_| "无法解析文件夹位置。".to_string())?;
+    let mut stack = vec![canonical.clone()];
+    let mut files = Vec::new();
+    let mut skipped = 0usize;
+    const MAX_FILES: usize = 60;
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            skipped += 1;
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(meta) = std::fs::symlink_metadata(&path) else {
+                skipped += 1;
+                continue;
+            };
+            if meta.file_type().is_symlink() {
+                skipped += 1;
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_lowercase();
+            if name.starts_with('.') {
+                continue;
+            }
+            if meta.is_dir() {
+                if matches!(name.as_str(), "node_modules" | "target" | "dist" | "build" | "__pycache__" | ".git") {
+                    continue;
+                }
+                stack.push(path);
+            } else if meta.is_file() {
+                let ext = path
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+                if SUPPORTED_EXTENSIONS.contains(&ext.as_str()) {
+                    if files.len() < MAX_FILES {
+                        files.push(path);
+                    } else {
+                        skipped += 1;
+                    }
+                }
+            }
+        }
+    }
+    let mut imported = 0usize;
+    let mut updated = 0usize;
+    let mut unchanged = 0usize;
+    for path in files {
+        match read_selected(&path, workspace, db) {
+            Ok(pending) => {
+                let prev = pending.preview.previous_version;
+                match db.import_source(pending) {
+                    Ok(doc) => match prev {
+                        None => imported += 1,
+                        Some(old) if doc.latest_version > old => updated += 1,
+                        _ => unchanged += 1,
+                    },
+                    Err(_) => skipped += 1,
+                }
+            }
+            Err(_) => skipped += 1,
+        }
+    }
+    Ok(FolderSyncReport {
+        folder: canonical.to_string_lossy().into_owned(),
+        imported,
+        updated,
+        unchanged,
+        skipped,
+    })
+}
+
 pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<PendingSource> {
     if !path.is_absolute() {
         return Err("请用文件选择窗口选择本机文件。".into());
@@ -108,14 +283,14 @@ pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<P
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_lowercase();
-    if !["txt", "md"].contains(&extension.as_str())
+    if !SUPPORTED_EXTENSIONS.contains(&extension.as_str())
         || lower.starts_with('.')
         || ["token", "credential", "secret", "password", "id_rsa"]
             .iter()
             .any(|term| lower.contains(term))
     {
         return Err(
-            "只支持 .txt/.md 文本文件；名称涉及密码、访问密钥等敏感信息的文件不能导入。".into(),
+            "支持 .txt/.md/.docx 及常见代码与配置文件；名称涉及密码、访问密钥等敏感信息的文件不能导入。".into(),
         );
     }
     let canonical =
@@ -176,11 +351,15 @@ pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<P
         return Err("文件超过 2 MiB，请缩小后重试。".into());
     }
     let raw_hash = hash(&bytes);
-    let text = String::from_utf8(bytes)
-        .map_err(|_| "文件不是 UTF-8，请转换编码后重新选择。".to_string())?;
-    let content = text.trim_start_matches('\u{feff}').replace("\r\n", "\n");
+    let content = if extension == "docx" {
+        extract_docx_text(&bytes)?
+    } else {
+        let text = String::from_utf8(bytes)
+            .map_err(|_| "文件不是 UTF-8，请转换编码后重新选择。".to_string())?;
+        text.trim_start_matches('\u{feff}').replace("\r\n", "\n")
+    };
     if content.trim().is_empty() || content.contains('\0') {
-        return Err("文件为空或含有二进制内容，请选择普通文本。".into());
+        return Err("文件为空或含有二进制内容，请选择普通文档或文本。".into());
     }
     let path = canonical.to_str().ok_or("文件路径编码无效。")?.to_string();
     let previous = db.source_previous(workspace, &path)?;
@@ -333,6 +512,63 @@ impl Database {
             params![new_id(), id, kind, timestamp],
         )
         .map_err(error)?;
+        // Auto-sync imported document into an effective, directly searchable knowledge node.
+        if kind != "reauthorized" {
+            let line_count = pending.preview.content.split('\n').count().max(1) as i64;
+            let content_excerpt: String = pending.preview.content.chars().take(20000).collect();
+            let doc_title = pending
+                .preview
+                .name
+                .strip_suffix(".md")
+                .or_else(|| pending.preview.name.strip_suffix(".txt"))
+                .unwrap_or(&pending.preview.name)
+                .chars()
+                .take(80)
+                .collect::<String>();
+            let existing_node: Option<(String, i64)> = tx
+                .query_row(
+                    "SELECT n.id, n.latest_version FROM knowledge_nodes n
+                     JOIN knowledge_source_links l ON l.node_id=n.id AND l.knowledge_version=n.latest_version
+                     WHERE n.workspace_id=?1 AND l.source_id=?2 AND l.start_line=1
+                     ORDER BY n.updated_at DESC LIMIT 1",
+                    params![pending.workspace, id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()
+                .map_err(error)?;
+            let (node_id, node_version) = if let Some((existing_id, prev_ver)) = existing_node {
+                let next_ver = prev_ver + 1;
+                tx.execute(
+                    "UPDATE knowledge_nodes SET latest_version=?2,effective_version=?2,revision=revision+1,updated_at=?3 WHERE id=?1",
+                    params![existing_id, next_ver, timestamp],
+                )
+                .map_err(error)?;
+                (existing_id, next_ver)
+            } else {
+                let nid = new_id();
+                tx.execute(
+                    "INSERT INTO knowledge_nodes(id,workspace_id,latest_version,effective_version,revision,created_at,updated_at,source_conversation_id,source_message_id,source_excerpt,source_hash) VALUES(?1,?2,1,1,2,?3,?3,NULL,NULL,NULL,NULL)",
+                    params![nid, pending.workspace, timestamp],
+                )
+                .map_err(error)?;
+                (nid, 1)
+            };
+            tx.execute(
+                "INSERT INTO knowledge_versions(node_id,version,title,kind,content,author,change_reason,created_at) VALUES(?1,?2,?3,'knowledge',?4,'user','导入资料自动生效',?5)",
+                params![node_id, node_version, doc_title, content_excerpt, timestamp],
+            )
+            .map_err(error)?;
+            tx.execute(
+                "INSERT INTO knowledge_approval_events(id,node_id,version,actor,created_at) VALUES(?1,?2,?3,'user',?4)",
+                params![new_id(), node_id, node_version, timestamp],
+            )
+            .map_err(error)?;
+            tx.execute(
+                "INSERT INTO knowledge_source_links VALUES(?1,?2,?3,?4,1,?5,?6)",
+                params![node_id, node_version, id, version, line_count, content_excerpt],
+            )
+            .map_err(error)?;
+        }
         refresh_nodes(&tx, &id)?;
         tx.commit().map_err(error)?;
         drop(c);

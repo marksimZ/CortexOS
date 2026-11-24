@@ -1,6 +1,6 @@
 import { useMemo, useSyncExternalStore } from "react";
-export type PageName = "chat" | "knowledge" | "graph" | "settings" | "benchmark";
-const pages: readonly PageName[] = ["chat", "knowledge", "graph", "settings", "benchmark"];
+export type PageName = "chat" | "knowledge" | "graph" | "settings";
+const pages: readonly PageName[] = ["chat", "knowledge", "graph", "settings"];
 export function navigationParams(hash: string): URLSearchParams {
   const query = hash.indexOf("?");
   return new URLSearchParams(query < 0 ? "" : hash.slice(query + 1));
@@ -18,15 +18,11 @@ export function parseNavigation(hash: string) {
   const [path] = hash.replace(/^#\//, "").split("?", 1);
   const params = navigationParams(hash);
   const page = pages.find(item => item === path) ?? "chat";
-  const view = params.get("view");
-  const benchmarkView = view === "personalized" || view === "harness" || view === "rag" ? view : "standard";
   const number = Number(params.get("version"));
   const citation = params.has("citation") ? Number(params.get("citation")) : -1;
   const back = params.get("back");
   return {
       page,
-      benchmarkView,
-      personalized: benchmarkView === "personalized",
       params,
       hash,
       workspace: params.get("workspace"),
@@ -37,8 +33,8 @@ export function parseNavigation(hash: string) {
       message: params.get("message"),
       citation: Number.isSafeInteger(citation) && citation >= 0 ? citation : undefined,
       version: Number.isSafeInteger(number) && number > 0 ? number : undefined,
-      mode: params.get("mode") === "execution" ? "execution" : "knowledge",
-      back: back && /^(#\/graph\?|#\/chat\?|#\/benchmark\?)/.test(back) ? back : null,
+      mode: "knowledge" as const,
+      back: back && /^(#\/graph\?|#\/chat\?)/.test(back) ? back : null,
   };
 }
 export function navigationHash(

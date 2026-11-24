@@ -254,17 +254,7 @@ pub(super) async fn post_json(
     response_limit: usize,
 ) -> Result<Value, ConnectionState> {
     let client = super::transport::JSON_CLIENT.as_ref().map_err(|error| *error)?;
-    let mut value = reqwest::header::HeaderValue::from_str(key)
-        .map_err(|_| ConnectionState::InvalidCredential)?;
-    value.set_sensitive(true);
-    let mut request = client.post(url).timeout(timeout).json(body);
-    request = match provider {
-        Provider::Openai => request.bearer_auth(key),
-        Provider::Anthropic => request
-            .header("x-api-key", value)
-            .header("anthropic-version", "2023-06-01"),
-        Provider::Gemini => request.header("x-goog-api-key", value),
-    };
+    let request = authenticate(client.post(url).timeout(timeout).json(body), provider, key)?;
     let mut response = request
         .send()
         .await
@@ -294,6 +284,16 @@ pub(super) async fn post_json(
     }
     Ok(body)
 }
+pub(super) fn authenticate(request: reqwest::RequestBuilder, provider: Provider, key: &str) -> Result<reqwest::RequestBuilder, ConnectionState> {
+    let mut secret = reqwest::header::HeaderValue::from_str(key).map_err(|_| ConnectionState::InvalidCredential)?;
+    secret.set_sensitive(true);
+    Ok(match provider {
+        Provider::Openai => request.bearer_auth(key),
+        Provider::Anthropic => request.header("x-api-key", secret).header("anthropic-version", "2023-06-01"),
+        Provider::Gemini => request.header("x-goog-api-key", secret),
+    })
+}
+
 pub fn tokens(provider: Provider, usage: &Value) -> (Option<u64>, Option<u64>) {
     match provider {
         Provider::Openai => (

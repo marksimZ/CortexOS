@@ -19,6 +19,7 @@ mod model_runtime;
 mod runtime_profiles;
 mod runtime_usage;
 mod local_runtime;
+mod memory;
 mod ollama;
 mod personal_assistant;
 mod portability;
@@ -118,6 +119,12 @@ pub fn run() {
             personal_assistant::save_assistant_draft,
             personal_assistant::publish_assistant,
             personal_assistant::activate_assistant,
+            memory::get_global_persona,
+            memory::save_global_persona,
+            memory::list_memory_candidates,
+            memory::resolve_memory_candidate,
+            memory::promote_rule_from_chat,
+            memory::generate_weekly_digest_draft,
             web_search::read_web_search_status,
             web_search::save_web_search_key,
             web_search::search_web,
@@ -139,6 +146,7 @@ pub fn run() {
             runtime_usage::report::model_runtime_usage,
             runtime_usage::report::model_runtime_resources,
             cloud::privacy::model_cloud_privacy_rules,
+            cloud::privacy::set_knowledge_local_only,
             runtime_profiles::routing::model_chat_routing,
             runtime_profiles::routing::chat_runtime_route,
             runtime_usage::model_runtime_policy,
@@ -279,6 +287,7 @@ pub fn run() {
             commands::inspect_benchmark_model,
             commands::discard_source,
             commands::choose_source,
+            commands::import_source_folder,
             commands::commit_source,
             commands::list_sources,
             commands::get_source,

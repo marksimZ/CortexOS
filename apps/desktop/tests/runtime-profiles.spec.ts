@@ -37,6 +37,7 @@ test("switch a workspace profile and confirm cloud transfer per message", async 
           if (command === "get_run") return null;
           if (args.workspaceId !== "w") throw Error("Unscoped command " + command);
           if (command === "read_web_search_status") return { configured: false };
+          if (command === "model_cloud_privacy_rules") return { syncMemoryAndHistory: false };
           if (command === "list_conversations") return [conversation];
           if (command === "list_knowledge" || command === "load_messages") return [];
           if (command === "rag_index_status") return { index: null };
@@ -131,7 +132,7 @@ test("switch a workspace profile and confirm cloud transfer per message", async 
   await page.screenshot({ path: info.outputPath("profiles-1366.png") });
 
   await page.getByRole("link", { name: "对话", exact: true }).click();
-  await expect(page.getByText("云端回答", { exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "回答模型", exact: true }).locator("option:checked")).toHaveText(/^自动 · fixture-cloud/);
   const draft = page.getByRole("textbox", { name: "你的问题" });
   await draft.fill("只发送本题");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
@@ -180,4 +181,215 @@ test("switch a workspace profile and confirm cloud transfer per message", async 
   await page.screenshot({ path: info.outputPath("bailian-chat-consent.png") });
   await dialog.getByRole("button", { name: "确认发送", exact: true }).click();
   await expect(draft).toHaveValue("");
+});
+
+test("choose a verified cloud model from chat while Ollama is offline", async ({ page }, info) => {
+  const target = { kind: "cloud", connectionId: "cloud", model: "verified-chat" };
+  const updatedAt = "2026-11-24T00:00:00Z";
+  const connectionName = "云端验收连接";
+  const browserErrors: string[] = [];
+  page.on("pageerror", error => browserErrors.push(error.message));
+  await page.addInitScript(({ target, updatedAt, connectionName }) => {
+    type Request = {
+      workspaceId: string;
+      conversationId: string;
+      generationTarget?: typeof target;
+      cloudConsent?: object;
+      contextSelection?: unknown[];
+      content?: string;
+      runId?: string;
+      onPreparing?: { onmessage: (message: object) => void };
+      onUpdate?: { onmessage: (message: object) => void };
+    };
+    const conversations = [
+      { id: "first", workspaceId: "w", title: "原会话", autoRetrieval: false, updatedAt },
+      { id: "next", workspaceId: "w", title: "另一会话", autoRetrieval: false, updatedAt },
+      { id: "isolated", workspaceId: "other", title: "隔离会话", autoRetrieval: false, updatedAt },
+    ];
+    const activity = { sends: [] as object[], cancels: [] as object[], unexpected: [] as string[] };
+    let finishPreparation: (() => void) | undefined;
+    const messages: object[] = [];
+    Object.assign(window, {
+      isTauri: true,
+      modelChoiceActivity: activity,
+      __TAURI_EVENT_PLUGIN_INTERNALS__: { unregisterListener() {} },
+      __TAURI_INTERNALS__: {
+        metadata: { currentWindow: { label: "main" } },
+        transformCallback: () => 1,
+        unregisterCallback() {},
+        invoke: async (command: string, args: Request) => {
+          if (command.startsWith("plugin:")) return 1;
+          if (command === "restore_on_start") return { phase: "idle" };
+          if (command === "bootstrap") return {
+            workspaces: [{ id: "w", name: "选模验收" }, { id: "other", name: "隔离工作区" }],
+            settings: { model: "offline-local", numCtx: 4096, numPredict: 512, temperature: .3, timeoutSeconds: 180 },
+            activeRun: null,
+          };
+          if (command === "check_ollama") throw Error("模拟 Ollama 离线");
+          if (command === "list_conversations") return conversations.filter(item => item.workspaceId === args.workspaceId);
+          if (command === "load_messages") return args.workspaceId === "w" && args.conversationId === "next" ? messages : [];
+          if (command === "list_memory_candidates") return [];
+          if (command === "read_web_search_status") return { configured: false };
+          if (command === "model_cloud_privacy_rules") return { syncMemoryAndHistory: false };
+          if (command === "get_run") return null;
+          if (command === "rag_index_status") return { index: null };
+          if (command === "list_runtime_cloud_connections") return args.workspaceId === "w" ? [{
+            id: target.connectionId, label: connectionName, provider: "compatible", address: "https://mock.example",
+            credentialAvailable: true,
+            probes: [
+              { model: target.model, capability: "generation", state: "verified" },
+              { model: "unverified-chat", capability: "generation", state: "failed" },
+              { model: "embed-only", capability: "embedding", state: "verified" },
+            ],
+          }] : [];
+          if (command === "list_model_cloud_knowledge") return { grants: [] };
+          if (command === "chat_runtime_route") {
+            const selected = args.workspaceId === "w" && args.generationTarget?.connectionId === target.connectionId &&
+              args.generationTarget?.kind === target.kind && args.generationTarget?.model === target.model;
+            if (args.generationTarget && !selected) activity.unexpected.push("Unexpected route target");
+            return {
+              profile: selected ? {
+                id: "manual-generation", updatedAt, name: "手动选择回答模型", mode: "cloud",
+                generation: target, embedding: { kind: "off" }, reranking: { kind: "off" },
+              } : null,
+              localBackup: null,
+              decision: { task: "question", reason: selected ? "manual_generation" : "default" },
+            };
+          }
+          if (command === "start_chat") {
+            const { workspaceId, conversationId, generationTarget, cloudConsent, content, contextSelection } = args;
+            activity.sends.push({ workspaceId, conversationId, generationTarget, cloudConsent, content, contextSelection });
+            const run = { id: "fixture-run", workspaceId, conversationId, assistantMessageId: "fixture-answer", modelId: target.model, status: "running" };
+            if (content === "准备后停止") {
+              args.onPreparing?.onmessage({ id: run.id, workspaceId, conversationId });
+              await new Promise<void>(resolve => { finishPreparation = resolve; });
+              throw Error("已停止查找");
+            }
+            if (content === "准备时失败") throw Error("模拟准备失败");
+            const answer = "模拟云端回答已完成。";
+            messages.push({
+              id: run.assistantMessageId, workspaceId, conversationId, role: "assistant", content: answer,
+              status: "completed", modelRunId: run.id, finishReason: "stop", createdAt: updatedAt,
+            });
+            args.onUpdate?.onmessage({
+              runId: run.id, messageId: run.assistantMessageId, workspaceId, conversationId, seq: 1,
+              content: answer, status: "completed", errorMessage: null,
+            });
+            return run;
+          }
+          if (command === "cancel_run" && finishPreparation) {
+            activity.cancels.push({ workspaceId: args.workspaceId, runId: args.runId });
+            finishPreparation();
+            finishPreparation = undefined;
+            return;
+          }
+          activity.unexpected.push(command);
+          throw Error("Unexpected mock command " + command);
+        },
+      },
+    });
+  }, { target, updatedAt, connectionName });
+
+  const activity = () => page.evaluate(() => (window as unknown as {
+    modelChoiceActivity: { sends: unknown[]; cancels: unknown[]; unexpected: string[] };
+  }).modelChoiceActivity);
+  const choice = page.getByRole("combobox", { name: "回答模型", exact: true });
+  const send = page.getByRole("button", { name: "发送消息", exact: true });
+  const draft = page.getByRole("textbox", { name: "你的问题", exact: true });
+  const dialog = page.getByRole("dialog", { name: "确认发送到云端", exact: true });
+  const pickCloud = () => choice.selectOption({ label: target.model + " · " + connectionName });
+  const pickAutomatic = () => choice.selectOption({ index: 0 });
+  const openConversation = (workspace: string, conversation: string) =>
+    page.evaluate(([w, c]) => { location.hash = `/chat?workspace=${w}&conversation=${c}`; }, [workspace, conversation]);
+
+  await page.goto("/#/chat?workspace=w&conversation=first");
+  await expect(choice.locator("option:checked")).toHaveText(/自动/);
+  await expect(choice.getByRole("option")).toHaveText([/自动/, target.model + " · " + connectionName]);
+  await draft.fill("准备后停止");
+  await expect(send).toBeDisabled();
+  await pickCloud();
+  await expect(send).toBeEnabled();
+  for (const theme of ["light", "dark"]) {
+    await page.getByRole("combobox", { name: "外观", exact: true }).selectOption(theme);
+    await expect(page.locator("html")).toHaveAttribute("data-color-scheme", theme);
+    for (const [width, height] of [[1366, 768], [1600, 900], [1920, 1080]]) {
+      await page.setViewportSize({ width, height });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: info.outputPath(`chat-model-choice-${theme}-${width}.png`) });
+      await send.click();
+      await expect(dialog.getByText(/verified-chat.*https:\/\/mock\.example/)).toBeVisible();
+      await page.screenshot({ path: info.outputPath(`chat-model-consent-${theme}-${width}.png`) });
+      await dialog.getByRole("button", { name: "取消", exact: true }).click();
+      await expect(dialog).toBeHidden();
+    }
+  }
+  expect((await activity()).sends).toEqual([]);
+  await expect(draft).toHaveValue("准备后停止");
+  await send.click();
+  await dialog.getByRole("button", { name: "确认发送", exact: true }).click();
+  const stop = page.getByRole("button", { name: "停止查找", exact: true });
+  await expect(stop).toBeVisible();
+  await expect(choice).toBeDisabled();
+  await page.screenshot({ path: info.outputPath("chat-model-preparing.png") });
+  await stop.click();
+  await expect(draft).toHaveValue("准备后停止");
+  await expect(send).toBeEnabled();
+  await pickAutomatic();
+  await expect(send).toBeDisabled();
+
+  await pickCloud();
+  await draft.fill("准备时失败");
+  await send.click();
+  await dialog.getByRole("button", { name: "确认发送", exact: true }).click();
+  await expect(page.getByText("模拟准备失败", { exact: true }).first()).toBeVisible();
+  await expect(draft).toHaveValue("准备时失败");
+  await page.screenshot({ path: info.outputPath("chat-model-failure.png") });
+  await pickAutomatic();
+  await expect(send).toBeDisabled();
+
+  await pickCloud();
+  await send.click();
+  await expect(dialog).toBeVisible();
+  await openConversation("w", "next");
+  await expect(page.locator(".conversation-title")).toHaveText("另一会话");
+  await dialog.getByRole("button", { name: "确认发送", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  expect((await activity()).sends).toHaveLength(2);
+  await expect(choice.locator("option:checked")).toHaveText(target.model + " · " + connectionName);
+  await draft.fill("普通云端问答");
+  await send.click();
+  await dialog.getByRole("button", { name: "确认发送", exact: true }).click();
+  await expect(page.getByText("模拟云端回答已完成。", { exact: true })).toBeVisible();
+  await expect(draft).toHaveValue("");
+  await page.screenshot({ path: info.outputPath("chat-model-cloud-answer.png") });
+
+  await openConversation("other", "isolated");
+  await expect(page.getByRole("banner").getByText("隔离工作区", { exact: true })).toBeVisible();
+  await expect(choice.getByRole("option")).toHaveText([/自动/]);
+  await draft.fill("隔离工作区草稿");
+  await expect(send).toBeDisabled();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: info.outputPath("chat-model-offline-narrow.png") });
+  await openConversation("w", "first");
+  await expect(choice.locator("option:checked")).toHaveText(target.model + " · " + connectionName);
+  await expect(draft).toHaveValue("准备时失败");
+  await expect(send).toBeEnabled();
+  await pickAutomatic();
+  await expect(send).toBeDisabled();
+  expect(await activity()).toEqual({
+    sends: [
+      ["first", "准备后停止"],
+      ["first", "准备时失败"],
+      ["next", "普通云端问答"],
+    ].map(([conversationId, content]) => ({
+      workspaceId: "w", conversationId, content, generationTarget: target, contextSelection: [],
+      cloudConsent: {
+        profileId: "manual-generation", updatedAt, shareSelection: false, grantedVersions: [], rankingVersions: [],
+      },
+    })),
+    cancels: [{ workspaceId: "w", runId: "fixture-run" }],
+    unexpected: [],
+  });
+  expect(browserErrors).toEqual([]);
 });

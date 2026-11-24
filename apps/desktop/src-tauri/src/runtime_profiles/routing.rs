@@ -88,6 +88,78 @@ pub(crate) struct Selection {
     pub(crate) local_backup: Option<String>,
 }
 
+pub(crate) fn select_generation(
+    c: &Connection,
+    workspace: &str,
+    knowledge: bool,
+    settings: &ModelSettings,
+    generation: Option<Target>,
+) -> AppResult<Selection> {
+    let Some(generation) = generation else {
+        return select(c, workspace, knowledge, settings);
+    };
+    require_workspace(c, workspace)?;
+    if matches!(generation, Target::Off | Target::Local { model: None }) {
+        return Err("请选择有效的回答模型。".into());
+    }
+    let automatic = select(c, workspace, knowledge, settings)?;
+    let inherited_id = automatic.profile.as_ref().map(|profile| profile.id.clone());
+    let mut profile = automatic.profile.unwrap_or_else(|| {
+        let mut defaults = Profile::default_local();
+        if matches!(generation, Target::Cloud { .. }) {
+            defaults.input.embedding = Target::Off;
+            defaults.input.reranking = Target::Off;
+        }
+        defaults
+    });
+    profile.id = "manual-generation".into();
+    profile.input.name = "手动选择回答模型".into();
+    profile.input.generation = generation;
+    let targets = profile.input.targets();
+    let uses_cloud = targets.iter().any(|(target, _)| matches!(target, Target::Cloud { .. }));
+    let uses_local = targets.iter().any(|(target, _)| matches!(target, Target::Local { .. }));
+    profile.input.mode = match (uses_cloud, uses_local) {
+        (true, true) => super::Mode::Hybrid,
+        (true, false) => super::Mode::Cloud,
+        _ => super::Mode::Local,
+    };
+    profile.input.validate()?;
+    let mut destinations = Vec::new();
+    for (target, capability) in profile.input.targets() {
+        if let Target::Cloud { connection_id, model } = target {
+            let connection = runtime_connections::get(c, workspace, connection_id)?;
+            if capability == Capability::Generation {
+                if !connection.can_generate(model) {
+                    return Err("所选云端连接凭据无效或不支持该生成模型。".into());
+                }
+                let checked = connection
+                    .verified_capability(model, capability)
+                    .map(|p| p.checked_at.as_str())
+                    .unwrap_or("unprobed");
+                destinations.push(json!([connection.provider, connection.display_destination(), checked]));
+            } else {
+                let probe = connection
+                    .verified_capability(model, capability)
+                    .ok_or("请先在云端模型设置中验证所选模型的对应能力。")?;
+                destinations.push(json!([connection.provider, connection.display_destination(), probe.checked_at]));
+            }
+        }
+    }
+    let snapshot = serde_json::to_vec(&(workspace, &profile, destinations)).map_err(json_error)?;
+    profile.updated_at = crate::benchmark::dataset::hash(&snapshot);
+    Ok(Selection {
+        decision: json!({
+            "task":if knowledge {"knowledge"} else {"question"},
+            "reason":"manual_generation", "preference":automatic.decision["preference"],
+            "preferredProfileId":automatic.decision["preferredProfileId"],
+            "preferredEstimatedMicros":null, "alternative":null,
+            "selectedProfileId":inherited_id,
+        }),
+        profile: Some(profile),
+        local_backup: None,
+    })
+}
+
 pub(crate) fn select(
     c: &Connection,
     workspace: &str,
@@ -219,12 +291,13 @@ pub async fn chat_runtime_route(
     state: State<'_, AppState>,
     workspace_id: String,
     knowledge: bool,
+    generation_target: Option<Target>,
 ) -> AppResult<Selection> {
     blocking(state.database.clone()?, move |db| {
         let settings = db.settings()?;
         let c = db.connection()?;
         require_workspace(&c, &workspace_id)?;
-        select(&c, &workspace_id, knowledge, &settings)
+        select_generation(&c, &workspace_id, knowledge, &settings, generation_target)
     })
     .await
 }
@@ -264,7 +337,7 @@ mod tests {
                 name: "本机".into(),
                 mode: Mode::Local,
                 generation: Target::Local { model: None },
-                embedding: Target::Off,
+                embedding: Target::Local { model: Some("vectors:latest".into()) },
                 reranking: Target::Off,
             },
         };
@@ -358,5 +431,25 @@ mod tests {
         assert_eq!(economy.decision["reason"], "lower_estimated_cost");
         assert_eq!(economy.decision["preferredEstimatedMicros"], 35);
         assert_eq!(economy.local_backup.as_deref(), Some("backup"));
+
+        let cloud_generation = Target::Cloud {
+            connection_id: cloud.connection.id.clone(),
+            model: "remote".into(),
+        };
+        let manual = select_generation(&c, &ws, true, &settings, Some(cloud_generation.clone()))
+            .unwrap();
+        let model = manual.profile.unwrap();
+        assert_eq!(model.id, "manual-generation");
+        assert!(matches!(model.input.generation, Target::Cloud { .. }));
+        assert!(matches!(model.input.mode, Mode::Hybrid));
+        assert!(matches!(model.input.embedding, Target::Local { model: Some(name) } if name == "vectors:latest"));
+        assert_eq!(manual.decision["reason"], "manual_generation");
+        assert!(manual.local_backup.is_none());
+        assert!(select_generation(&c, &other, true, &settings, Some(cloud_generation)).is_err());
+        let local = select_generation(&c, &ws, true, &settings, Some(Target::Local {
+            model: Some("installed:latest".into()),
+        })).unwrap();
+        assert!(matches!(local.profile.unwrap().input.generation, Target::Local { model: Some(name) } if name == "installed:latest"));
+        assert!(local.local_backup.is_none());
     }
 }

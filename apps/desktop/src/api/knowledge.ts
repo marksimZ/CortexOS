@@ -1,8 +1,3 @@
-import type { ExecutionData } from "../execution-data";
-import type {
-  SavedKnowledgeScope,
-  ScopeMember,
-} from "../components/KnowledgeBranchForm";
 import type { GraphData, GraphEdge, GraphNode, Point } from "../graph-data";
 import type { GraphNodePage, HistoryPage, RelationPage } from "../graph-query";
 import type { KnowledgeDetail, KnowledgeNode } from "../knowledge-types";
@@ -12,13 +7,12 @@ import type {
   SourceDocument,
   SourceRef,
 } from "../SourceBrowser";
-import type { ContextSelection, RunSummary } from "../studio";
+import type { RunSummary } from "../studio";
 import { createClient, type Command, type WorkspaceArgs } from "./request";
 
 type NodeArgs = WorkspaceArgs & { nodeId: string };
 type SourceArgs = WorkspaceArgs & { sourceId: string };
 type TicketArgs = WorkspaceArgs & { ticket: string };
-type RunArgs = WorkspaceArgs & { runId: string };
 type SaveKnowledge = {
   input: WorkspaceArgs & {
     nodeId: string | null;
@@ -45,21 +39,14 @@ export const knowledge = createClient<{
   save_knowledge: Command<SaveKnowledge, string>;
   save_source_knowledge: Command<SaveKnowledge & { source: SourceRef }, string>;
   approve_knowledge: Command<NodeArgs & { expectedRevision: number }, void>;
-  list_knowledge_snapshot_members: Command<
-    WorkspaceArgs & { snapshotId: string },
-    ScopeMember[]
-  >;
-  create_knowledge_branch: Command<
-    WorkspaceArgs & {
-      baseSnapshotId: string;
-      name: string;
-      overrides: ContextSelection[];
-    },
-    SavedKnowledgeScope
-  >;
+  set_knowledge_local_only: Command<NodeArgs & { localOnly: boolean }, void>;
   list_sources: Command<WorkspaceArgs, SourceDocument[]>;
   get_source: Command<SourceArgs & { version: number }, Snapshot>;
   choose_source: Command<WorkspaceArgs, Preview | null>;
+  import_source_folder: Command<
+    WorkspaceArgs,
+    { folder: string; imported: number; updated: number; unchanged: number; skipped: number } | null
+  >;
   commit_source: Command<TicketArgs, SourceDocument>;
   discard_source: Command<TicketArgs, void>;
   revoke_source: Command<SourceArgs & { expectedRevision: number }, void>;
@@ -113,6 +100,4 @@ export const knowledge = createClient<{
     string
   >;
   list_runs: Command<WorkspaceArgs & { offset?: number }, RunSummary[]>;
-  load_execution_graph: Command<RunArgs, ExecutionData>;
-  save_execution_view: Command<{ input: RunArgs & ViewArgs }, number>;
 }>();

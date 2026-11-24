@@ -1,5 +1,13 @@
 # 里程碑记录
 
+## 2026-11-24 专属个人 AI 演进（Step 0 拆库 + Phase 1–3）
+
+- **评测独立拆库**：先将基线改动归档提交 `c56f10e`，经由本机 Codex 在 `marksimZ` 账号下创建公开仓库 `CortexOS-Bench`，完整校验推送 26 个分支与 2 个标签并克隆至 `D:\vibecoding\CortexOS-Bench`；原 `origin` 保持不变。
+- **Phase 1（瘦身、云地贯通、资料直连）**：主导航收敛为「对话 / 知识 / 图谱 / 设置」四栏，移除前端 `src/benchmark/`、3D 执行轨迹图、7 节点演示切换器及快照/实验分支选择器。Schema 30 增加 `knowledge_local_only` 单条“仅限本地”隐私锁与工作区常驻同步策略 `syncMemoryAndHistory`（默认开启）；云端对话支持 OpenAI 兼容 SSE 流式输出、多轮历史、工作区个人助手指令与聊天栏直接切换本机/云端模型；仅在发消息所用模型与上一轮不同时在对话流插入行内切换提示条。用户手动录入知识与导入文档默认直接生效并同步 FTS5 检索。
+- **Phase 2（双层记忆与进化闭环）**：Schema 31 新增 `global_persona`、`memory_candidates`、`conversation_summaries`。全局「关于我」画像与跨会话近期情景摘要在本地及开启同步的云端对话中统一注入；每轮完成后零显存开销提炼偏好、长期规则与项目事实，在对话页与知识页提供待确认记忆收件箱（一键记住 / 编辑 / 忽略），并在用户消息下方支持一键「沉淀为长期规则」。
+- **Phase 3（多格式同步、周报草稿与引导式人设）**：零新增依赖复用锁定 `zip` + `quick-xml` 支持 `.docx` 及常见代码/配置文件导入，新增授权文件夹增量同步 `import_source_folder`；任务中心新增近 7 天本地进展周报草稿生成器；「设置 → 我的助手」增加引导式角色分身预设与风格快捷标签。
+- **实测与未验证范围**：执行 `npm.cmd --prefix apps/desktop run build`、`node --experimental-strip-types --test apps/desktop/tests/unit/navigation.test.ts`、`cargo test --offline --locked --lib`（覆盖 Schema 31 全量迁移、记忆进化闭环、云端兼容路由与隐私校验）及 `cargo build --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`，均通过。未运行真实本地/云端模型推理及自动化 WebView2 截图回归。
+
 ## 2026-11-24 国内云端模型预设
 
 - 工作区的“设置 → 云端模型”新增 DeepSeek 官方、阿里云百炼（北京）和硅基流动。复用已有兼容协议、按连接绑定的 Windows 凭据与模型用途验证。切换服务商清空已输入的密钥。运行方案与聊天显示连接、预设和模型，每次发送沿用云端授权范围。配置按既有格式保存，无数据库迁移。

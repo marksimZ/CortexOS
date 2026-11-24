@@ -73,6 +73,7 @@ pub struct Message {
     pub content: String,
     pub status: String,
     pub model_run_id: Option<String>,
+    pub model_id: Option<String>,
     pub created_at: String,
     pub finish_reason: Option<String>,
     pub citations: Option<serde_json::Value>,

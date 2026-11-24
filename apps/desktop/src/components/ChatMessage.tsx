@@ -1,9 +1,10 @@
-import { BookOpen, Check, Code2, Copy, GitBranch } from "lucide-react";
+import { BookOpen, Check, Code2, Copy, Sparkles } from "lucide-react";
 import { memo, useCallback, useState, useSyncExternalStore } from "react";
+import { memoryApi } from "../api/memory";
 import type { ChatStream } from "../chat-stream";
-import { navigate } from "../navigation";
 import type { Message } from "../studio";
 import { AnswerContent } from "./AnswerContent";
+import { notify } from "./Toast";
 const statusNames: Record<string, string> = {
   streaming: "生成中",
   completed: "已完成",
@@ -55,7 +56,7 @@ export const ChatMessage = memo(function ChatMessage({
       aria-label={message.role === "user" ? "你的问题" : "模型回答"}
     >
       <div className="message-heading">
-        <strong>{message.role === "user" ? "你" : "本地助手"}</strong>
+        <strong>{message.role === "user" ? "你" : "专属助手"}</strong>
         {message.role === "assistant" && (
           <span
             className={`message-status ${message.finishReason === "length" ? "limited" : message.status}`}
@@ -79,6 +80,21 @@ export const ChatMessage = memo(function ChatMessage({
         <p className="output-limit-note">
           已达到长度上限，回答可能不完整。可在设置中增加“回答长度上限（Token）”后重试。
         </p>
+      )}
+      {message.role === "user" && message.content.trim().length >= 4 && message.content.trim().length <= 240 && (
+        <div className="message-actions">
+          <button
+            className="button text-button"
+            onClick={() => {
+              void memoryApi("promote_rule_from_chat", { rule: message.content.trim() })
+                .then(() => notify("已沉淀为全局长期规则，后续对话生效"))
+                .catch(reportError);
+            }}
+          >
+            <Sparkles size={14} aria-hidden="true" />
+            沉淀为长期规则
+          </button>
+        </div>
       )}
       {message.role === "assistant" && (
         <div className="message-actions">
@@ -143,27 +159,12 @@ export const ChatMessage = memo(function ChatMessage({
             保存为知识
           </button>
           {message.modelRunId && (
-            <>
-              <button
-                className="button text-button"
-                onClick={() => setSelectedRun(message.modelRunId)}
-              >
-                <GitBranch size={14} aria-hidden="true" />
-                执行过程
-              </button>
-              <button
-                className="button text-button"
-                onClick={() =>
-                  navigate("graph", {
-                    workspace: message.workspaceId,
-                    mode: "execution",
-                    run: message.modelRunId,
-                  })
-                }
-              >
-                3D 执行轨迹
-              </button>
-            </>
+            <button
+              className="button text-button"
+              onClick={() => setSelectedRun(message.modelRunId)}
+            >
+              参考依据
+            </button>
           )}
           {(["failed", "cancelled", "interrupted"].includes(message.status) ||
             message.finishReason === "length") && (

@@ -164,7 +164,8 @@ export function CognitiveInspector({
           <RetrievalInspection detail={detail} beforeLocate={() => dialog.current?.close()} showContext />
           {detail.contextManifest.modelRoute && <p>
             {detail.contextManifest.modelRoute.task === "knowledge" ? "知识问答" : "普通问答"}，
-            {detail.contextManifest.modelRoute.reason === "lower_estimated_cost" ? "采用估算费用较低的方案"
+            {detail.contextManifest.modelRoute.reason === "manual_generation" ? "使用对话输入框选定的模型"
+              : detail.contextManifest.modelRoute.reason === "lower_estimated_cost" ? "采用估算费用较低的方案"
               : detail.contextManifest.modelRoute.reason === "prices_unavailable" ? "费率未知，使用首选方案"
               : detail.contextManifest.modelRoute.reason === "workspace_default" ? "使用工作区当前方案" : "使用该任务的首选方案"}
           </p>}

@@ -56,6 +56,7 @@ pub(crate) fn relations(
     roots: Option<&[String]>,
     relation: Option<&str>,
     limit: usize,
+    exclude_local_only: bool,
 ) -> AppResult<(Vec<Relation>, bool)> {
     if roots.is_some_and(<[String]>::is_empty) {
         return Ok((Vec::new(), false));
@@ -94,6 +95,8 @@ pub(crate) fn relations(
          LEFT JOIN seeds fa ON fa.node=e.from_node_id LEFT JOIN seeds fb ON fb.node=e.to_node_id
          WHERE e.active=1 AND (?5 IS NULL OR e.relation=?5)
             AND (?2 IS NULL OR fa.ordinal IS NOT NULL OR fb.ordinal IS NOT NULL)
+            AND (NOT ?7 OR NOT EXISTS(SELECT 1 FROM knowledge_local_only p
+                 WHERE p.workspace_id=?1 AND p.node_id IN (a.node_id,b.node_id) AND p.local_only=1))
          ORDER BY MIN(COALESCE(fa.ordinal,9999),COALESCE(fb.ordinal,9999)),e.edge_id LIMIT ?6"
     ).map_err(error)?;
     let mut rows = statement
@@ -104,7 +107,8 @@ pub(crate) fn relations(
                 vertices,
                 snapshot,
                 relation,
-                (limit + 1) as i64
+                (limit + 1) as i64,
+                exclude_local_only,
             ],
             |row| {
                 let endpoint = |col: usize| -> rusqlite::Result<Node> {
@@ -215,6 +219,7 @@ pub(crate) fn expand(
     scope: Option<&Resolved>,
     manual: &[Value],
     report: &mut Value,
+    exclude_local_only: bool,
 ) -> AppResult<Trail> {
     let terms = keywords(report);
     let direct = report["candidates"].as_array_mut().unwrap();
@@ -258,7 +263,7 @@ pub(crate) fn expand(
             break;
         }
         let (mut edges, capped) =
-            relations(c, workspace, scope, Some(&ids), None, EDGE_LIMIT_PER_HOP)?;
+            relations(c, workspace, scope, Some(&ids), None, EDGE_LIMIT_PER_HOP, exclude_local_only)?;
         trail.truncated |= capped;
         // Prefer routes that can continue when a node also has a terminal conflict edge.
         edges.sort_by_key(|edge| edge.relation == "contradicts");
@@ -384,7 +389,7 @@ pub(crate) fn cluster_overview(
     workspace: &str,
     scope: Option<&Resolved>,
 ) -> AppResult<Value> {
-    let (edges, edges_capped) = relations(c, workspace, scope, None, None, CLUSTER_EDGE_LIMIT)?;
+    let (edges, edges_capped) = relations(c, workspace, scope, None, None, CLUSTER_EDGE_LIMIT, false)?;
     let mut nodes = BTreeMap::<&str, (&Node, Vec<usize>)>::new();
     for (i, edge) in edges.iter().enumerate() {
         for point in [&edge.from, &edge.to] {

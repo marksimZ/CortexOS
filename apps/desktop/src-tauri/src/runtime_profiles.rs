@@ -79,6 +79,18 @@ pub(crate) struct CloudConsent {
     pub(crate) ranking_versions: Vec<ContextSelection>,
 }
 
+impl CloudConsent {
+    pub(crate) fn implicit(profile: &Profile) -> Self {
+        Self {
+            profile_id: profile.id.clone(),
+            updated_at: profile.updated_at.clone(),
+            share_selection: true,
+            granted_versions: vec![],
+            ranking_versions: vec![],
+        }
+    }
+}
+
 impl Target {
     pub(crate) fn resolve_cloud(
         &self,

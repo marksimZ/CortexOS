@@ -46,22 +46,10 @@ function taskLink(workspace: string | null, kind: string, record?: TaskRecord) {
       ? navigationHash("chat", { workspace, conversation: record.conversation, message: record.message })
       : navigationHash("chat", { workspace });
   }
-  if (kind === "standard" || kind === "personalized_batch") {
-    return navigationHash("benchmark", { workspace, view: kind === "personalized_batch" ? "personalized" : undefined, batch: record?.id });
-  }
-  if (kind === "personalized_generation") {
-    return navigationHash("benchmark", { workspace, view: "personalized", job: record?.id });
-  }
-  if (kind === "rag") return navigationHash("benchmark", { workspace, view: "rag", tab: "models", experiment: record?.id });
-  if (kind.startsWith("harness_")) {
-    const experiment = kind === "harness_experiment";
-    return navigationHash("benchmark", { workspace, view: "harness", assessment: record?.assessment,
-      step: experiment ? "experiments" : "tasks", experiment: experiment ? record?.id : undefined });
-  }
   if (kind === "rag_index" || kind === "local_maintenance") {
     return navigationHash("settings", { section: kind === "rag_index" ? "model" : "data" });
   }
-  return navigationHash("benchmark", { workspace });
+  return navigationHash("chat", { workspace });
 }
 
 function stopAction(task: LiveTask, kind: string) {
@@ -177,8 +165,7 @@ export function TaskList({ workspaceId, workspaceName, close }: {
           </li>
         ))}</ul>}
       {workspaceId && <div className="task-actions task-history-links">
-        <a className="button text-button" href={navigationHash("graph", { workspace: workspaceId, mode: "execution" })} onClick={close}>对话记录</a>
-        <a className="button text-button" href={navigationHash("benchmark", { workspace: workspaceId, tab: "history" })} onClick={close}>标准评测历史</a>
+        <a className="button text-button" href={navigationHash("chat", { workspace: workspaceId })} onClick={close}>返回对话</a>
       </div>}
       <a className="button text-button" href={navigationHash("settings", { section: "data" })} onClick={close}>备份与恢复记录</a>
     </section>

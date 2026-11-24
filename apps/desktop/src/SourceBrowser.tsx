@@ -3,7 +3,7 @@ import { AppDialog, openDialog } from "./components/AppDialog";
 import { SelectMenu } from "./components/SelectMenu";
 import { useEffect, useRef, useState } from "react";
 import { notify } from "./components/Toast";
-import { FileText, Plus, X } from "lucide-react";
+import { FileText, FolderSync, Plus, X } from "lucide-react";
 import { errorText } from "./studio";
 import type { EditKnowledge } from "./knowledge-types";
 import { FileName } from "./components/FileName";
@@ -176,6 +176,24 @@ export function SourceBrowser({
               setReaderCollapsed(false);
               requestAnimationFrame(() => splitRoot.current?.querySelector<HTMLElement>('[role="separator"]')?.focus());
             }}>显示文件预览</button>}
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={() =>
+                void perform(async () => {
+                  const report = await knowledge("import_source_folder", {
+                    workspaceId: workspace,
+                  });
+                  if (report && live.current) {
+                    await refresh();
+                    notify(`同步完成：新增 ${report.imported}、更新 ${report.updated}、未变 ${report.unchanged}`);
+                  }
+                })
+              }
+            >
+              <FolderSync size={16} />
+              同步文件夹
+            </button>
             <button
               className="button secondary"
               disabled={busy}

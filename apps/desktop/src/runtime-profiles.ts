@@ -9,6 +9,9 @@ export type Target =
   | { kind: "off" }
   | { kind: "local"; model: string | null }
   | { kind: "cloud"; connectionId: string; model: string };
+export type GenerationTarget =
+  | { kind: "local"; model: string }
+  | Extract<Target, { kind: "cloud" }>;
 export type ProfileInput = { name: string; mode: RuntimeMode } & Record<RuntimeRole, Target>;
 export type Profile = ProfileInput & { id: string; updatedAt: string };
 export type Profiles = { activeId: string | null; profiles: Profile[] };
@@ -23,6 +26,9 @@ export type RuntimeConnection = {
   label: string;
   provider: string;
   address: string | null;
+  credentialAvailable?: boolean;
+  catalogState?: string;
+  models?: { id: string; generation?: string }[];
   probes: { model: string; capability: RuntimeRole; state: string }[];
 };
 export function cloudConnectionLabel(connection: RuntimeConnection): string {
@@ -51,4 +57,5 @@ export type CloudDraft = {
   profile: Profile;
   disclosure: CloudDisclosure;
   knowledgeRoute: boolean;
+  generationTarget?: GenerationTarget;
 };

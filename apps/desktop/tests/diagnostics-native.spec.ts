@@ -65,7 +65,7 @@ test("native diagnostics export only known fields", async ({}, info) => {
     await page.getByRole("button", { name: "关于", exact: true }).click();
     const panel = page.getByRole("region", { name: "本机诊断" });
     await panel.getByRole("button", { name: "检查运行状态" }).click();
-    await expect(panel.getByText("结构版本 29")).toBeVisible();
+    await expect(panel.getByText("结构版本 32")).toBeVisible();
     await panel.getByText("最近错误（24 小时）", { exact: true }).click();
     await expect(panel.getByText("云端请求 密钥无效（1）")).toBeVisible();
     await expect(panel.getByText("稍后手动重试。")).toHaveCount(2);
@@ -74,7 +74,7 @@ test("native diagnostics export only known fields", async ({}, info) => {
     online = false;
     await expect(nativeInvoke<DiagnosticsReport>(page, "read_diagnostics")).resolves.toMatchObject({
       backend: "available", ollama: "unavailable", queue: { queued: 0, running: 0, cancelling: 0 },
-      database: { schemaVersion: 29, cloudConnections: [{ provider: "openai", status: "verified", count: 1 }] },
+      database: { schemaVersion: 32, cloudConnections: [{ provider: "openai", status: "verified", count: 1 }] },
     });
     const output = info.outputPath("diagnostics.json");
     await panel.getByRole("button", { name: "导出诊断报告…" }).click();

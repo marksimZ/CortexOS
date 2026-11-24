@@ -1,7 +1,4 @@
 import {
-  Box,
-  ChevronDown,
-  Cloud,
   Eye,
   Globe,
   HardDrive,
@@ -14,14 +11,21 @@ import { MarkdownContent } from "./MarkdownContent";
 import { ContextPicker } from "../ContextPicker";
 import { navigationHash } from "../navigation";
 import { webSearchProviderLabel, type WebSearchProvider } from "../api/web-search";
+import { cloudPresetForAddress } from "../cloud-presets";
 import { SelectMenu } from "./SelectMenu";
 import type { Studio } from "../studio";
+import { cloudConnectionLabel, type GenerationTarget, type RuntimeConnection } from "../runtime-profiles";
 export function ChatComposer({
   studio,
-  modelReady,
   modelName,
+  generationTarget,
+  chooseGeneration,
+  connections,
+  modelError,
+  retryModels,
   cloudAnswer,
   cloudLookup,
+  cloudSyncDefault,
   currentRunning,
   preparing,
   cancelling,
@@ -36,10 +40,15 @@ export function ChatComposer({
   send,
 }: {
   studio: Studio;
-  modelReady: boolean | undefined;
   modelName: string;
+  generationTarget?: GenerationTarget;
+  chooseGeneration: (target?: GenerationTarget) => void;
+  connections: RuntimeConnection[];
+  modelError?: string;
+  retryModels: () => void;
   cloudAnswer: boolean;
   cloudLookup: boolean;
+  cloudSyncDefault: boolean;
   currentRunning: boolean;
   preparing: boolean;
   cancelling: boolean;
@@ -60,6 +69,35 @@ export function ChatComposer({
     ? (searchChoice?.workspace === studio.workspaceId ? searchChoice?.provider : undefined) ?? "brave"
     : "news";
   const scope = `${studio.workspaceId}:${studio.conversationId}`;
+  const selectedModel = generationTarget ? JSON.stringify(generationTarget) : "";
+  const localModels = studio.health?.models.map(({ name }) => {
+    const target: GenerationTarget = { kind: "local", model: name };
+    return { target, label: name, key: JSON.stringify(target) };
+  }) ?? [];
+  const cloudModels = connections.flatMap(connection => {
+    if (connection.credentialAvailable === false || connection.catalogState === "invalid_credential") return [];
+    const seen = new Set<string>();
+    const items: { target: GenerationTarget; label: string; key: string }[] = [];
+    const connLabel = cloudConnectionLabel(connection);
+    const pushModel = (model: string) => {
+      if (!model || seen.has(model)) return;
+      seen.add(model);
+      const target: GenerationTarget = { kind: "cloud", connectionId: connection.id, model };
+      items.push({ target, label: model + " · " + connLabel, key: JSON.stringify(target) });
+    };
+    for (const probe of connection.probes) {
+      if (probe.capability === "generation" && probe.state === "verified") pushModel(probe.model);
+    }
+    for (const item of connection.models ?? []) {
+      if (item.generation !== "unsupported") pushModel(item.id);
+    }
+    if (items.length === 0) {
+      const preset = connection.provider === "compatible" ? cloudPresetForAddress(connection.address) : undefined;
+      for (const fallback of preset?.defaultModels ?? []) pushModel(fallback);
+    }
+    return items;
+  });
+  const options = [...localModels, ...cloudModels];
   const preview = previewKey === scope;
   const textarea = useRef<HTMLTextAreaElement>(null);
   const previewArea = useRef<HTMLDivElement>(null);
@@ -122,15 +160,25 @@ export function ChatComposer({
           </div>
         )}
         <div className="composer-toolbar">
-          <a
-            className="composer-model"
-            href={navigationHash("settings", { workspace: studio.workspaceId, section: cloudAnswer || cloudLookup ? "profiles" : "model" })}
-            title={modelReady ? "打开模型设置" : "模型尚未就绪，打开设置"}
-          >
-            {cloudAnswer || cloudLookup ? <Cloud size={17} aria-hidden="true" /> : <Box size={17} aria-hidden="true" />}
-            <span>{(cloudAnswer || cloudLookup) && <><strong>{cloudAnswer ? "云端回答" : "云端查找"}</strong>{" "}</>}{modelName}</span>
-            <ChevronDown size={14} aria-hidden="true" />
-          </a>
+          <div className="composer-model">
+            <SelectMenu
+              aria-label="回答模型"
+              title={modelName}
+              value={selectedModel}
+              disabled={!studio.desktop || !studio.workspaceId || !!studio.activeRun || currentRunning || studio.sending}
+              onChange={event => chooseGeneration(options.find(item => item.key === event.target.value)?.target)}
+            >
+              <option value="">{generationTarget ? "自动" : `自动 · ${modelName}`}</option>
+              {selectedModel && !options.some(item => item.key === selectedModel) &&
+                <option value={selectedModel} disabled>{generationTarget?.model}（不可用）</option>}
+              {cloudModels.length > 0 && <optgroup label="云端模型">
+                {cloudModels.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
+              </optgroup>}
+              {localModels.length > 0 && <optgroup label="本机模型">
+                {localModels.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
+              </optgroup>}
+            </SelectMenu>
+          </div>
           <div className="composer-actions">
             {studio.desktop && studio.workspaceId && <button
               type="button"
@@ -204,7 +252,7 @@ export function ChatComposer({
           <option value="news">{webSearchProviderLabel.news}</option>
           <option value="brave">{webSearchProviderLabel.brave}</option>
         </SelectMenu>}
-        {studio.desktop && studio.workspaceId && !cloudAnswer && (
+        {studio.desktop && studio.workspaceId && (!cloudAnswer || cloudSyncDefault) && (
           <label className="retrieval-switch">
             <input
               type="checkbox"
@@ -224,10 +272,12 @@ export function ChatComposer({
           </label>
         )}
         {!cloudAnswer && <span className="local-label"><HardDrive size={15} aria-hidden="true" />本地</span>}
+        {(cloudAnswer || cloudLookup) && <span>{cloudAnswer ? "云端回答" : "云端查找"}</span>}
         <ContextPicker
-          key={`${studio.workspaceId}:${studio.conversationId}`}
+          key={`${scope}:${selectedModel}`}
           studio={studio}
           cloudAnswer={cloudAnswer}
+          generationTarget={generationTarget}
         />
       </div>
       {studio.desktop && studio.workspaceId && !studio.draft && !currentRunning && !studio.sending &&
@@ -238,6 +288,10 @@ export function ChatComposer({
           }}>试试「十分钟后提醒我喝水」</button>
         )}
       {draftTooLong && <small className="form-error" id="message-length-error">问题超过输入上限。请缩短后再发送。</small>}
+      {modelError && <div className="composer-context">
+        <small className="form-error" role="status">{modelError}</small>
+        <button className="button text-button" type="button" onClick={retryModels}>重新读取模型</button>
+      </div>}
       {searchConfigured !== undefined && !!studio.draft.trim() && <small className="inline-help" id="web-query-disclosure">
         联网查询会将本题发送给{webSearchProviderLabel[provider]}。
       </small>}
@@ -252,8 +306,11 @@ export function ChatComposer({
           Enter 发送，Shift+Enter 换行。支持 Markdown 标题、列表、代码和表格，点击眼睛图标预览，返回编辑保留原文。
           可输入“十分钟后提醒我喝水”来创建提醒。
           可输入“每个工作日早上九点整理 AI 新闻”来创建定时简报。
-          {cloudAnswer ? "发送前可确认要传给云端的内容。" : "系统会在容量允许的范围内选取最近的完整对话，并查找当前工作区已确认的知识；不会直接搜索文件全文。请结合依据判断回答是否可靠。"}
+          {cloudAnswer
+            ? cloudSyncDefault ? "云端回答会按当前同步设置使用对话与记忆。自动查找知识可在此关闭。" : "发送前可确认要传给云端的内容。"
+            : "系统会在容量允许的范围内选取最近的完整对话，并查找当前工作区已确认的知识；不会直接搜索文件全文。请结合依据判断回答是否可靠。"}
         </p>
+        {studio.workspaceId && <a href={navigationHash("settings", { workspace: studio.workspaceId, section: cloudAnswer ? "profiles" : "model" })}>模型设置</a>}
         {!studio.desktop && <p>浏览器预览不会读取或保存本地数据。</p>}
       </details>
     </div>

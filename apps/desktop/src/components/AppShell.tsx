@@ -16,7 +16,7 @@ import { TaskCenter } from "./TaskCenter";
 import { WorkspaceHelp } from "./WorkspaceHelp";
 export const pages = [
   { id: "chat", label: "对话" }, { id: "knowledge", label: "知识" },
-  { id: "graph", label: "图谱" }, { id: "benchmark", label: "评测" }, { id: "settings", label: "设置" },
+  { id: "graph", label: "图谱" }, { id: "settings", label: "设置" },
 ] as const;
 function Brand() {
   return <a className="prototype-brand" href="#/chat" aria-label="CortexOS 首页">
@@ -89,7 +89,7 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
           if (narrow) { openDialog(drawer.current); setMobileOpen(true); } else setCollapsed(!collapsed);
         }}><PanelLeft size={18} /></button>
         {!narrow && navigation(false)}
-        <div className="topbar-title">{(narrow || page !== "settings") && <strong>{page === "chat" ? conversation?.title ?? "新的对话" : pages.find(item => item.id === page)?.label}</strong>}<span>{workspace?.name ?? "本地工作区"}</span></div>
+        {(narrow || page === "chat") && <div className="topbar-title" title={page === "chat" ? conversation?.title ?? "新的对话" : undefined}><strong>{page === "chat" ? conversation?.title ?? "新的对话" : pages.find(item => item.id === page)?.label}</strong></div>}
         {studio.desktop ? <WindowDragRegion onError={studio.reportError} /> : <span className="topbar-spacer" />}
         <ModelStatus studio={studio} />
         <button className="icon-button" type="button" aria-label="任务中心" title="任务中心" aria-haspopup="dialog" onClick={() => {

@@ -7,7 +7,7 @@ import { errorText } from "./frontend-error";
 import { draftStore } from "./draft-store";
 import { Channel, isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CloudConsent, ModelRoute } from "./runtime-profiles";
+import type { CloudConsent, GenerationTarget, ModelRoute } from "./runtime-profiles";
 
 export interface ModelSettings {
   model: string;
@@ -36,6 +36,7 @@ export interface Message {
   content: string;
   status: string;
   modelRunId: string | null;
+  modelId?: string | null;
   finishReason: string | null;
   citations?: CitationReport | null;
   createdAt: string;
@@ -463,6 +464,7 @@ export function useStudio() {
     override?: string,
     cloud?: { question: string; selection: ContextSelection[]; consent: CloudConsent; knowledgeRoute: boolean },
     composed?: { question: string; workspaceId: string; conversationId: string | null },
+    generationTarget?: GenerationTarget,
   ) => {
     const workspace = view.current.workspaceId;
     const conversationId = view.current.conversationId;
@@ -528,6 +530,7 @@ export function useStudio() {
         content,
         contextSelection: cloud ? selectedContext : knowledgeScope ? [] : selectedContext,
         ...(cloud ? { cloudConsent: cloud.consent, useKnowledgeRoute: cloud.knowledgeRoute } : {}),
+        ...(generationTarget ? { generationTarget } : {}),
         knowledgeScope,
         useGraph,
         onPreparing: preparation,

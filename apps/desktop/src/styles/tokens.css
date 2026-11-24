@@ -24,7 +24,7 @@
   --success: #16a34a; --success-text: #15803d; --danger: #dc2626; --warning: #b45309;
   --glass: #ffffff; --glass-highlight: rgb(255 255 255 / 0%);
   --surface: #ffffff; --surface-subtle: #f6f6f7;
-  --surface-hover: #f1f1f3; --surface-graph: #fbfbfc;
+  --surface-hover: #f1f1f3; --surface-pressed: #e8e8eb; --primary-pressed: #45454d; --surface-graph: #fbfbfc;
   --line: #e8e8ec; --line-strong: #d9d9de; --control-border: #e2e2e6;
   --selected: #f2f2f5; --chip: rgb(94 106 210 / 10%);
   --warning-bg: rgb(180 83 9 / 8%); --danger-bg: rgb(220 38 38 / 7%); --success-bg: rgb(22 163 74 / 9%);
@@ -38,7 +38,7 @@
   --font-ui: -apple-system, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
   --ease: cubic-bezier(.2, 0, 0, 1); --spring: cubic-bezier(.2, 0, 0, 1);
-  --motion: 140ms; --sidebar-width: 252px; --reading-width: 45rem;
+  --motion: 140ms; --motion-fast: 60ms; --motion-enter: 180ms; --sidebar-width: 252px; --reading-width: 45rem;
   --knowledge-reading-width: 68ch;
   --node-knowledge: #3f8f7f; --node-context: #7b8494; --node-hypothesis: #8b7fae;
   --node-decision: #5b6bb5; --node-evidence: #4a8f8a; --node-conflict: #a2741f;
@@ -54,7 +54,7 @@
   --success: #4ade80; --success-text: #6ee7a8; --danger: #f87171; --warning: #fbbf24;
   --glass: #141416; --glass-highlight: rgb(255 255 255 / 0%);
   --surface: #141416; --surface-subtle: #1a1a1d;
-  --surface-hover: #202024; --surface-graph: #0f0f11;
+  --surface-hover: #202024; --surface-pressed: #2a2a30; --primary-pressed: #d4d4d8; --surface-graph: #0f0f11;
   --line: #26262b; --line-strong: #34343a; --control-border: #2e2e34;
   --selected: #232329; --chip: rgb(124 131 240 / 16%);
   --warning-bg: rgb(251 191 36 / 10%); --danger-bg: rgb(248 113 113 / 10%); --success-bg: rgb(74 222 128 / 12%);

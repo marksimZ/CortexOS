@@ -6,10 +6,11 @@ import { notify } from "./components/Toast";
 import { StatusLabel } from "./components/StatusLabel";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, Check, Pencil, Plus, Search, X, ListTree, History } from "lucide-react";
+import { BookOpen, Check, Pencil, Plus, Search, User, X, ListTree, History } from "lucide-react";
 import { navigate, useNavigation } from "./navigation";
 import { errorText, type Studio } from "./studio";
 import { kinds, type EditKnowledge, type KnowledgeDetail, type KnowledgeNode } from "./knowledge-types";
+import { MemoryCandidatesBar } from "./components/MemoryCandidatesBar";
 
 const status = (node: KnowledgeNode) =>
   node.latestVersion === node.effectiveVersion
@@ -78,6 +79,14 @@ export function KnowledgePage({
           <button
             className="button secondary"
             disabled={!studio.desktop || !workspace}
+            onClick={() => navigate("settings", { section: "assistant", workspace })}
+          >
+            <User size={15} />
+            关于我
+          </button>
+          <button
+            className="button secondary"
+            disabled={!studio.desktop || !workspace}
             onClick={() => setSourcesOpen(true)}
           >
             资料文件
@@ -135,6 +144,13 @@ export function KnowledgePage({
           </button>
         </div>
       )}
+      {studio.desktop && workspace && (
+        <MemoryCandidatesBar
+          workspaceId={workspace}
+          refreshKey={revision + refresh}
+          onResolved={() => setRefresh((n) => n + 1)}
+        />
+      )}
       {emptyLibrary ? (
         <div className="knowledge-empty library-empty"><BookOpen size={28} aria-hidden="true" /><h2>还没有知识</h2>
           {studio.desktop && workspace ? actions : <p>{studio.desktop ? "先创建或选择工作区。" : "在桌面程序中管理知识。"}</p>}
@@ -183,6 +199,7 @@ export function KnowledgePage({
                         <StatusLabel tone={item.latestVersion === item.effectiveVersion ? "success" : "warning"}>
                           {status(item)}
                         </StatusLabel>
+                        {item.localOnly && <StatusLabel tone="neutral">仅限本地</StatusLabel>}
                         <span>v{item.latestVersion}</span>
                       </span>
                     </button>
@@ -454,10 +471,30 @@ export function KnowledgeInspector({
                 )}
                 <button
                   className="button secondary"
+                  onClick={() => {
+                    if (!workspace) return;
+                    const nextLocalOnly = !detail.node.localOnly;
+                    void knowledge("set_knowledge_local_only", {
+                      workspaceId: workspace,
+                      nodeId: detail.node.id,
+                      localOnly: nextLocalOnly,
+                    })
+                      .then(() => {
+                        setRefresh((n) => n + 1);
+                        notify(nextLocalOnly ? "已设为仅限本地，云端模型不可读取" : "已取消仅限本地限制");
+                        onChanged?.();
+                      })
+                      .catch((e) => setError(errorText(e)));
+                  }}
+                >
+                  {detail.node.localOnly ? "仅限本地（点击解锁）" : "设为仅限本地"}
+                </button>
+                <button
+                  className="button secondary"
                   onClick={() => onEdit({ workspaceId: workspace!, detail })}
                 >
                   <Pencil size={15} />
-                  修改草稿
+                  编辑内容
                 </button>
               </div>
             </header>
