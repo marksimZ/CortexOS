@@ -368,6 +368,7 @@ pub async fn start_chat(
     workspace_id: String,
     conversation_id: String,
     content: String,
+    images: Option<Vec<crate::models::MessageImage>>,
     context_selection: Option<Vec<ContextSelection>>,
     knowledge_scope: Option<crate::knowledge_scope::Request>,
     use_graph: Option<bool>,
@@ -377,6 +378,8 @@ pub async fn start_chat(
     on_preparing: Channel<RunPreparing>,
     on_update: Channel<StreamUpdate>,
 ) -> AppResult<RunSummary> {
+    let images = images.unwrap_or_default();
+    validate_message_images(&images)?;
     let database = state.database.clone()?;
     use crate::runtime_profiles::{ChatRuntime, CloudChat, CloudTargets, Target, ranking};
     let id = new_id();
@@ -437,7 +440,7 @@ pub async fn start_chat(
         }
         Some(state.provider.clone()?)
     };
-    crate::db::chat_budget(&settings, content.trim())?;
+    crate::db::chat_budget_with_images(&settings, content.trim(), &images)?;
     let requested_at = now();
     let workspace = workspace_id.clone();
     let conversation = conversation_id.clone();
@@ -526,7 +529,7 @@ pub async fn start_chat(
             }),
             ranking:ranking.as_ref(),
         });
-        let prepared = db.prepare_chat_runtime(
+        let prepared = db.prepare_chat_runtime_with_images(
             &prepare_id,
             &workspace_id,
             &conversation_id,
@@ -540,6 +543,7 @@ pub async fn start_chat(
             runtime.as_ref(),
             Some(&model_route),
             true,
+            &images,
         )?;
         Ok((prepared, targets.generation))
     })
@@ -823,11 +827,14 @@ pub async fn preview_context(
     workspace_id: String,
     conversation_id: Option<String>,
     content: String,
+    images: Option<Vec<crate::models::MessageImage>>,
     context_selection: Vec<ContextSelection>,
     knowledge_scope: Option<crate::knowledge_scope::Request>,
     use_graph: Option<bool>,
     generation_target: Option<crate::runtime_profiles::Target>,
 ) -> AppResult<serde_json::Value> {
+    let images = images.unwrap_or_default();
+    validate_message_images(&images)?;
     blocking(state.database.clone()?, move |db| {
         use crate::runtime_profiles::{ChatRuntime, CloudChat, Target};
         let mut settings = db.settings()?;
@@ -858,7 +865,7 @@ pub async fn preview_context(
             cloud: cloud.as_ref().map(|target| CloudChat { target, share_selection: true, granted_versions: &[], public_fixture:false }),
             ranking: None,
         });
-        Ok(db.prepare_chat_runtime(
+        Ok(db.prepare_chat_runtime_with_images(
             &new_id(),
             &workspace_id,
             &conversation_id.unwrap_or_default(),
@@ -872,6 +879,7 @@ pub async fn preview_context(
             runtime.as_ref(),
             Some(&decision.decision),
             true,
+            &images,
         )?.manifest)
     })
     .await

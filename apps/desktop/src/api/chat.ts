@@ -14,6 +14,7 @@ import type {
   Conversation,
   KnowledgeScope,
   Message,
+  MessageImage,
   ModelHealth,
   ModelSettings,
   RunDetail,
@@ -61,6 +62,7 @@ export const chat = createClient<{
   start_chat: Command<
     ContextArgs &
       ConversationArgs & {
+        images?: MessageImage[];
         cloudConsent?: CloudConsent;
         useKnowledgeRoute?: boolean;
         generationTarget?: GenerationTarget;
@@ -74,7 +76,11 @@ export const chat = createClient<{
     ContextOptionsPage
   >;
   preview_context: Command<
-    ContextArgs & { conversationId: string | null; generationTarget?: GenerationTarget },
+    ContextArgs & {
+      conversationId: string | null;
+      images?: MessageImage[];
+      generationTarget?: GenerationTarget;
+    },
     ContextManifest
   >;
   chat_runtime_route: Command<

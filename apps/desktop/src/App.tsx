@@ -170,6 +170,7 @@ export default function App() {
             studio={studio}
             onCreateWorkspace={openCreateWorkspace}
             onSaveKnowledge={saveMessageAsKnowledge}
+            onQuickSavedKnowledge={() => setKnowledgeRevision((n) => n + 1)}
           />
         )}
         {page === "knowledge" && (

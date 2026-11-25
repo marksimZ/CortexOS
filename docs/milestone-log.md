@@ -1,5 +1,13 @@
 # 里程碑记录
 
+## 2026-11-25 Phase 7：划词追问/存卡悬浮气泡与 Ctrl+V 粘贴截图多模态问答
+
+- **阅读区划词悬浮气泡（`SelectionPopover.tsx`）**：在 `ChatMessage.tsx` 与 `SourceBrowser.tsx` 接入无侵入划词快捷胶囊（选中 4–8000 字时自动浮出，点击不丢失选区）：
+  - **「💬 追问这段」**：自动将选中内容（资料文件自动附带《文件名》与起止行号）按 Markdown 引用块追加至当前会话输入框并聚焦光标；
+  - **「📌 存为知识卡」**：在回答中一键调用 `save_knowledge` 保存并自动定位连续原文片段以保留 `sourceMessageId` 溯源；在资料文件中自动解析选中行区间（`data-source-line`）并调用 `save_source_knowledge` 直接保留文件版本与精确起止行溯源。
+- **Schema 37 多模态截图问答（独立 Codex 新会话 `01a211e9-0fa3-7ee0-bbdd-a27e5d0e91c3` 交付后端）**：新增迁移 `0037_message_images.sql`（独立表持久化每条消息最多 4 张 PNG/JPEG/WebP/GIF 图片 Base64），扩展 `models.rs`、`db.rs`、`commands.rs`、`ollama.rs`、`cloud/runtime_protocol.rs` 与 `cloud/runtime_connections.rs`，支持 OpenAI 兼容服务（`image_url` Data URI）、OpenAI 官方（`input_image`）、Anthropic（`base64 image`）、Gemini（`inlineData`）及本机 Ollama（`images`）五种协议编码与本机备用回退附件保留，图片按固定视觉预算（1024 单位/张）估算云端输入上限与预留额。前端 `ChatComposer.tsx` 支持 `Ctrl+V` 直接粘贴剪贴板截图或选图、前端 Canvas 自适应压缩（最长边 ≤ 1568px）、待发缩略图预览条，消息流支持缩略图与点击弹窗放大查看。
+- **实测与未验证范围**：执行 `npm.cmd --prefix apps/desktop run build`、`node --experimental-strip-types --test apps/desktop/tests/unit/navigation.test.ts`（2/2 通过）、`cargo test --offline --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --lib multimodal`（2/2 通过）、`--lib chat_with_pasted_image`（1/1 通过，回环 HTTP 替身校验多模态流式请求与图片落盘回读）、`--lib cloud_chat_loopback_preserves_roles_and_excludes_private_lineage`（1/1 通过）、`--lib upgrades_existing_database_with_consistent_backup_and_checks_all_migrations`（1/1 通过）及 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`（通过）。未运行真实本地/云端多模态模型推理及原生 WebView2 自动化截图回归。
+
 ## 2026-11-25 Phase 6：AI 隐式记忆提炼、冲突检测与版本演进
 
 - **云端对话后置隐式记忆提炼（Codex 桌面独立新会话 `01a211c9-eb18-71b3-a8ad-3e39895bc351` 交付后端）**：在 `cloud/runtime_connections.rs` 新增 `extract_implicit_memories`，于云端聊天正常完成且工作区开启 `syncMemoryAndHistory` 时后台异步提炼 0–2 条长期背景、沟通规则或项目变更候选。上下文组装 `cloud_memory_context` 严格排除 `local_only` 私密节点、本地备用回退轮次并经过 `privacy::check_workspace` 隐私校验；写入新候选后发出 `memory-candidates-updated` 事件驱动前端实时刷新。

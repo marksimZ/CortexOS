@@ -49,6 +49,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0034_watched_folder_sync.sql"),
     include_str!("../migrations/0035_conversation_archive.sql"),
     include_str!("../migrations/0036_memory_conflict_evolution.sql"),
+    include_str!("../migrations/0037_message_images.sql"),
 ];
 const MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const RUN_COLUMNS: &str = "id,workspace_id,conversation_id,assistant_message_id,model_id,status,started_at,finished_at,error_message";
@@ -98,6 +99,19 @@ pub(crate) fn chat_budget(settings: &ModelSettings, content: &str) -> AppResult<
     let used = SYSTEM_PROMPT.len() + content.len() + 64;
     if content.is_empty() || used > budget {
         return Err("这条消息为空或过长，请缩短问题或在设置中增加上下文长度。".into());
+    }
+    Ok((budget, used))
+}
+
+pub(crate) fn chat_budget_with_images(
+    settings: &ModelSettings,
+    content: &str,
+    images: &[MessageImage],
+) -> AppResult<(usize, usize)> {
+    let (budget, text_units) = chat_budget(settings, content)?;
+    let used = text_units + images.len() * IMAGE_ESTIMATED_UNITS;
+    if used > budget {
+        return Err("问题和图片超出上下文容量，请减少图片或在设置中增加上下文长度。".into());
     }
     Ok((budget, used))
 }
@@ -365,6 +379,27 @@ pub(crate) fn insert_execution(
         ],
     )
     .map_err(error)?;
+    Ok(())
+}
+
+fn insert_execution_with_images(
+    c: &Connection,
+    run: &RunSummary,
+    settings: &ModelSettings,
+    request: &Value,
+    manifest: &Value,
+    user_id: &str,
+    content: &str,
+    images: &[MessageImage],
+) -> AppResult<()> {
+    insert_execution(c, run, settings, request, manifest, user_id, content)?;
+    for (ordinal, image) in images.iter().enumerate() {
+        c.execute(
+            "INSERT INTO message_images (message_id, ordinal, mime_type, data_base64) VALUES (?1, ?2, ?3, ?4)",
+            params![user_id, ordinal as i64, image.mime_type, image.data_base64],
+        )
+        .map_err(error)?;
+    }
     Ok(())
 }
 
@@ -686,6 +721,15 @@ impl Database {
     }
 
     pub fn messages(&self, workspace_id: &str, conversation_id: &str) -> AppResult<Vec<Message>> {
+        self.chat_messages(workspace_id, conversation_id, true)
+    }
+
+    fn chat_messages(
+        &self,
+        workspace_id: &str,
+        conversation_id: &str,
+        include_images: bool,
+    ) -> AppResult<Vec<Message>> {
         let connection = self.connection()?;
         if !connection
             .query_row(
@@ -702,7 +746,7 @@ impl Database {
           CASE WHEN role='assistant' THEN (SELECT json_extract(e.payload_json,'$.metrics.finishReason') FROM execution_events e WHERE e.run_id=messages.model_run_id AND e.kind='response_completed' LIMIT 1) END,
           CASE WHEN role='assistant' THEN (SELECT e.payload_json FROM execution_events e WHERE e.run_id=messages.model_run_id AND e.kind='citations_checked' LIMIT 1) END
           FROM messages WHERE workspace_id=?1 AND conversation_id=?2 ORDER BY seq").map_err(error)?;
-        statement
+        let mut messages = statement
             .query_map(params![workspace_id, conversation_id], |r| {
                 Ok(Message {
                     id: r.get(0)?,
@@ -715,6 +759,7 @@ impl Database {
                     model_id: r.get(7)?,
                     created_at: r.get(8)?,
                     finish_reason: r.get(9)?,
+                    images: Vec::new(),
                     citations: r
                         .get::<_, Option<String>>(10)?
                         .map(|text| {
@@ -731,7 +776,30 @@ impl Database {
             })
             .map_err(error)?
             .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(error)
+            .map_err(error)?;
+
+        if include_images {
+            let mut statement = connection.prepare(
+                "SELECT m.id, i.mime_type, i.data_base64 FROM message_images i
+                 JOIN messages m ON m.id=i.message_id
+                 WHERE m.workspace_id=?1 AND m.conversation_id=?2 ORDER BY m.seq, i.ordinal",
+            ).map_err(error)?;
+            let rows = statement.query_map(params![workspace_id, conversation_id], |row| {
+                Ok((row.get::<_, String>(0)?, MessageImage {
+                    mime_type: row.get(1)?,
+                    data_base64: row.get(2)?,
+                }))
+            }).map_err(error)?;
+            let mut images_by_message = std::collections::HashMap::<_, Vec<_>>::new();
+            for row in rows {
+                let (id, image) = row.map_err(error)?;
+                images_by_message.entry(id).or_default().push(image);
+            }
+            for message in &mut messages {
+                message.images = images_by_message.remove(&message.id).unwrap_or_default();
+            }
+        }
+        Ok(messages)
     }
 
     #[cfg(test)]
@@ -801,18 +869,42 @@ impl Database {
         model_route: Option<&Value>,
         use_workspace_assistant: bool,
     ) -> AppResult<PreparedRun> {
+        self.prepare_chat_runtime_with_images(
+            run_id, workspace_id, conversation_id, content, settings, selection, preview,
+            semantic, scope, use_graph, runtime, model_route, use_workspace_assistant, &[],
+        )
+    }
+
+    pub(crate) fn prepare_chat_runtime_with_images(
+        &self,
+        run_id: &str,
+        workspace_id: &str,
+        conversation_id: &str,
+        content: &str,
+        settings: &ModelSettings,
+        selection: &[ContextSelection],
+        preview: bool,
+        semantic: Option<&crate::rag::Query>,
+        scope: Option<&crate::knowledge_scope::Request>,
+        use_graph: impl Into<crate::retrieval::GraphMode>,
+        runtime: Option<&crate::runtime_profiles::ChatRuntime>,
+        model_route: Option<&Value>,
+        use_workspace_assistant: bool,
+        images: &[MessageImage],
+    ) -> AppResult<PreparedRun> {
+        validate_message_images(images)?;
         let cloud = runtime.and_then(|value| value.cloud.as_ref());
         let private_cloud = cloud.is_some_and(|value|!value.public_fixture);
         let selection = if cloud.is_some_and(|value| !value.share_selection) { &[] } else { selection };
         let scope = if private_cloud { None } else { scope };
         let content = content.trim();
-        let (budget, mut used) = chat_budget(settings, content)?;
+        let (budget, mut used) = chat_budget_with_images(settings, content, images)?;
         let requested_at = semantic.map_or_else(now, |query| query.requested_at.clone());
         let history = if preview && conversation_id.is_empty() {
             self.conversations(workspace_id)?;
             Vec::new()
         } else {
-            self.messages(workspace_id, conversation_id)?
+            self.chat_messages(workspace_id, conversation_id, false)?
         };
         // Hold the same read/write lock through version resolution and snapshot commit.
         let mut connection = self.connection()?;
@@ -1186,11 +1278,13 @@ impl Database {
         let mut messages = vec![ChatMessage {
             role: "system".into(),
             content: system_prompt.clone(),
+            images: Vec::new(),
         }];
         if let Some(text) = knowledge_message {
             messages.push(ChatMessage {
                 role: "user".into(),
                 content: text,
+                images: Vec::new(),
             });
         }
         let mut references = Vec::new();
@@ -1198,12 +1292,14 @@ impl Database {
             messages.push(ChatMessage {
                 role: message.role.clone(),
                 content: message.content.clone(),
+                images: Vec::new(),
             });
             references.push(json!({"messageId":message.id,"contentHash":hash(&message.content)}));
         }
         messages.push(ChatMessage {
             role: "user".into(),
             content: content.into(),
+            images: images.to_vec(),
         });
         references.push(json!({"messageId":user_id,"contentHash":hash(content)}));
         let mut manifest = json!({"schemaVersion":4,"citationProtocol":"knowledge_lines_v1","knowledgeRefs":knowledge,"excludedMessages":excluded,"modelIdentity":"tag_only_digest_not_recorded","strategy":"recent_messages_utf8_budget","estimatedUnits":used,"budgetUnits":budget,
@@ -1235,6 +1331,7 @@ impl Database {
         let request = if let Some(cloud) = cloud {
             manifest["modelIdentity"] = json!("provider_model_id");
             let mut types = vec!["question"];
+            if !images.is_empty() { types.push("images"); }
             if cloud_sync && references.len() > 1 { types.push("conversation_history"); }
             if assistant.is_some() { types.push("workspace_assistant"); }
             if persona_used { types.push("global_persona"); }
@@ -1261,7 +1358,7 @@ impl Database {
             });
         }
         let transaction = connection.transaction().map_err(error)?;
-        insert_execution(
+        insert_execution_with_images(
             &transaction,
             &run,
             settings,
@@ -1269,6 +1366,7 @@ impl Database {
             &manifest,
             &user_id,
             content,
+            images,
         )?;
         let draft_title = smart_fallback_title(content);
         transaction.execute("UPDATE conversations SET title=CASE WHEN title='新对话' THEN ?1 ELSE title END,updated_at=?2 WHERE workspace_id=?3 AND id=?4",params![draft_title,run.started_at,workspace_id,conversation_id]).map_err(error)?;
@@ -1350,15 +1448,27 @@ impl Database {
         &self, mut prepared: PreparedRun, settings: &ModelSettings, reason: &str,
     ) -> AppResult<PreparedRun> {
         settings.validate()?;
-        let messages: Vec<ChatMessage> = serde_json::from_value(prepared.request["messages"].clone()).map_err(json_error)?;
-        if messages.is_empty() { return Err("原请求缺少可用的上下文。".into()); }
+        if !prepared.request["messages"].as_array().is_some_and(|messages| !messages.is_empty()) {
+            return Err("原请求缺少可用的上下文。".into());
+        }
+        let messages = prepared.request["messages"].take();
+        let cloud_request = prepared.manifest["cloudTransfer"].is_object();
+        let mut request = if cloud_request {
+            let messages: Vec<ChatMessage> = serde_json::from_value(messages).map_err(json_error)?;
+            crate::ollama::chat_request(settings, &messages)
+        } else {
+            // The local request already has Ollama's base64-only image arrays.
+            let mut request = crate::ollama::chat_request(settings, &[]);
+            request["messages"] = messages;
+            request
+        };
         let mut c = self.connection()?;
         let tx = c.transaction().map_err(error)?;
         let run = &mut prepared.run;
         if !execution_is_running(&tx,run,ExecutionPurpose::Chat)? {
             return Err("回答已结束，无法切换模型。".into());
         }
-        if prepared.manifest["cloudTransfer"].is_object() {
+        if cloud_request {
             for version in crate::cloud::privacy::context_versions(&prepared.manifest)? {
                 if !crate::cloud::privacy::is_current(&tx,&run.workspace_id,&version.node_id,version.version)? {
                     return Err("知识版本已变化，请重新准备回答。".into());
@@ -1367,7 +1477,6 @@ impl Database {
         }
         let original: String = tx.query_row("SELECT request_hash FROM context_snapshots WHERE run_id=?1",
             [&run.id],|row|row.get(0)).optional().map_err(error)?.ok_or("找不到原请求快照，无法切换模型。")?;
-        let mut request = crate::ollama::chat_request(settings,&messages);
         crate::local_runtime::Preferences::read(&tx)?.apply(&mut request);
         let raw = serde_json::to_string(&request).map_err(json_error)?;
         let detail = json!({"primaryModel":run.model_id,"backupModel":settings.model,"backupProvider":"ollama",
@@ -1737,6 +1846,291 @@ mod profile_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn multimodal_local_backup_preserves_ollama_and_cloud_attachments() {
+        use crate::{
+            cloud::runtime_connections::CloudTarget,
+            runtime_profiles::{ChatRuntime, CloudChat, Profile},
+        };
+
+        let db = Database::rag_evaluation_database().unwrap();
+        let workspace = db.create_workspace("备用图片请求").unwrap().id;
+        let target = CloudTarget::loopback_test("http://127.0.0.1:1/".parse().unwrap(), "remote");
+        let profile: Profile = serde_json::from_value(json!({
+            "id": new_id(), "updatedAt": now(), "name": "Fixture", "mode": "cloud",
+            "generation": {"kind": "cloud", "model": "remote", "connectionId": target.connection.id},
+            "embedding": {"kind": "off"}, "reranking": {"kind": "off"}
+        })).unwrap();
+        let runtime = ChatRuntime {
+            profile: &profile,
+            cloud: Some(CloudChat {
+                target: &target,
+                share_selection: false,
+                granted_versions: &[],
+                public_fixture: false,
+            }),
+            ranking: None,
+        };
+        let images = [
+            MessageImage {
+                mime_type: "image/png".into(),
+                data_base64: "AA==".into(),
+            },
+            MessageImage {
+                mime_type: "image/jpeg".into(),
+                data_base64: "AQ==".into(),
+            },
+        ];
+        let backup = ModelSettings {
+            model: "backup".into(),
+            ..ModelSettings::default()
+        };
+        for primary in [None, Some(&runtime)] {
+            let chat = db.create_conversation(&workspace).unwrap().id;
+            let prepared = db
+                .prepare_chat_runtime_with_images(
+                    &new_id(),
+                    &workspace,
+                    &chat,
+                    "保留附件",
+                    &ModelSettings::default(),
+                    &[],
+                    false,
+                    None,
+                    None,
+                    false,
+                    primary,
+                    None,
+                    false,
+                    &images,
+                )
+                .unwrap();
+            let prepared = db
+                .prepare_local_backup(prepared, &backup, "fixture")
+                .unwrap();
+            assert_eq!(prepared.request["model"], "backup");
+            assert_eq!(
+                prepared.request["messages"]
+                    .as_array()
+                    .unwrap()
+                    .last()
+                    .unwrap(),
+                &json!({"role": "user", "content": "保留附件", "images": ["AA==", "AQ=="]}),
+            );
+            assert_eq!(db.messages(&workspace, &chat).unwrap()[0].images, images);
+            db.finish(&prepared.run, "ok", "completed", None, json!({}))
+                .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn chat_with_pasted_image_persists_message_images_and_streams_over_http_fixture() {
+        use crate::{
+            cloud::runtime_connections::{CloudTarget, ModelLimits},
+            generation::execute_chat,
+            model_runtime::http_fixture,
+            runtime_profiles::{ChatRuntime, CloudChat, Profile},
+        };
+        use std::sync::Arc;
+        use tokio::sync::watch;
+
+        const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+        let image = MessageImage {
+            mime_type: "image/png".into(),
+            data_base64: PNG.into(),
+        };
+        let images = std::slice::from_ref(&image);
+        let db = Arc::new(Database::rag_evaluation_database().unwrap());
+        let workspace = db.create_workspace("图片附件").unwrap().id;
+        let conversation = db.create_conversation(&workspace).unwrap().id;
+        let (url, server) = http_fixture::serve(1, |_, path, body| {
+            assert_eq!(path, "/chat/completions");
+            assert_eq!(body["stream"], true);
+            let user = body["messages"].as_array().unwrap().last().unwrap();
+            assert_eq!(user["role"], "user");
+            assert_eq!(
+                user["content"],
+                json!([
+                    {"type": "text", "text": "描述图片"},
+                    {"type": "image_url", "image_url": {"url": format!("data:image/png;base64,{PNG}")}}
+                ])
+            );
+            (
+                200,
+                json!({"choices": [{"message": {"content": "合成图片回复"}, "finish_reason": "stop"}]}),
+            )
+        });
+        let mut target = CloudTarget::loopback_test(url, "remote");
+        target.connection.limits.push(ModelLimits {
+            model: "remote".into(),
+            context_tokens: None,
+            max_input_tokens: Some(2000),
+            max_output_tokens: None,
+            input_micro_usd_per_million: Some(1_000_000),
+            output_micro_usd_per_million: Some(0),
+            micro_usd_per_request: None,
+        });
+        let profile: Profile = serde_json::from_value(json!({
+            "id": new_id(), "updatedAt": now(), "name": "Fixture", "mode": "cloud",
+            "generation": {"kind": "cloud", "model": "remote", "connectionId": target.connection.id},
+            "embedding": {"kind": "off"}, "reranking": {"kind": "off"}
+        })).unwrap();
+        let runtime = ChatRuntime {
+            profile: &profile,
+            cloud: Some(CloudChat {
+                target: &target,
+                share_selection: false,
+                granted_versions: &[],
+                public_fixture: false,
+            }),
+            ranking: None,
+        };
+        let settings = ModelSettings {
+            model: "remote".into(),
+            ..ModelSettings::default()
+        };
+        let prepare = |images: &[MessageImage], preview| {
+            db.prepare_chat_runtime_with_images(
+                &new_id(),
+                &workspace,
+                &conversation,
+                "描述图片",
+                &settings,
+                &[],
+                preview,
+                None,
+                None,
+                false,
+                Some(&runtime),
+                None,
+                false,
+                images,
+            )
+        };
+        let invalid_mime = MessageImage {
+            mime_type: "image/svg+xml".into(),
+            ..image.clone()
+        };
+        let invalid_base64 = MessageImage {
+            data_base64: "A=AA".into(),
+            ..image.clone()
+        };
+        let oversized = MessageImage {
+            data_base64: "AAAA".repeat(700_001),
+            ..image.clone()
+        };
+        assert!(
+            prepare(&[invalid_mime], false)
+                .unwrap_err()
+                .contains("图片格式")
+        );
+        assert!(
+            prepare(&[invalid_base64], false)
+                .unwrap_err()
+                .contains("Base64")
+        );
+        assert!(
+            prepare(&[oversized], false)
+                .unwrap_err()
+                .contains("图片过大")
+        );
+        assert!(
+            prepare(&vec![image.clone(); 5], false)
+                .unwrap_err()
+                .contains("最多附带 4")
+        );
+
+        let large = MessageImage {
+            data_base64: "AAAA".repeat(125_000),
+            ..image.clone()
+        };
+        let large_preview = prepare(&[large], true).unwrap();
+        let text_preview = prepare(&[], true).unwrap();
+        assert_eq!(
+            large_preview.manifest["estimatedUnits"].as_u64().unwrap(),
+            text_preview.manifest["estimatedUnits"].as_u64().unwrap() + 1024,
+        );
+        assert!(db.messages(&workspace, &conversation).unwrap().is_empty());
+
+        let prepared = prepare(images, false).unwrap();
+        assert_eq!(
+            prepared.manifest["cloudTransfer"]["dataTypes"],
+            json!(["question", "images"])
+        );
+        let text_bytes: usize = prepared.request["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|message| message["content"].as_str().unwrap().len())
+            .sum();
+        let (keep, cancel) = watch::channel(false);
+        let mut updates = Vec::new();
+        let result = execute_chat(
+            db.clone(),
+            None,
+            Some(&target),
+            prepared,
+            settings,
+            None,
+            cancel,
+            |update| updates.push(update),
+        )
+        .await;
+        drop(keep);
+        assert_eq!(
+            result.update.status, "completed",
+            "{:?}",
+            result.update.error_message
+        );
+        assert!(result.saved);
+        server.join().unwrap();
+        assert!(
+            updates
+                .iter()
+                .any(|update| update.status == "running" && update.content == "合成图片回复")
+        );
+        let messages = db.messages(&workspace, &conversation).unwrap();
+        assert_eq!(messages[0].images, images);
+        assert!(messages[1].images.is_empty());
+        let reserved: i64 = db
+            .connection()
+            .unwrap()
+            .query_row("SELECT estimate_micros FROM model_cloud_calls", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(reserved, text_bytes as i64 + 1024 + 64);
+
+        let followup = db
+            .prepare_chat_runtime(
+                &new_id(),
+                &workspace,
+                &conversation,
+                "后续问题",
+                &ModelSettings::default(),
+                &[],
+                true,
+                None,
+                None,
+                false,
+                None,
+                None,
+                false,
+            )
+            .unwrap();
+        let followup_messages = followup.request["messages"].as_array().unwrap();
+        assert!(
+            followup_messages
+                .iter()
+                .any(|message| message["content"] == "描述图片")
+        );
+        assert!(
+            followup_messages
+                .iter()
+                .all(|message| message.get("images").is_none())
+        );
+    }
 
     #[test]
     fn database_isolates_workspaces_preserves_partial_and_recovers_after_restart() {

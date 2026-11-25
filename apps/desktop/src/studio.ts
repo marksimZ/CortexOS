@@ -29,12 +29,17 @@ export interface Conversation {
   autoRetrieval: boolean;
   archived?: boolean;
 }
+export interface MessageImage {
+  mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+  dataBase64: string;
+}
 export interface Message {
   id: string;
   workspaceId: string;
   conversationId: string;
   role: "user" | "assistant";
   content: string;
+  images?: MessageImage[];
   status: string;
   modelRunId: string | null;
   modelId?: string | null;
@@ -264,6 +269,7 @@ export { defaultSettings } from "./studio-settings";
 
 const chatDrafts = draftStore<string>("chat", value => typeof value === "string");
 const emptyContext: ContextSelection[] = [];
+const emptyImages: MessageImage[] = [];
 function useStudioError() {
   const [error, setError] = useState<string | null>(null);
   const reportError = useCallback((value: unknown) => setError(errorText(value)), []);
@@ -288,6 +294,7 @@ export function useStudio() {
   const [knowledgeScopes, setKnowledgeScopes] = useState<Record<string, KnowledgeScope | null>>({});
   const [graphLookups, setGraphLookups] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [imageDrafts, setImageDrafts] = useState<Record<string, MessageImage[]>>({});
   const [health, setHealth] = useState<ModelHealth | null>(null);
   const [checking, setChecking] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -419,12 +426,28 @@ export function useStudio() {
     setContexts((previous) => ({ ...previous, [draftKey]: items }));
   const cachedDraft = useMemo(() => chatDrafts.get(draftKey), [draftKey]);
   const draft = drafts[draftKey] ?? cachedDraft ?? "";
+  const draftImages = imageDrafts[draftKey] ?? emptyImages;
+  const setDraftImages = (items: MessageImage[]) =>
+    setImageDrafts((previous) => ({ ...previous, [draftKey]: items.slice(0, 4) }));
   const writeDraft = (key: string, text: string) => {
     const persisted = text ? chatDrafts.set(key, text) : (chatDrafts.delete(key), true);
     setDrafts(current => ({ ...current, [key]: text }));
     return persisted;
   };
   const setDraft = (text: string) => writeDraft(draftKey, text);
+  const quoteIntoChat = useCallback((quoteBlock: string) => {
+    const ws = view.current.workspaceId;
+    if (!ws) return;
+    const conv = view.current.conversationId;
+    const key = `${ws}:${conv ?? "new"}`;
+    setDrafts((current) => {
+      const existing = current[key] ?? chatDrafts.get(key) ?? "";
+      const prefix = existing.trim() ? `${existing.trimEnd()}\n\n` : "";
+      const next = `${prefix}${quoteBlock}`;
+      chatDrafts.set(key, next);
+      return { ...current, [key]: next };
+    });
+  }, [view]);
 
   const autoRetrieval =
     retrievalChange?.workspaceId === workspaceId &&
@@ -486,7 +509,9 @@ export function useStudio() {
       reportError("当前会话已变化，请返回原会话重新确认来源。");
       return;
     }
-    const content = (cloud?.question ?? override ?? composed?.question ?? draft).trim();
+    const attachedImages = override === undefined ? (imageDrafts[draftKey] ?? emptyImages) : emptyImages;
+    const rawContent = (cloud?.question ?? override ?? composed?.question ?? draft).trim();
+    const content = rawContent || (attachedImages.length > 0 ? "请结合这张图片回答。" : "");
     const selectedContext = cloud?.selection ?? contextSelection;
     if (
       !workspace ||
@@ -512,6 +537,13 @@ export function useStudio() {
       setGraphLookups((previous) => ({ ...previous, [`${workspace}:${conversation}`]: useGraph }));
       if (override === undefined && draftKey !== `${workspace}:${conversation}`) {
         if (writeDraft(`${workspace}:${conversation}`, draft)) writeDraft(draftKey, "");
+        if (attachedImages.length > 0) {
+          setImageDrafts((previous) => ({
+            ...previous,
+            [draftKey]: emptyImages,
+            [`${workspace}:${conversation}`]: attachedImages,
+          }));
+        }
       }
       const stream = new Channel<StreamUpdate>();
       channel.current = stream;
@@ -542,6 +574,7 @@ export function useStudio() {
         workspaceId: workspace,
         conversationId: conversation,
         content,
+        ...(attachedImages.length > 0 ? { images: attachedImages } : {}),
         contextSelection: cloud ? selectedContext : knowledgeScope ? [] : selectedContext,
         ...(cloud ? { cloudConsent: cloud.consent, useKnowledgeRoute: cloud.knowledgeRoute } : {}),
         ...(generationTarget ? { generationTarget } : {}),
@@ -562,6 +595,11 @@ export function useStudio() {
       if (override === undefined) {
         writeDraft(draftKey, "");
         if (draftKey !== `${workspace}:${conversation}`) writeDraft(`${workspace}:${conversation}`, "");
+        setImageDrafts((previous) => ({
+          ...previous,
+          [draftKey]: emptyImages,
+          [`${workspace}:${conversation}`]: emptyImages,
+        }));
       }
       if (draftKey !== `${workspace}:${conversation}`) {
         setKnowledgeScopes((previous) => ({ ...previous, [draftKey]: null }));
@@ -613,6 +651,9 @@ export function useStudio() {
     activeRun,
     preparingRun,
     draft,
+    draftImages,
+    setDraftImages,
+    quoteIntoChat,
     draftPersistence: draft ? chatDrafts.persisted(draftKey) ? "local" : "temporary" : null,
     setDraft,
     contextSelection,

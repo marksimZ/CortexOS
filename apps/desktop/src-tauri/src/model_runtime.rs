@@ -347,6 +347,7 @@ mod tests {
             &[ChatMessage {
                 role: "user".into(),
                 content: "问题".into(),
+                images: Vec::new(),
             }],
         );
         let Generated::Streaming(mut stream) = provider

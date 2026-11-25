@@ -45,10 +45,12 @@ export function ChatPage({
   studio,
   onCreateWorkspace,
   onSaveKnowledge,
+  onQuickSavedKnowledge,
 }: {
   studio: Studio;
   onCreateWorkspace: (next?: "chat" | "cloud") => void;
   onSaveKnowledge: (message: Message, excerpt: string) => void;
+  onQuickSavedKnowledge?: () => void;
 }) {
   const route = useNavigation();
   const conversation = studio.conversations.find(
@@ -174,7 +176,7 @@ export function ChatPage({
   const composerReady =
     studio.desktop &&
     !!studio.workspaceId &&
-    !!studio.draft.trim() &&
+    (!!studio.draft.trim() || studio.draftImages.length > 0) &&
     !draftTooLong &&
     !studio.sending &&
     !studio.savingRetrieval &&
@@ -342,7 +344,7 @@ export function ChatPage({
     }
     if (!modelReady || currentRunning) return;
     if (cloudTurn && currentRuntime?.profile && studio.workspaceId) {
-      const question = (content ?? studio.draft).trim();
+      const question = (content ?? studio.draft).trim() || (studio.draftImages.length > 0 ? "请结合这张图片回答。" : "");
       if (question) {
         if (cloudSyncDefault) {
           navigate("chat", { workspace: studio.workspaceId, conversation: studio.conversationId });
@@ -532,6 +534,11 @@ export function ChatPage({
                       copied={copied === message.id}
                       copy={copy}
                       onSaveKnowledge={onSaveKnowledge}
+                      onQuoteSelection={(quoteBlock) => {
+                        studio.quoteIntoChat(quoteBlock);
+                        focusComposer();
+                      }}
+                      onQuickSavedKnowledge={onQuickSavedKnowledge}
                       setSelectedRun={setSelectedRun}
                       canRetry={canRetry}
                       reportError={studio.reportError}
@@ -703,6 +710,7 @@ export function ChatPage({
           })}</ul>
           <p>云端回答发送本次问题。向量查找启用且索引可用时发送问题。历史对话留在本机，云端服务可能计费。</p>
           {cloudDraft.profile.generation.kind === "cloud" && <p>云端回答使用内置默认助手。个人助手指令留在本机。</p>}
+          {studio.draftImages.length > 0 && !cloudDraft.retry && <p>本次问题附带 {studio.draftImages.length} 张图片，将一并发送给所选云端模型。</p>}
           {cloudDraft.webSources && <p>本次问题包含你选用的网页标题、链接和摘要，适用的云端服务会收到这些内容。</p>}
           {cloudDraft.profile.generation.kind === "cloud" && cloudDraft.selection.length > 0 && <label className="retrieval-switch">
             <input type="checkbox" checked={shareSelection} onChange={event => setShareSelection(event.target.checked)} />

@@ -3,7 +3,10 @@ use super::{
     completion::{self, CompletionInput, CompletionOutput, post_json},
     provider::{Model, catalog},
 };
-use crate::model_runtime::normalized_embeddings;
+use crate::{
+    model_runtime::normalized_embeddings,
+    models::{ChatMessage, MessageImage},
+};
 use reqwest::Url;
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -14,6 +17,10 @@ const INVALID: ConnectionState = ConnectionState::ServiceError;
 pub(super) enum Endpoint {
     Official(Provider),
     Compatible { base: Url, rerank: bool },
+}
+
+fn image_data_url(image: &MessageImage) -> String {
+    format!("data:{};base64,{}", image.mime_type, image.data_base64)
 }
 
 impl Endpoint {
@@ -70,7 +77,11 @@ impl Endpoint {
         input: &CompletionInput,
         timeout: Duration,
     ) -> CloudResult<CompletionOutput> {
-        let messages = [crate::models::ChatMessage { role: "user".into(), content: input.prompt.clone() }];
+        let messages = [ChatMessage {
+            role: "user".into(),
+            content: input.prompt.clone(),
+            images: Vec::new(),
+        }];
         let (url, mut request) = self.generation_chat_wire(&input.model, &messages, input.max_output_tokens)?;
         // Leave the production request at the model's default thinking setting.
         // The 64-token probe needs room for the visible answer on DeepSeek.
@@ -114,7 +125,7 @@ impl Endpoint {
     pub(super) fn generation_chat_wire(
         &self,
         model: &str,
-        messages: &[crate::models::ChatMessage],
+        messages: &[ChatMessage],
         max_output_tokens: u32,
     ) -> CloudResult<(String, Value)> {
         let system = messages
@@ -129,9 +140,24 @@ impl Endpoint {
                 .join("chat/completions")
                 .map_err(|_| INVALID)?
                 .to_string();
+            let wire_messages: Vec<Value> = messages
+                .iter()
+                .map(|message| {
+                    let content = if message.images.is_empty() {
+                        json!(message.content)
+                    } else {
+                        let mut parts = vec![json!({"type": "text", "text": message.content})];
+                        parts.extend(message.images.iter().map(|image| {
+                            json!({"type": "image_url", "image_url": {"url": image_data_url(image)}})
+                        }));
+                        json!(parts)
+                    };
+                    json!({"role": message.role, "content": content})
+                })
+                .collect();
             let request = json!({
                 "model": model,
-                "messages": messages,
+                "messages": wire_messages,
                 "stream": true,
                 "stream_options": {"include_usage":true},
                 "max_tokens": max_output_tokens,
@@ -142,7 +168,18 @@ impl Endpoint {
             Provider::Openai => {
                 let input: Vec<Value> = turns
                     .iter()
-                    .map(|m| json!({"role": m.role, "content": m.content}))
+                    .map(|message| {
+                        let content = if message.role == "user" && !message.images.is_empty() {
+                            let mut parts = vec![json!({"type": "input_text", "text": message.content})];
+                            parts.extend(message.images.iter().map(|image| {
+                                json!({"type": "input_image", "image_url": image_data_url(image)})
+                            }));
+                            json!(parts)
+                        } else {
+                            json!(message.content)
+                        };
+                        json!({"role": message.role, "content": content})
+                    })
                     .collect();
                 Ok((
                     "https://api.openai.com/v1/responses".into(),
@@ -159,7 +196,20 @@ impl Endpoint {
             Provider::Anthropic => {
                 let wire_msgs: Vec<Value> = turns
                     .iter()
-                    .map(|m| json!({"role": m.role, "content": m.content}))
+                    .map(|message| {
+                        let content = if message.images.is_empty() {
+                            json!(message.content)
+                        } else {
+                            let mut parts: Vec<Value> = message.images.iter().map(|image| {
+                                json!({"type": "image", "source": {
+                                    "type": "base64", "media_type": image.mime_type, "data": image.data_base64
+                                }})
+                            }).collect();
+                            parts.push(json!({"type": "text", "text": message.content}));
+                            json!(parts)
+                        };
+                        json!({"role": message.role, "content": content})
+                    })
                     .collect();
                 Ok((
                     "https://api.anthropic.com/v1/messages".into(),
@@ -179,9 +229,13 @@ impl Endpoint {
                 }
                 let contents: Vec<Value> = turns
                     .iter()
-                    .map(|m| {
-                        let role = if m.role == "assistant" { "model" } else { "user" };
-                        json!({"role": role, "parts": [{"text": m.content}]})
+                    .map(|message| {
+                        let role = if message.role == "assistant" { "model" } else { "user" };
+                        let mut parts = vec![json!({"text": message.content})];
+                        parts.extend(message.images.iter().map(|image| {
+                            json!({"inlineData": {"mimeType": image.mime_type, "data": image.data_base64}})
+                        }));
+                        json!({"role": role, "parts": parts})
                     })
                     .collect();
                 Ok((
@@ -484,6 +538,92 @@ fn ordered<'a>(rows: &'a Value, count: usize, field: &str) -> CloudResult<Vec<&'
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn multimodal_wire_encodes_openai_compatible_anthropic_gemini_and_ollama() {
+        let messages = [
+            ChatMessage {
+                role: "assistant".into(),
+                content: "Earlier answer".into(),
+                images: Vec::new(),
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: "Describe this image".into(),
+                images: vec![MessageImage {
+                    mime_type: "image/png".into(),
+                    data_base64: "AA==".into(),
+                }],
+            },
+        ];
+        let text_only = json!({"role": "assistant", "content": "Earlier answer"});
+        assert_eq!(serde_json::to_value(&messages[0]).unwrap(), text_only);
+        let text = &messages[1].content;
+        let data_url = "data:image/png;base64,AA==";
+
+        let compatible = Endpoint::compatible("https://fixture.invalid/v1", false).unwrap();
+        let (url, body) = compatible
+            .generation_chat_wire("fixture", &messages, 512)
+            .unwrap();
+        assert_eq!(url, "https://fixture.invalid/v1/chat/completions");
+        assert_eq!(body["messages"][0], text_only);
+        assert_eq!(
+            body["messages"][1]["content"],
+            json!([
+                {"type": "text", "text": text},
+                {"type": "image_url", "image_url": {"url": data_url}}
+            ])
+        );
+
+        let (url, body) = Endpoint::Official(Provider::Openai)
+            .generation_chat_wire("fixture", &messages, 512)
+            .unwrap();
+        assert_eq!(url, "https://api.openai.com/v1/responses");
+        assert_eq!(body["input"][0], text_only);
+        assert_eq!(
+            body["input"][1]["content"],
+            json!([
+                {"type": "input_text", "text": text},
+                {"type": "input_image", "image_url": data_url}
+            ])
+        );
+
+        let (url, body) = Endpoint::Official(Provider::Anthropic)
+            .generation_chat_wire("fixture", &messages, 512)
+            .unwrap();
+        assert_eq!(url, "https://api.anthropic.com/v1/messages");
+        assert_eq!(body["messages"][0], text_only);
+        assert_eq!(
+            body["messages"][1]["content"],
+            json!([
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AA=="}},
+                {"type": "text", "text": text}
+            ])
+        );
+
+        let (url, body) = Endpoint::Official(Provider::Gemini)
+            .generation_chat_wire("fixture", &messages, 512)
+            .unwrap();
+        assert!(url.ends_with("/fixture:streamGenerateContent?alt=sse"));
+        assert_eq!(
+            body["contents"][0],
+            json!({"role": "model", "parts": [{"text": "Earlier answer"}]})
+        );
+        assert_eq!(
+            body["contents"][1],
+            json!({"role": "user", "parts": [
+                {"text": text},
+                {"inlineData": {"mimeType": "image/png", "data": "AA=="}}
+            ]})
+        );
+
+        let body = crate::ollama::chat_request(&crate::models::ModelSettings::default(), &messages);
+        assert_eq!(body["messages"][0], text_only);
+        assert_eq!(
+            body["messages"][1],
+            json!({"role": "user", "content": text, "images": ["AA=="]})
+        );
+    }
 
     #[tokio::test]
     async fn runtime_cloud_compatible_routes_against_http_fixture() {

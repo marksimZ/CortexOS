@@ -64,6 +64,42 @@ pub struct Conversation {
     pub archived: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MessageImage {
+    pub mime_type: String,
+    pub data_base64: String,
+}
+
+pub(crate) const IMAGE_ESTIMATED_UNITS: usize = 1024;
+
+pub fn validate_message_images(images: &[MessageImage]) -> AppResult<()> {
+    if images.len() > 4 {
+        return Err("单条消息最多附带 4 张图片。".into());
+    }
+    for image in images {
+        if !matches!(
+            image.mime_type.as_str(),
+            "image/png" | "image/jpeg" | "image/webp" | "image/gif"
+        ) {
+            return Err("图片格式必须为 PNG、JPEG、WebP 或 GIF。".into());
+        }
+        let data = &image.data_base64;
+        if data.len() > 2_800_000 {
+            return Err("图片过大，Base64 编码最多支持 2,800,000 个字符。".into());
+        }
+        let payload = data.trim_end_matches('=');
+        if data.len() < 4
+            || data.len() % 4 != 0
+            || data.len() - payload.len() > 2
+            || !payload.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/'))
+        {
+            return Err("图片数据无效，请提供不含空白的标准 Base64 编码。".into());
+        }
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Message {
@@ -78,6 +114,8 @@ pub struct Message {
     pub created_at: String,
     pub finish_reason: Option<String>,
     pub citations: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<MessageImage>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -139,10 +177,12 @@ impl ExecutionPurpose {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<MessageImage>,
 }
 
 #[derive(Clone, Debug)]

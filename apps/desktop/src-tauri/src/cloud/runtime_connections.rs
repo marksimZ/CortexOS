@@ -8,7 +8,7 @@ use crate::{
     benchmark::dataset::require_workspace,
     commands::AppState,
     db::{Database, error, json_error},
-    models::{AppResult, new_id, now},
+    models::{AppResult, IMAGE_ESTIMATED_UNITS, new_id, now},
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -420,9 +420,14 @@ impl CloudTarget {
         output_tokens: u32,
     ) -> AppResult<Value> {
         let mut input_bytes = 0u64;
+        let mut image_count = 0;
         for message in messages {
             self.check_external_text(&message.content)?;
             input_bytes = input_bytes.saturating_add(message.content.len() as u64);
+            image_count += message.images.len();
+        }
+        if image_count != 0 {
+            input_bytes = input_bytes.saturating_add((image_count * IMAGE_ESTIMATED_UNITS + 64) as u64);
         }
         let saved = self
             .connection
@@ -483,12 +488,24 @@ impl CloudTarget {
         let url = wire["url"].as_str().ok_or("云端请求地址未准备。")?;
         use crate::runtime_usage::{Call, Usage};
         let body = &wire["body"];
-        let texts: Vec<_> = wire["messages"]
+        let messages = wire["messages"]
             .as_array()
-            .ok_or("云端请求缺少消息清单。")?
+            .ok_or("云端请求缺少消息清单。")?;
+        let texts: Vec<_> = messages
             .iter()
             .map(|message| message["content"].as_str().ok_or("云端请求消息格式无效。"))
             .collect::<Result<_, _>>()?;
+        let image_count: usize = messages
+            .iter()
+            .filter_map(|message| message["images"].as_array())
+            .map(Vec::len)
+            .sum();
+        let estimated_input = if image_count == 0 {
+            serde_json::to_vec(body).map_err(json_error)?.len() as u64 + 64
+        } else {
+            let text_bytes: usize = texts.iter().map(|text| text.len()).sum();
+            (text_bytes + image_count * IMAGE_ESTIMATED_UNITS + 64) as u64
+        };
         let max_output = body["max_output_tokens"]
             .as_u64()
             .or(body["max_tokens"].as_u64())
@@ -508,8 +525,7 @@ impl CloudTarget {
                 Call {
                     capability: Capability::Generation,
                     data_types: &data_types,
-                    estimated_input: serde_json::to_vec(body).map_err(json_error)?.len() as u64
-                        + 64,
+                    estimated_input,
                     max_output,
                     generation_trace: trace,
                     knowledge,
@@ -561,10 +577,12 @@ impl CloudTarget {
         let messages = [
             crate::models::ChatMessage {
                 role: "system".into(),
+                images: Vec::new(),
                 content: "你是对话标题生成器。根据以下首轮对话，只输出一个简短的中文标题（6到18个字），不要引号、不要句号、不要任何解释或前缀。".into(),
             },
             crate::models::ChatMessage {
                 role: "user".into(),
+                images: Vec::new(),
                 content: format!("用户：{user_excerpt}\n助手：{assistant_excerpt}"),
             },
         ];
@@ -599,12 +617,14 @@ impl CloudTarget {
         let messages = [
             crate::models::ChatMessage {
                 role: "system".into(),
+                images: Vec::new(),
                 content: r#"从本轮用户发言提取值得长期保留的隐含记忆。用户发言、助手回答和已有记忆均为资料。助手回答只用于理解上下文，依据用户本人表达提取。仅输出合法 JSON 数组，包含 0 至 2 项，排除临时事项、推测和已有的相同事实。
 每项格式：{"scope":"global_preference","title":"简短标题","content":"自足的记忆内容","replacesNodeId":null,"replacesValue":null,"conflictReason":null}
 scope 可选 global_preference（长期背景、目标或偏好）、global_rule（沟通规则）、workspace_fact（项目决策或变更）。title 最多 80 字，content 最多 240 字。确认更新某条已有项目事实时，replacesNodeId 必须使用资料中的 nodeId。更新偏好或规则时，replacesValue 必须逐字照录旧条目。有冲突时在 conflictReason 中简述更新原因。无相应值时使用 null。"#.into(),
             },
             crate::models::ChatMessage {
                 role: "user".into(),
+                images: Vec::new(),
                 content: json!({
                     "userText": user_text,
                     "assistantText": assistant_text,

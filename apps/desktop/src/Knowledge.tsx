@@ -115,6 +115,12 @@ export function KnowledgePage({
             setSourcesOpen(false);
             onEdit(request);
           }}
+          onAskInChat={(quoteBlock) => {
+            studio.quoteIntoChat(quoteBlock);
+            setSourcesOpen(false);
+            navigate("chat", { workspace, conversation: studio.conversationId });
+            requestAnimationFrame(() => document.getElementById("message")?.focus());
+          }}
         />
       )}
       <header className="page-heading">
@@ -444,7 +450,7 @@ export function KnowledgeInspector({
             <header className="knowledge-detail-heading">
               <div>
                 <span className="knowledge-kind">
-                  {kinds[currentVersion.kind]} / v{currentVersion.version}
+                  {kinds[currentVersion.kind]}
                 </span>
                 <h2>{currentVersion.title}</h2>
                 <p className="knowledge-state">

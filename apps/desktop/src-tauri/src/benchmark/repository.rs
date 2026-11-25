@@ -279,10 +279,12 @@ impl Database {
             ChatMessage {
                 role: "system".into(),
                 content: system.into(),
+                images: Vec::new(),
             },
             ChatMessage {
                 role: "user".into(),
                 content: prompt,
+                images: Vec::new(),
             },
         ];
         let mut request = crate::ollama::chat_request(&settings, &messages);

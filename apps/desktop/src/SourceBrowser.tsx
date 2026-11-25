@@ -9,6 +9,7 @@ import { errorText } from "./studio";
 import type { EditKnowledge } from "./knowledge-types";
 import { FileName } from "./components/FileName";
 import { PaneDivider, splitStyle } from "./components/PaneDivider";
+import { SelectionPopover } from "./components/SelectionPopover";
 export interface SourceRef {
   sourceId: string;
   version: number;
@@ -50,15 +51,18 @@ export function SourceBrowser({
   onClose,
   onChanged,
   onDraft,
+  onAskInChat,
 }: {
   workspace: string;
   initial?: SourceRef;
   onClose: () => void;
   onChanged?: () => void;
   onDraft?: (request: EditKnowledge) => void;
+  onAskInChat?: (quoteBlock: string) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const splitRoot = useRef<HTMLDivElement>(null);
+  const sourcePreRef = useRef<HTMLPreElement>(null);
   const readerToggle = useRef<HTMLButtonElement>(null);
   const [splitRatio, setSplitRatio] = useState<number | null>(null);
   const [readerCollapsed, setReaderCollapsed] = useState(false);
@@ -161,6 +165,22 @@ export function SourceBrowser({
       });
   };
   const lines = selected?.content.split("\n") ?? [];
+  const resolveRangeLines = (range: Range): [number, number] => {
+    const lineOf = (node: Node | null): number | null => {
+      const el = node instanceof HTMLElement ? node : node?.parentElement ?? null;
+      const raw = el?.closest("[data-source-line]")?.getAttribute("data-source-line");
+      return raw ? Number(raw) : null;
+    };
+    const a = lineOf(range.startContainer);
+    const b = lineOf(range.endContainer);
+    if (a != null && b != null && Number.isFinite(a) && Number.isFinite(b)) {
+      return [
+        Math.max(1, Math.min(a, b)),
+        Math.min(Math.max(1, lines.length), Math.max(a, b)),
+      ];
+    }
+    return [start, end];
+  };
   const valid =
     !!selected &&
     Number.isInteger(start) &&
@@ -524,7 +544,7 @@ export function SourceBrowser({
                       下一段
                     </button>
                   </div>
-                  <pre className="source-text numbered-source">
+                  <pre ref={sourcePreRef} className="source-text numbered-source">
                     {lines
                       .slice(linePage, linePage + 200)
                       .map((line, index) => {
@@ -532,6 +552,7 @@ export function SourceBrowser({
                         return (
                           <span
                             key={i}
+                            data-source-line={i + 1}
                             className={
                               valid && i + 1 >= start && i + 1 <= end
                                 ? "selected-source-line"
@@ -541,6 +562,7 @@ export function SourceBrowser({
                             <span
                               aria-hidden="true"
                               className="source-line-number"
+                              style={{ userSelect: "none" }}
                             >
                               {i + 1}
                             </span>
@@ -549,6 +571,69 @@ export function SourceBrowser({
                         );
                       })}
                   </pre>
+                  <SelectionPopover
+                    containerRef={sourcePreRef}
+                    disabled={busy || !selected.document.enabled}
+                    onSelectionRange={(range) => {
+                      const [sLine, eLine] = resolveRangeLines(range);
+                      setStart(sLine);
+                      setEnd(eLine);
+                    }}
+                    onAsk={(_rawText, range) => {
+                      const [sLine, eLine] = resolveRangeLines(range);
+                      const cleanLines = lines.slice(sLine - 1, eLine);
+                      const quote =
+                        `> 摘自《${selected.document.name}》第 ${sLine}–${eLine} 行：\n` +
+                        cleanLines
+                          .slice(0, 16)
+                          .map((l) => `> ${l}`)
+                          .join("\n") +
+                        "\n\n";
+                      if (onAskInChat) {
+                        onAskInChat(quote);
+                      }
+                    }}
+                    onSaveCard={(_rawText, range) => {
+                      const [sLine, eLine] = resolveRangeLines(range);
+                      const cleanContent = lines.slice(sLine - 1, eLine).join("\n").trim();
+                      if (!cleanContent) return;
+                      const firstLine =
+                        cleanContent
+                          .split("\n")
+                          .map((l) => l.replace(/^[#>*\-\d.\s]+/, "").trim())
+                          .find((l) => l.length > 0) ?? selected.document.name;
+                      const autoTitle =
+                        Array.from(`${firstLine}`)
+                          .slice(0, 48)
+                          .join("")
+                          .trim() || `${selected.document.name} 摘录`;
+                      void perform(async () => {
+                        await knowledge("save_source_knowledge", {
+                          source: {
+                            sourceId: selected.document.id,
+                            version: selected.version,
+                            startLine: sLine,
+                            endLine: eLine,
+                          },
+                          input: {
+                            workspaceId: workspace,
+                            nodeId: null,
+                            expectedRevision: null,
+                            title: autoTitle,
+                            kind: "knowledge",
+                            content: Array.from(cleanContent).slice(0, 20000).join(""),
+                            changeReason: "从资料文件划词存为知识卡",
+                            sourceMessageId: null,
+                            sourceExcerpt: null,
+                          },
+                        });
+                        onChanged?.();
+                        notify(
+                          `已存为知识卡（保留《${selected.document.name}》第 ${sLine}–${eLine} 行溯源）`,
+                        );
+                      });
+                    }}
+                  />
                   <details>
                     <summary>保存记录与使用权限</summary>
                     <p>

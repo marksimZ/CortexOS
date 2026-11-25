@@ -456,6 +456,17 @@ mod tests {
 }
 
 pub fn chat_request(settings: &ModelSettings, messages: &[ChatMessage]) -> Value {
+    let messages: Vec<Value> = messages
+        .iter()
+        .map(|message| {
+            let mut wire = json!({"role": message.role, "content": message.content});
+            if !message.images.is_empty() {
+                let images: Vec<_> = message.images.iter().map(|image| &image.data_base64).collect();
+                wire["images"] = json!(images);
+            }
+            wire
+        })
+        .collect();
     json!({"model":settings.model,"messages":messages,"stream":true,"think":false,"keep_alive":"5m",
         "options":{"num_ctx":settings.num_ctx,"temperature":settings.temperature,"num_predict":settings.num_predict}})
 }

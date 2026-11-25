@@ -2,9 +2,11 @@ import {
   Eye,
   Globe,
   HardDrive,
+  ImagePlus,
   Pencil,
   Send,
   Square,
+  X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MarkdownContent } from "./MarkdownContent";
@@ -12,11 +14,89 @@ import { ContextPicker } from "../ContextPicker";
 import { navigationHash } from "../navigation";
 import { webSearchProviderLabel, type WebSearchProvider } from "../api/web-search";
 import { assistant, type AssistantSettings } from "../api/assistant";
+import { AppDialog, openDialog } from "./AppDialog";
 import { notify } from "./Toast";
 import { cloudPresetForAddress } from "../cloud-presets";
 import { SelectMenu } from "./SelectMenu";
-import type { Studio } from "../studio";
+import type { MessageImage, Studio } from "../studio";
 import { cloudConnectionLabel, type GenerationTarget, type RuntimeConnection } from "../runtime-profiles";
+
+const ALLOWED_IMAGE_TYPES = new Set<MessageImage["mimeType"]>([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
+const MAX_IMAGES = 4;
+const MAX_DIMENSION = 1568;
+const MAX_BASE64_LENGTH = 2_700_000;
+
+function readDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("无法读取图片数据。"));
+    };
+    reader.onerror = () => reject(new Error("读取图片失败。"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function parseDataUrl(dataUrl: string): MessageImage {
+  const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl.trim());
+  if (!match) {
+    throw new Error("不支持的图片编码格式，请使用 PNG、JPEG、WebP 或 GIF 图片。");
+  }
+  const mimeType = match[1] as MessageImage["mimeType"];
+  const dataBase64 = match[2];
+  if (!dataBase64 || dataBase64.length > MAX_BASE64_LENGTH) {
+    throw new Error("单张图片过大（压缩后仍超过约 2 MB），请裁剪后重试。");
+  }
+  return { mimeType, dataBase64 };
+}
+
+async function encodeImageFile(file: File): Promise<MessageImage> {
+  const rawType = file.type as MessageImage["mimeType"];
+  if (!ALLOWED_IMAGE_TYPES.has(rawType)) {
+    throw new Error("仅支持粘贴或上传 PNG、JPG、WebP、GIF 格式图片。");
+  }
+  if (rawType === "image/gif") {
+    return parseDataUrl(await readDataUrl(file));
+  }
+  if (file.size <= 350 * 1024 && (rawType === "image/png" || rawType === "image/webp" || rawType === "image/jpeg")) {
+    return parseDataUrl(await readDataUrl(file));
+  }
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("图片解码失败，请确认图片未损坏。"));
+      element.src = objectUrl;
+    });
+    const maxSide = Math.max(img.naturalWidth || 1, img.naturalHeight || 1);
+    const scale = maxSide > MAX_DIMENSION ? MAX_DIMENSION / maxSide : 1;
+    const width = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
+    const height = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return parseDataUrl(await readDataUrl(file));
+    }
+    ctx.drawImage(img, 0, 0, width, height);
+    let dataUrl = canvas.toDataURL("image/webp", 0.86);
+    if (!dataUrl.startsWith("data:image/webp;base64,") || dataUrl.length > MAX_BASE64_LENGTH) {
+      dataUrl = canvas.toDataURL("image/jpeg", 0.84);
+    }
+    return parseDataUrl(dataUrl);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export function ChatComposer({
   studio,
   modelName,
@@ -67,6 +147,9 @@ export function ChatComposer({
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [assistantState, setAssistantState] = useState<AssistantSettings | null>(null);
   const [switchingAssistant, setSwitchingAssistant] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<MessageImage | null>(null);
+  const attachmentDialog = useRef<HTMLDialogElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const taskPreview = taskDraft === "briefing" ? "预览新闻简报" : taskDraft === "reminder" ? "预览提醒" : undefined;
   const [searchChoice, setSearchChoice] = useState<{ workspace: string; provider: WebSearchProvider }>();
   const provider = searchConfigured
@@ -108,12 +191,14 @@ export function ChatComposer({
   const previousPreview = useRef(false);
   const composing = useRef(false);
   const compositionEndedAt = useRef(-Infinity);
+
   useEffect(() => {
     if (previousPreview.current !== preview) {
       (preview ? previewArea.current : textarea.current)?.focus();
       previousPreview.current = preview;
     }
   }, [preview]);
+
   useEffect(() => {
     const ws = studio.workspaceId;
     if (!studio.desktop || !ws) {
@@ -126,9 +211,109 @@ export function ChatComposer({
       .catch(() => { if (active) setAssistantState(null); });
     return () => { active = false; };
   }, [studio.desktop, studio.workspaceId]);
+
+  const attachFiles = async (files: File[]) => {
+    if (!files.length) return;
+    const remaining = MAX_IMAGES - studio.draftImages.length;
+    if (remaining <= 0) {
+      notify(`单条消息最多添加 ${MAX_IMAGES} 张图片`);
+      return;
+    }
+    const chosen = files.slice(0, remaining);
+    if (files.length > remaining) {
+      notify(`已选取前 ${remaining} 张图片（单条最多 ${MAX_IMAGES} 张）`);
+    }
+    try {
+      const encoded = await Promise.all(chosen.map(encodeImageFile));
+      studio.setDraftImages([...studio.draftImages, ...encoded]);
+    } catch (err) {
+      studio.reportError(err);
+    }
+  };
+
   return (
     <div className="composer-area">
       <div className="composer">
+        {studio.draftImages.length > 0 && (
+          <div
+            className="composer-image-strip"
+            aria-label="待发送图片附件"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "8px",
+              padding: "4px 4px 8px",
+              borderBottom: "1px solid var(--line)",
+              marginBottom: "6px",
+            }}
+          >
+            {studio.draftImages.map((img, idx) => (
+              <div
+                key={idx}
+                style={{
+                  position: "relative",
+                  width: "56px",
+                  height: "56px",
+                  borderRadius: "8px",
+                  overflow: "hidden",
+                  border: "1px solid var(--line)",
+                  background: "var(--surface-inset, var(--surface))",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviewAttachment(img);
+                    requestAnimationFrame(() => openDialog(attachmentDialog.current));
+                  }}
+                  aria-label={`预览待发送图片 ${idx + 1}`}
+                  title="点击放大预览"
+                  style={{
+                    padding: 0,
+                    border: "none",
+                    width: "100%",
+                    height: "100%",
+                    cursor: "zoom-in",
+                    background: "transparent",
+                  }}
+                >
+                  <img
+                    src={`data:${img.mimeType};base64,${img.dataBase64}`}
+                    alt={`待发送图片 ${idx + 1}`}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`移除第 ${idx + 1} 张图片`}
+                  title="移除图片"
+                  disabled={studio.sending}
+                  onClick={() => {
+                    studio.setDraftImages(studio.draftImages.filter((_, i) => i !== idx));
+                  }}
+                  style={{
+                    position: "absolute",
+                    top: "2px",
+                    right: "2px",
+                    width: "18px",
+                    height: "18px",
+                    borderRadius: "999px",
+                    border: "none",
+                    background: "rgba(0, 0, 0, 0.68)",
+                    color: "#fff",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                >
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <label className="sr-only" htmlFor="message">
           你的问题
         </label>
@@ -141,13 +326,31 @@ export function ChatComposer({
           aria-describedby={draftTooLong ? "message-length-error" : undefined}
           value={studio.draft}
           onChange={(event) => studio.setDraft(event.target.value)}
+          onPaste={(event) => {
+            if (!studio.desktop || !studio.workspaceId || studio.sending) return;
+            const imageItems = Array.from(event.clipboardData?.items ?? []).filter(
+              (item) => item.kind === "file" && item.type.startsWith("image/"),
+            );
+            if (!imageItems.length) return;
+            const files = imageItems
+              .map((item) => item.getAsFile())
+              .filter((file): file is File => file !== null);
+            if (files.length > 0) {
+              event.preventDefault();
+              void attachFiles(files);
+            }
+          }}
           onCompositionStart={() => { composing.current = true; }}
           onCompositionEnd={() => {
             composing.current = false;
             compositionEndedAt.current = performance.now();
           }}
           placeholder={
-            studio.workspaceId ? "输入问题…" : "创建工作区后，在这里输入问题…"
+            studio.workspaceId
+              ? studio.draftImages.length > 0
+                ? "补充关于图片的问题，或直接按 Enter 发送…"
+                : "输入问题（支持 Ctrl+V 直接粘贴截图）…"
+              : "创建工作区后，在这里输入问题…"
           }
           disabled={!studio.desktop || !studio.workspaceId}
           readOnly={studio.sending || studio.creatingConversation || studio.loadingMessages}
@@ -235,6 +438,34 @@ export function ChatComposer({
               title={`将本题发送给${webSearchProviderLabel[provider]}`}
               onClick={() => { setPreviewKey(null); searchWeb(provider); }}
             ><Globe size={16} aria-hidden="true" />{searchConfigured === null ? "查询公开新闻" : "联网查询"}</button>}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              multiple
+              hidden
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                event.target.value = "";
+                void attachFiles(files);
+              }}
+            />
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="添加图片附件"
+              title="添加图片（也可在输入框按 Ctrl+V 直接粘贴截图）"
+              disabled={
+                !studio.desktop ||
+                !studio.workspaceId ||
+                studio.sending ||
+                studio.loadingMessages ||
+                studio.draftImages.length >= MAX_IMAGES
+              }
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <ImagePlus size={17} aria-hidden="true" />
+            </button>
             <button
               type="button"
               className="icon-button"
@@ -281,7 +512,7 @@ export function ChatComposer({
                   void send();
                 }}
                 aria-label={studio.sending ? "正在发送" : taskPreview ?? "发送消息"}
-                title={canSend ? (taskPreview ?? "发送消息（Enter）") : "请先选择可用模型并输入问题"}
+                title={canSend ? (taskPreview ?? "发送消息（Enter）") : "请先选择可用模型并输入问题或粘贴图片"}
               >
                 <Send size={19} aria-hidden="true" />
               </button>
@@ -344,9 +575,8 @@ export function ChatComposer({
         <summary title="展开查看对话说明与常用快捷键">对话说明与快捷键</summary>
         <div className="composer-help-popover">
           <p>
-            Enter 发送，Shift+Enter 换行。支持 Markdown 标题、列表、代码和表格，点击眼睛图标预览，返回编辑保留原文。
-            可输入“十分钟后提醒我喝水”来创建提醒。
-            可输入“每个工作日早上九点整理 AI 新闻”来创建定时简报。
+            Enter 发送，Shift+Enter 换行，Ctrl+V 可直接粘贴截图（需多模态模型支持）。在回答或资料文件中划选文字，可一键「追问这段」或「存为知识卡」。
+            支持输入“十分钟后提醒我喝水”创建提醒，或“每个工作日早上九点整理 AI 新闻”创建定时简报。
             {cloudAnswer
               ? cloudSyncDefault ? "云端回答会按当前同步设置使用对话与记忆。自动查找知识可在此关闭。" : "发送前可确认要传给云端的内容。"
               : "系统会在容量允许的范围内选取最近的完整对话，并查找当前工作区已确认的知识；不会直接搜索文件全文。请结合依据判断回答是否可靠。"}
@@ -355,6 +585,40 @@ export function ChatComposer({
           {!studio.desktop && <p>浏览器预览不会读取或保存本地数据。</p>}
         </div>
       </details>
+      <AppDialog
+        ref={attachmentDialog}
+        className="form-dialog"
+        aria-label="预览待发送图片"
+        onClose={() => setPreviewAttachment(null)}
+        style={{ maxWidth: "min(90vw, 900px)", padding: "12px" }}
+      >
+        {previewAttachment && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <strong style={{ fontSize: "0.9rem" }}>待发送图片预览</strong>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="关闭图片预览"
+                onClick={() => attachmentDialog.current?.close()}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <img
+              src={`data:${previewAttachment.mimeType};base64,${previewAttachment.dataBase64}`}
+              alt="待发送图片预览"
+              style={{
+                maxWidth: "100%",
+                maxHeight: "76vh",
+                objectFit: "contain",
+                borderRadius: "8px",
+                margin: "0 auto",
+              }}
+            />
+          </div>
+        )}
+      </AppDialog>
     </div>
   );
 }
