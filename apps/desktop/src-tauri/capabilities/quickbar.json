@@ -5,6 +5,7 @@
   "windows": ["quickbar"],
   "permissions": [
     "allow-bootstrap",
+    "allow-get-global-persona",
     "allow-create-conversation",
     "allow-start-chat",
     "allow-cancel-run",

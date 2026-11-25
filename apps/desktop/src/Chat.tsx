@@ -530,6 +530,7 @@ export function ChatPage({
                     <ChatMessage
                       message={message}
                       stream={studio.chatStream}
+                      assistantName={studio.assistantDisplayName}
                       located={route.message === message.id}
                       copied={copied === message.id}
                       copy={copy}

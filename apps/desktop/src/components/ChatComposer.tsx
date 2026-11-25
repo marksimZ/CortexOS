@@ -349,7 +349,7 @@ export function ChatComposer({
             studio.workspaceId
               ? studio.draftImages.length > 0
                 ? "补充关于图片的问题，或直接按 Enter 发送…"
-                : "输入问题（支持 Ctrl+V 直接粘贴截图）…"
+                : `向 ${studio.assistantDisplayName} 提问（支持 Ctrl+V 直接粘贴截图）…`
               : "创建工作区后，在这里输入问题…"
           }
           disabled={!studio.desktop || !studio.workspaceId}
@@ -412,7 +412,7 @@ export function ChatComposer({
                     .then(() => {
                       setAssistantState(prev => prev ? { ...prev, activeVersion: nextVersion } : prev);
                       const label = nextVersion === null
-                        ? "内置默认助手"
+                        ? studio.assistantDisplayName
                         : assistantState.versions.find(v => v.version === nextVersion)?.name || `分身 v${nextVersion}`;
                       notify(`已切换助手分身：${label}`);
                     })
@@ -420,7 +420,7 @@ export function ChatComposer({
                     .finally(() => setSwitchingAssistant(false));
                 }}
               >
-                <option value="">默认助手</option>
+                <option value="">{studio.assistantDisplayName}（默认）</option>
                 {assistantState.versions.map(v => (
                   <option key={v.version} value={String(v.version)}>
                     {v.name || `分身 v${v.version}`}

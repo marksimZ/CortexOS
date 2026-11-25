@@ -1,5 +1,14 @@
 # 里程碑记录
 
+## 2026-11-25 专属助手起名引导、全站称呼联动与消除启动黑框
+
+- **消除 Windows 启动黑色控制台窗口（独立 Codex/GPT 新会话 `01a2124c-1dd1-7092-ae66-1c0fb0b7a55c` 交付后端）**：将 `src-tauri/src/main.rs` 的子系统属性由 `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` 调整为 `#![cfg_attr(windows, windows_subsystem = "windows")]`，桌面快捷方式启动开发版与正式版 `cortexos-desktop.exe` 均不再弹出全黑命令行窗口。
+- **Schema 38 助手自定义称呼与 Prompt 注入**：新增迁移 `0038_assistant_name.sql`（`global_persona.assistant_name`），在 `memory.rs` 校验长度（≤ 40 字、无控制字符）、写入 `GlobalPersona::format_prompt()` 让模型明确感知用户起的称呼、纳入 `DailyFocus.assistantName`，保存全局画像与沉淀规则时广播 `global-persona-updated` 事件，并在 `capabilities/quickbar.json` 为浮窗授予最小权限 `allow-get-global-persona`。
+- **首次启动起名弹窗与全站 6 处称呼联动**：
+  - `App.tsx` 在首次启动且未起名时弹出轻量「想给你的专属 AI 起个名字吗？」对话框（支持快捷候选名或「暂不起名」跳过），`GlobalPersonaPanel.tsx` 支持随时修改；
+  - `QuickBar.tsx` 不再沿用当前工作区/知识板块名，改为「秒问 {助手名}」「向 {助手名} 提问」「{助手名} 正在结合当前工作区记忆思考…」，并与 `ChatMessage.tsx`（回答署名）、`ChatComposer.tsx`（输入框占位与默认分身）、`EmptyState.tsx`（欢迎语与今日聚焦副标题）、`AppShell.tsx`（品牌提示）实时同步。
+- **实测与未验证范围**：执行 `npm.cmd --prefix apps/desktop run build`、`node --experimental-strip-types --test apps/desktop/tests/unit/navigation.test.ts`（2/2 通过）、`cargo test --offline --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --lib memory::tests`（5/5 通过）、`--lib upgrades_existing_database_with_consistent_backup_and_checks_all_migrations`（1/1 通过）及 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`（通过）。未运行真实模型推理，Windows 双击无黑框启动与首次起名弹窗视觉待实机复核。
+
 ## 2026-11-25 Phase 9：Windows 原生 Alt+Space 全局呼出随手记与秒问浮窗
 
 - **零新增依赖 Win32 全局热键与浮窗生命周期（独立 Codex 新会话 `01a2121d-d924-7623-a33f-7b295bbd0bb3` 交付后端）**：新增 `src-tauri/src/quickbar.rs` 与最小权限窗口能力配置 `capabilities/quickbar.json`，通过 Windows `user32.dll`（`RegisterHotKey` / `UnregisterHotKey` / `GetMessageW` / `PostThreadMessageW`）在独立消息泵线程监听 `Alt + Space`（支持 `<data_dir>/quickbar.json` 持久化开关与热键占用冲突提示，并在自动化测试环境自动隔离不抢占宿主热键）。关闭浮窗自动转为隐藏，退出主窗口时同步投递 `WM_QUIT` 释放热键并销毁浮窗，杜绝残留后台僵尸进程。

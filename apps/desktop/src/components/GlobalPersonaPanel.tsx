@@ -5,6 +5,7 @@ import { errorText } from "../frontend-error";
 import { notify } from "./Toast";
 
 const emptyPersona: GlobalPersona = {
+  assistantName: "",
   displayName: "",
   roleBackground: "",
   communicationStyle: "",
@@ -82,6 +83,17 @@ export function GlobalPersonaPanel() {
             void save();
           }}
         >
+          <div className="field">
+            <label htmlFor="persona-assistant-name">你想怎么称呼你的专属助手</label>
+            <input
+              id="persona-assistant-name"
+              maxLength={40}
+              value={persona.assistantName ?? ""}
+              disabled={saving}
+              placeholder="例如：Jarvis / 星期五 / 小脑（留空则显示“专属助手”）"
+              onChange={(e) => setPersona({ ...persona, assistantName: e.target.value })}
+            />
+          </div>
           <div className="field">
             <label htmlFor="persona-name">希望 AI 如何称呼你</label>
             <input

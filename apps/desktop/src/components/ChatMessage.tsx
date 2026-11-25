@@ -47,6 +47,7 @@ function findVerbatimExcerpt(original: string, selected: string): string {
 export const ChatMessage = memo(function ChatMessage({
   message: stored,
   stream,
+  assistantName,
   located,
   copied,
   copy,
@@ -60,6 +61,7 @@ export const ChatMessage = memo(function ChatMessage({
 }: {
   message: Message;
   stream: ChatStream;
+  assistantName?: string;
   located: boolean;
   copied: boolean;
   copy: (id: string, text: string) => Promise<void>;
@@ -109,7 +111,7 @@ export const ChatMessage = memo(function ChatMessage({
       aria-label={message.role === "user" ? "你的问题" : "模型回答"}
     >
       <div className="message-heading">
-        <strong>{message.role === "user" ? "你" : "专属助手"}</strong>
+        <strong>{message.role === "user" ? "你" : assistantName || "专属助手"}</strong>
         {message.role === "assistant" && (
           <span
             className={`message-status ${message.finishReason === "length" ? "limited" : message.status}`}

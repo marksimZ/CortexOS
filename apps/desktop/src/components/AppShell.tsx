@@ -18,8 +18,8 @@ export const pages = [
   { id: "chat", label: "对话" }, { id: "knowledge", label: "知识" },
   { id: "graph", label: "图谱" }, { id: "settings", label: "设置" },
 ] as const;
-function Brand() {
-  return <a className="prototype-brand" href="#/chat" aria-label="CortexOS 首页" title="CortexOS · 专属个人 AI 工作台">
+function Brand({ assistantName }: { assistantName: string }) {
+  return <a className="prototype-brand" href="#/chat" aria-label="CortexOS 首页" title={`CortexOS · ${assistantName}`}>
     <BrandMark />
     <span>CortexOS</span>
   </a>;
@@ -70,7 +70,7 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
     </nav>
   );
   const sidebar = (mobile: boolean) => <>
-    {mobile && <Brand />}
+    {mobile && <Brand assistantName={studio.assistantDisplayName} />}
     <button className="button secondary new-thread" disabled={!studio.desktop || !studio.workspaceId || studio.loading || studio.creatingConversation || studio.sending} onClick={() => {
       void studio.newConversation().then(item => { navigate("chat", { workspace: item.workspaceId, conversation: item.id }); drawer.current?.close(); }).catch(studio.reportError);
     }}><Plus size={16} aria-hidden="true" />{studio.creatingConversation ? "正在创建…" : "新建对话"}</button>
@@ -89,7 +89,7 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
       }
     }}>
       <header className="prototype-topbar">
-        {!narrow && <Brand />}
+        {!narrow && <Brand assistantName={studio.assistantDisplayName} />}
         <button className="icon-button navigation-toggle" aria-label={narrow ? "打开导航" : collapsed ? "展开会话侧栏" : "收起会话侧栏"} aria-expanded={narrow ? mobileOpen : !collapsed} aria-controls={narrow ? "mobile-navigation" : "primary-sidebar"} aria-haspopup={narrow ? "dialog" : undefined} title={narrow ? "打开导航" : collapsed ? "展开会话侧栏" : "收起会话侧栏"} onClick={() => {
           if (narrow) { openDialog(drawer.current); setMobileOpen(true); } else setCollapsed(!collapsed);
         }}><PanelLeft size={18} /></button>

@@ -5,12 +5,13 @@ import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { formatFolderSync, knowledge, type FolderSyncReport } from "./api/knowledge";
+import { memoryApi } from "./api/memory";
 import { AppShell, pages } from "./components/AppShell";
 import { lazyView } from "./components/lazyView";
 import type { EditKnowledge } from "./knowledge-types";
 import { ChatPage } from "./Chat";
 import type { EditEdge } from "./RelationshipEditor";
-import { errorText, useStudio, type Message } from "./studio";
+import { errorText, preference, remember, useStudio, type Message } from "./studio";
 import { notify } from "./components/Toast";
 import "./styles/tokens.css";
 import "./styles/layout.css";
@@ -149,6 +150,27 @@ export default function App() {
   const workspaceDialog = useRef<HTMLDialogElement>(null);
   const afterWorkspace = useRef<"chat" | "cloud" | null>(null);
   const volatileDialog = useRef<HTMLDialogElement>(null);
+  const namingDialog = useRef<HTMLDialogElement>(null);
+  const namingPromptedRef = useRef(false);
+  const [assistantNameDraft, setAssistantNameDraft] = useState("");
+  const [savingAssistantName, setSavingAssistantName] = useState(false);
+  const [assistantNameError, setAssistantNameError] = useState<string | null>(null);
+  useEffect(() => {
+    if (
+      !studio.desktop ||
+      studio.loading ||
+      !studio.personaLoaded ||
+      namingPromptedRef.current
+    ) {
+      return;
+    }
+    if (studio.assistantName || preference("assistant-naming-prompted") === "true") {
+      namingPromptedRef.current = true;
+      return;
+    }
+    namingPromptedRef.current = true;
+    openDialog(namingDialog.current);
+  }, [studio.desktop, studio.loading, studio.personaLoaded, studio.assistantName]);
   useDraftWindow(() => openDialog(volatileDialog.current), reportError);
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -290,6 +312,93 @@ export default function App() {
           }}
         />
       )}
+      <AppDialog
+        ref={namingDialog}
+        className="form-dialog"
+        aria-labelledby="naming-assistant-title"
+        onCancel={() => {
+          remember("assistant-naming-prompted", "true");
+        }}
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const trimmed = assistantNameDraft.trim();
+            if (!trimmed || savingAssistantName) return;
+            setSavingAssistantName(true);
+            setAssistantNameError(null);
+            void memoryApi("get_global_persona", undefined)
+              .then((persona) =>
+                memoryApi("save_global_persona", {
+                  input: { ...persona, assistantName: trimmed },
+                }),
+              )
+              .then((saved) => {
+                remember("assistant-naming-prompted", "true");
+                studio.setAssistantName(saved.assistantName?.trim() || trimmed);
+                notify(`你好，我是 ${trimmed}！随时在「设置 → 我的助手」可修改称呼`);
+                namingDialog.current?.close();
+              })
+              .catch((value) => setAssistantNameError(errorText(value)))
+              .finally(() => setSavingAssistantName(false));
+          }}
+        >
+          <h2 id="naming-assistant-title">想给你的专属 AI 起个名字吗？</h2>
+          <p>
+            给它起一个顺口的名字，后续对话、今日聚焦与全局随手记都会用这个称呼陪伴你（随时可在「设置 → 我的助手」修改）。
+          </p>
+          <div className="field">
+            <label htmlFor="first-run-assistant-name">助手称呼（选填）</label>
+            <input
+              id="first-run-assistant-name"
+              data-initial-focus
+              value={assistantNameDraft}
+              onChange={(event) => setAssistantNameDraft(event.target.value)}
+              maxLength={40}
+              placeholder="例如：Jarvis / 星期五 / 小脑"
+              readOnly={savingAssistantName}
+            />
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
+            {["小脑", "星期五", "Jarvis", "小星"].map((sample) => (
+              <button
+                key={sample}
+                type="button"
+                className="button secondary"
+                style={{ padding: "3px 10px", fontSize: "12px" }}
+                disabled={savingAssistantName}
+                onClick={() => setAssistantNameDraft(sample)}
+              >
+                {sample}
+              </button>
+            ))}
+          </div>
+          {assistantNameError && (
+            <p className="form-error" role="alert">
+              {assistantNameError}
+            </p>
+          )}
+          <div className="dialog-actions">
+            <button
+              className="button secondary"
+              type="button"
+              disabled={savingAssistantName}
+              onClick={() => {
+                remember("assistant-naming-prompted", "true");
+                namingDialog.current?.close();
+              }}
+            >
+              暂不起名
+            </button>
+            <button
+              className="button primary"
+              disabled={savingAssistantName || !assistantNameDraft.trim()}
+            >
+              {savingAssistantName ? "正在保存…" : "就叫这个名字"}
+            </button>
+          </div>
+        </form>
+      </AppDialog>
       <AppDialog ref={volatileDialog} aria-labelledby="volatile-title" aria-describedby="volatile-detail" className="form-dialog">
         <h2 id="volatile-title">仍有临时草稿</h2>
         <p id="volatile-detail">有修改只保留在当前窗口。关闭窗口后无法恢复这些内容。</p>

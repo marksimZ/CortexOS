@@ -1,4 +1,5 @@
 import { chat } from "./api/chat";
+import { assistantLabel, memoryApi, type GlobalPersona } from "./api/memory";
 import { useStudioSettings } from "./studio-settings";
 import { preference, remember } from "./preferences";
 import { useChatWorkspace } from "./chat-workspace";
@@ -6,6 +7,7 @@ import { createChatStream, type StreamUpdate } from "./chat-stream";
 import { errorText } from "./frontend-error";
 import { draftStore } from "./draft-store";
 import { Channel, isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CloudConsent, GenerationTarget, ModelRoute } from "./runtime-profiles";
 
@@ -296,6 +298,8 @@ export function useStudio() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [imageDrafts, setImageDrafts] = useState<Record<string, MessageImage[]>>({});
   const [health, setHealth] = useState<ModelHealth | null>(null);
+  const [assistantName, setAssistantName] = useState("");
+  const [personaLoaded, setPersonaLoaded] = useState(!desktop);
   const [checking, setChecking] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const { error, reportError, clearError } = useStudioError();
@@ -368,6 +372,29 @@ export function useStudio() {
     void reload();
     void checkConnection();
   }, [reload, checkConnection]);
+
+  useEffect(() => {
+    if (!desktop) {
+      setPersonaLoaded(true);
+      return;
+    }
+    let active = true;
+    void memoryApi("get_global_persona", undefined)
+      .then((persona) => {
+        if (active) setAssistantName(persona.assistantName?.trim() || "");
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setPersonaLoaded(true);
+      });
+    const unlistenPromise = listen<GlobalPersona>("global-persona-updated", ({ payload }) => {
+      if (active) setAssistantName(payload.assistantName?.trim() || "");
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+      void unlistenPromise.then((unlisten) => unlisten?.()).catch(() => {});
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeRun) return;
@@ -667,6 +694,10 @@ export function useStudio() {
     setAutoRetrieval,
     savingRetrieval,
     health,
+    assistantName,
+    assistantDisplayName: assistantLabel(assistantName),
+    personaLoaded,
+    setAssistantName,
     checking,
     connectionError,
     error,

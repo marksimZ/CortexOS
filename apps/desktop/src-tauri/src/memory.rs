@@ -14,6 +14,7 @@ use tauri::State;
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct GlobalPersona {
     pub display_name: String,
+    pub assistant_name: String,
     pub role_background: String,
     pub communication_style: String,
     pub preferences: Vec<String>,
@@ -24,6 +25,7 @@ pub(crate) struct GlobalPersona {
 impl GlobalPersona {
     pub(crate) fn validate(&mut self) -> AppResult<()> {
         self.display_name = self.display_name.trim().to_owned();
+        self.assistant_name = self.assistant_name.trim().to_owned();
         self.role_background = self.role_background.trim().to_owned();
         self.communication_style = self.communication_style.trim().to_owned();
         if self.display_name.chars().count() > 60
@@ -31,6 +33,11 @@ impl GlobalPersona {
             || self.communication_style.chars().count() > 800
         {
             return Err("称呼最多 60 字，背景与沟通风格最多各 800 字。".into());
+        }
+        if self.assistant_name.chars().count() > 40
+            || self.assistant_name.chars().any(char::is_control)
+        {
+            return Err("助手称呼最多 40 字，且不能包含控制字符。".into());
         }
         let clean = |items: &mut Vec<String>, max_items: usize| -> AppResult<()> {
             let mut deduped = Vec::new();
@@ -59,6 +66,7 @@ impl GlobalPersona {
 
     pub(crate) fn is_empty(&self) -> bool {
         self.display_name.is_empty()
+            && self.assistant_name.is_empty()
             && self.role_background.is_empty()
             && self.communication_style.is_empty()
             && self.preferences.is_empty()
@@ -70,6 +78,12 @@ impl GlobalPersona {
             return None;
         }
         let mut lines = vec!["关于当前用户（全局长期画像，跨工作区生效）：".to_string()];
+        if !self.assistant_name.is_empty() {
+            lines.push(format!(
+                "- 用户为你起的名字：{}（请自然以此名字自称，回应用户对你的称呼）",
+                self.assistant_name
+            ));
+        }
         if !self.display_name.is_empty() {
             lines.push(format!("- 称呼：{}", self.display_name));
         }
@@ -106,26 +120,43 @@ pub(crate) fn read_persona(c: &Connection) -> AppResult<GlobalPersona> {
     if !exists {
         return Ok(GlobalPersona::default());
     }
-    let row: Option<(String, String, String, String, String, String)> = c
+    let row: Option<(String, String, String, String, String, String, String)> = c
         .query_row(
-            "SELECT display_name,role_background,communication_style,preferences_json,rules_json,updated_at
+            "SELECT display_name,assistant_name,role_background,communication_style,preferences_json,rules_json,updated_at
              FROM global_persona WHERE id=1",
             [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
+            |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    r.get(6)?,
+                ))
+            },
         )
         .optional()
         .map_err(error)?;
     match row {
-        Some((display_name, role_background, communication_style, prefs_raw, rules_raw, updated_at)) => {
-            Ok(GlobalPersona {
-                display_name,
-                role_background,
-                communication_style,
-                preferences: serde_json::from_str(&prefs_raw).map_err(json_error)?,
-                rules: serde_json::from_str(&rules_raw).map_err(json_error)?,
-                updated_at,
-            })
-        }
+        Some((
+            display_name,
+            assistant_name,
+            role_background,
+            communication_style,
+            prefs_raw,
+            rules_raw,
+            updated_at,
+        )) => Ok(GlobalPersona {
+            display_name,
+            assistant_name,
+            role_background,
+            communication_style,
+            preferences: serde_json::from_str(&prefs_raw).map_err(json_error)?,
+            rules: serde_json::from_str(&rules_raw).map_err(json_error)?,
+            updated_at,
+        }),
         None => Ok(GlobalPersona::default()),
     }
 }
@@ -137,10 +168,11 @@ pub(crate) fn write_persona(c: &Connection, persona: &mut GlobalPersona) -> AppR
     let prefs_json = serde_json::to_string(&persona.preferences).map_err(json_error)?;
     let rules_json = serde_json::to_string(&persona.rules).map_err(json_error)?;
     c.execute(
-        "INSERT INTO global_persona(id,display_name,role_background,communication_style,preferences_json,rules_json,updated_at)
-         VALUES(1,?1,?2,?3,?4,?5,?6)
+        "INSERT INTO global_persona(id,display_name,assistant_name,role_background,communication_style,preferences_json,rules_json,updated_at)
+         VALUES(1,?1,?2,?3,?4,?5,?6,?7)
          ON CONFLICT(id) DO UPDATE SET
            display_name=excluded.display_name,
+           assistant_name=excluded.assistant_name,
            role_background=excluded.role_background,
            communication_style=excluded.communication_style,
            preferences_json=excluded.preferences_json,
@@ -148,6 +180,7 @@ pub(crate) fn write_persona(c: &Connection, persona: &mut GlobalPersona) -> AppR
            updated_at=excluded.updated_at",
         params![
             persona.display_name,
+            persona.assistant_name,
             persona.role_background,
             persona.communication_style,
             prefs_json,
@@ -479,6 +512,7 @@ pub(crate) fn save_ai_memory_suggestions(
                 &persona.role_background,
                 &persona.communication_style,
                 &persona.display_name,
+                &persona.assistant_name,
             ]
             .contains(&&item.content)
         {
@@ -638,16 +672,19 @@ pub(crate) async fn get_global_persona(state: State<'_, AppState>) -> AppResult<
 
 #[tauri::command]
 pub(crate) async fn save_global_persona(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     mut input: GlobalPersona,
 ) -> AppResult<GlobalPersona> {
     input.validate()?;
-    blocking(state.database.clone()?, move |db| {
+    let saved = blocking(state.database.clone()?, move |db| {
         let c = db.connection()?;
         write_persona(&c, &mut input)?;
         Ok(input)
     })
-    .await
+    .await?;
+    let _ = tauri::Emitter::emit(&app, "global-persona-updated", &saved);
+    Ok(saved)
 }
 
 #[tauri::command]
@@ -1022,6 +1059,7 @@ pub(crate) struct DailyFocus {
     pub workspace_id: String,
     pub workspace_name: String,
     pub display_name: String,
+    pub assistant_name: String,
     pub has_activity: bool,
     pub knowledge_count: usize,
     pub pending_memory_count: usize,
@@ -1041,7 +1079,7 @@ pub(crate) fn query_daily_focus(c: &Connection, workspace_id: &str) -> AppResult
             |r| r.get(0),
         )
         .map_err(error)?;
-    let display_name = read_persona(c)?.display_name;
+    let persona = read_persona(c)?;
     let knowledge_count: i64 = c
         .query_row(
             &format!(
@@ -1225,7 +1263,8 @@ pub(crate) fn query_daily_focus(c: &Connection, workspace_id: &str) -> AppResult
     Ok(DailyFocus {
         workspace_id: workspace_id.to_owned(),
         workspace_name,
-        display_name,
+        display_name: persona.display_name,
+        assistant_name: persona.assistant_name,
         has_activity,
         knowledge_count: usize::try_from(knowledge_count).map_err(|err| err.to_string())?,
         pending_memory_count: usize::try_from(pending_memory_count)
@@ -1252,6 +1291,7 @@ pub(crate) async fn read_daily_focus(
 
 #[tauri::command]
 pub(crate) async fn promote_rule_from_chat(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     rule: String,
 ) -> AppResult<GlobalPersona> {
@@ -1259,7 +1299,7 @@ pub(crate) async fn promote_rule_from_chat(
     if text.is_empty() || text.chars().count() > 240 {
         return Err("长期规则需为 1 至 240 字。".into());
     }
-    blocking(state.database.clone()?, move |db| {
+    let saved = blocking(state.database.clone()?, move |db| {
         let c = db.connection()?;
         let mut persona = read_persona(&c)?;
         if !persona.rules.iter().any(|r| r == &text) {
@@ -1268,13 +1308,60 @@ pub(crate) async fn promote_rule_from_chat(
         write_persona(&c, &mut persona)?;
         Ok(persona)
     })
-    .await
+    .await?;
+    let _ = tauri::Emitter::emit(&app, "global-persona-updated", &saved);
+    Ok(saved)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::Database;
+
+    #[test]
+    fn assistant_name_persists_and_appears_in_prompt_and_daily_focus() {
+        let db = Database::rag_evaluation_database().unwrap();
+        let workspace = db.create_workspace("助手称呼").unwrap().id;
+        let c = db.connection().unwrap();
+        let mut persona = GlobalPersona {
+            assistant_name: " 小智 ".into(),
+            ..Default::default()
+        };
+
+        write_persona(&c, &mut persona).unwrap();
+        let saved = read_persona(&c).unwrap();
+        assert_eq!(saved.assistant_name, "小智");
+        assert_eq!(
+            saved.format_prompt().unwrap(),
+            "关于当前用户（全局长期画像，跨工作区生效）：\n- 用户为你起的名字：小智（请自然以此名字自称，回应用户对你的称呼）"
+        );
+        assert_eq!(
+            query_daily_focus(&c, &workspace).unwrap().assistant_name,
+            "小智"
+        );
+
+        persona.assistant_name.clear();
+        write_persona(&c, &mut persona).unwrap();
+        let saved = read_persona(&c).unwrap();
+        assert!(saved.assistant_name.is_empty());
+        assert!(saved.format_prompt().is_none());
+    }
+
+    #[test]
+    fn assistant_name_rejects_excess_length_and_control_characters() {
+        let mut persona = GlobalPersona {
+            assistant_name: "智".repeat(40),
+            ..Default::default()
+        };
+        assert!(persona.validate().is_ok());
+        for name in ["智".repeat(41), "小\n智".into()] {
+            persona.assistant_name = name;
+            assert_eq!(
+                persona.validate().unwrap_err(),
+                "助手称呼最多 40 字，且不能包含控制字符。"
+            );
+        }
+    }
 
     #[test]
     fn daily_focus_aggregates_episodes_sources_briefings_and_respects_empty_workspace() {
@@ -1500,7 +1587,7 @@ mod tests {
                 communication_style: "结论先行，直接给代码示例".into(),
                 preferences: vec!["优先用 TypeScript".into()],
                 rules: vec!["不要输出客套话".into()],
-                updated_at: String::new(),
+                ..Default::default()
             };
             write_persona(&c, &mut p).unwrap();
             let loaded = read_persona(&c).unwrap();

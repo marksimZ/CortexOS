@@ -1,12 +1,18 @@
 import { createClient, type Command, type WorkspaceArgs } from "./request";
 
 export interface GlobalPersona {
+  assistantName: string;
   displayName: string;
   roleBackground: string;
   communicationStyle: string;
   preferences: string[];
   rules: string[];
   updatedAt: string;
+}
+
+export function assistantLabel(name?: string | null, fallback = "专属助手"): string {
+  const clean = name?.trim();
+  return clean || fallback;
 }
 
 export interface MemoryCandidate {
@@ -58,6 +64,7 @@ export interface FocusReminder {
 export interface DailyFocus {
   workspaceId: string;
   workspaceName: string;
+  assistantName?: string;
   displayName: string;
   hasActivity: boolean;
   knowledgeCount: number;

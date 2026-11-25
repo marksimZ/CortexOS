@@ -94,6 +94,9 @@ export function EmptyState({
       focus.hasActivity,
   );
 
+  const botName = focus?.assistantName?.trim() || studio.assistantDisplayName;
+  const hasCustomBotName = Boolean((focus?.assistantName?.trim() || studio.assistantName).trim());
+
   if (showFocusBoard && focus) {
     const greeting = greetingByTime();
     const hasEpisodes = focus.recentEpisodes.length > 0;
@@ -122,7 +125,7 @@ export function EmptyState({
             {focus.displayName ? `，${focus.displayName}` : ""}
           </h2>
           <p className="welcome-tagline" style={{ margin: 0, fontSize: "0.86rem" }}>
-            {focus.workspaceName} · 已沉淀 {focus.knowledgeCount} 条有效知识
+            {focus.workspaceName} · {botName} 已沉淀 {focus.knowledgeCount} 条有效知识
             {focus.pendingMemoryCount > 0 ? ` · ${focus.pendingMemoryCount} 条记忆待确认` : ""}
           </p>
         </div>
@@ -384,9 +387,9 @@ export function EmptyState({
     <div className="chat-empty">
       <div className="welcome-heading">
         <BrandMark className="cognitive-mark" size={80} />
-        <h2>欢迎使用 CortexOS</h2>
+        <h2>{hasCustomBotName ? `你好，我是 ${botName}` : "欢迎使用 CortexOS"}</h2>
         <p className="welcome-tagline">
-          定制你的专属个人 AI：记住你的偏好、本地资料与长期规则，越用越懂你。
+          定制你的专属个人 AI{hasCustomBotName ? `「${botName}」` : ""}：记住你的偏好、本地资料与长期规则，越用越懂你。
         </p>
       </div>
       <div className="welcome-next">

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { chat } from "./api/chat";
+import { assistantLabel, memoryApi, type GlobalPersona } from "./api/memory";
 import { quickbarApi } from "./api/quickbar";
 import type { StreamUpdate } from "./chat-stream";
 import { BrandMark } from "./components/BrandMark";
@@ -49,6 +50,7 @@ function readSavedGeneration(workspace: string | null): GenerationTarget | undef
 export function QuickBar() {
   const desktop = isTauri();
   const [mode, setMode] = useState<"ask" | "note">("ask");
+  const [assistantName, setAssistantName] = useState("");
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -67,8 +69,12 @@ export function QuickBar() {
   const syncWorkspaces = useCallback(async () => {
     if (!desktop) return;
     try {
-      const boot = await chat("bootstrap");
+      const [boot, persona] = await Promise.all([
+        chat("bootstrap"),
+        memoryApi("get_global_persona", undefined).catch(() => null),
+      ]);
       setWorkspaces(boot.workspaces);
+      if (persona) setAssistantName(persona.assistantName?.trim() || "");
       const preferred = preference("workspace");
       const chosen =
         boot.workspaces.find((w) => w.id === preferred) ?? boot.workspaces[0] ?? null;
@@ -92,7 +98,11 @@ export function QuickBar() {
   }, [desktop]);
 
   useEffect(() => {
-    document.title = "CortexOS 随手记与秒问";
+    const label = assistantName.trim();
+    document.title = label ? `${label} · 随手记与秒问` : "CortexOS 随手记与秒问";
+  }, [assistantName]);
+
+  useEffect(() => {
     void syncWorkspaces();
     requestAnimationFrame(() => inputRef.current?.focus());
 
@@ -105,6 +115,10 @@ export function QuickBar() {
         inputRef.current?.focus();
         inputRef.current?.select();
       });
+    }).catch(() => undefined);
+
+    const personaPromise = listen<GlobalPersona>("global-persona-updated", ({ payload }) => {
+      setAssistantName(payload.assistantName?.trim() || "");
     }).catch(() => undefined);
 
     const onBlur = () => {
@@ -120,6 +134,7 @@ export function QuickBar() {
     return () => {
       window.removeEventListener("blur", onBlur);
       void shownPromise.then((unlisten) => unlisten?.()).catch(() => {});
+      void personaPromise.then((unlisten) => unlisten?.()).catch(() => {});
     };
   }, [desktop, syncWorkspaces, hideWindow, answer, error]);
 
@@ -310,7 +325,7 @@ export function QuickBar() {
               }}
             >
               <Sparkles size={12} aria-hidden="true" />
-              秒问 AI
+              秒问 {assistantName.trim() || "AI"}
             </button>
             <button
               type="button"
@@ -436,7 +451,7 @@ export function QuickBar() {
               ? "请先在主窗口创建一个工作区…"
               : effectiveMode === "note"
                 ? `记录灵感、结论或待办，按 Enter 直接存入「${currentWorkspace?.name ?? "知识库"}」…`
-                : `向「${currentWorkspace?.name ?? "专属助手"}」提问（输入 / 快速切换随手记）…`
+                : `向 ${assistantLabel(assistantName)} 提问（输入 / 快速切换随手记）…`
           }
           style={{
             flex: 1,
@@ -531,7 +546,9 @@ export function QuickBar() {
             {answer ? (
               <MarkdownContent content={answer} />
             ) : asking ? (
-              <p style={{ color: "var(--muted)", margin: 0 }}>正在结合当前工作区记忆思考…</p>
+              <p style={{ color: "var(--muted)", margin: 0 }}>
+                {assistantLabel(assistantName)} 正在结合当前工作区记忆思考…
+              </p>
             ) : null}
           </div>
           <footer
