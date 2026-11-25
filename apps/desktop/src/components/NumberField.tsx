@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 
-export function NumberField({ label, min, max, step = 1, value, onChange, readOnly, error }: {
+export function NumberField({ label, min, max, step = 1, value, onChange, readOnly, disabled, error }: {
   label: string;
   min: number;
   max: number;
@@ -8,6 +8,7 @@ export function NumberField({ label, min, max, step = 1, value, onChange, readOn
   value: number | null;
   onChange: (value: number | null) => void;
   readOnly?: boolean;
+  disabled?: boolean;
   error?: string;
 }) {
   const id = useId();
@@ -17,10 +18,14 @@ export function NumberField({ label, min, max, step = 1, value, onChange, readOn
       ? `请输入 ${min} 至 ${max} 之间的${step === 1 ? "整数" : "数字"}。` : undefined : undefined);
   return <div className="field">
     <label htmlFor={id}>{label}</label>
-    <input id={id} type="number" required min={min} max={max} step={step} readOnly={readOnly}
+    <input id={id} type="number" required min={min} max={max} step={step} readOnly={readOnly} disabled={disabled}
       value={value !== null && Number.isFinite(value) ? value : ""}
       aria-invalid={!!invalid || undefined} aria-describedby={invalid ? `${id}-error` : undefined}
-      onChange={event => onChange(Number.isFinite(event.currentTarget.valueAsNumber) ? event.currentTarget.valueAsNumber : null)}
+      onChange={event => {
+        const next = Number.isFinite(event.currentTarget.valueAsNumber) ? event.currentTarget.valueAsNumber : null;
+        if (next === null || next < min || next > max) setChecked(true);
+        onChange(next);
+      }}
       onBlur={() => setChecked(true)} onInvalid={event => {
         setChecked(true);
         const parent = event.currentTarget.closest("details:not([open])");

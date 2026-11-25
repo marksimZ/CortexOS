@@ -1,6 +1,6 @@
 import { capacityError, NumberField, validModelCapacity } from "./components/NumberField";
 import { SelectMenu } from "./components/SelectMenu";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CheckCircle2,
   Database,
@@ -40,6 +40,12 @@ export function SettingsPage({ studio }: { studio: Studio }) {
   const [capacityInvalid, setCapacityInvalid] = useState(false);
   const route = useNavigation();
   const section = sections.find(([id]) => id === route.params.get("section"))?.[0] ?? "model";
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLButtonElement && active.closest(".settings-navigation") && active.getAttribute("aria-pressed") !== "true") {
+      active.blur();
+    }
+  }, [section]);
   const installed = studio.health?.models.some(
     (model) => model.name === draft.model,
   );
@@ -130,8 +136,8 @@ export function SettingsPage({ studio }: { studio: Studio }) {
               </div>
             </div>
             <div className="field">
-              <label htmlFor="endpoint">服务地址</label>
-              <input id="endpoint" value="http://127.0.0.1:11434" readOnly />
+              <label htmlFor="endpoint">服务地址（固定本机回环）</label>
+              <input id="endpoint" value="http://127.0.0.1:11434" disabled />
             </div>
             <button
               type="button"
@@ -194,10 +200,10 @@ export function SettingsPage({ studio }: { studio: Studio }) {
             <details className="advanced-settings">
               <summary>生成参数</summary>
               <div className="parameter-fields">
-                <NumberField label="输入与回答总容量（Token）" min={1024} max={16384} value={draft.numCtx} readOnly={!studio.desktop} error={capacityInvalid ? capacityError : undefined} onChange={value => field("numCtx", value)} />
-                <NumberField label="回答长度上限（Token）" min={32} max={2048} value={draft.numPredict} readOnly={!studio.desktop} onChange={value => field("numPredict", value)} />
-                <NumberField label="回答变化程度（温度）" min={0} max={2} step="any" value={draft.temperature} readOnly={!studio.desktop} onChange={value => field("temperature", value)} />
-                <NumberField label="生成超时（秒）" min={30} max={600} value={draft.timeoutSeconds} readOnly={!studio.desktop} onChange={value => field("timeoutSeconds", value)} />
+                <NumberField label="输入与回答总容量（Token）" min={1024} max={16384} value={draft.numCtx} readOnly={!studio.desktop} disabled={!studio.desktop} error={capacityInvalid ? capacityError : undefined} onChange={value => field("numCtx", value)} />
+                <NumberField label="回答长度上限（Token）" min={32} max={2048} value={draft.numPredict} readOnly={!studio.desktop} disabled={!studio.desktop} onChange={value => field("numPredict", value)} />
+                <NumberField label="回答变化程度（温度）" min={0} max={2} step="any" value={draft.temperature} readOnly={!studio.desktop} disabled={!studio.desktop} onChange={value => field("temperature", value)} />
+                <NumberField label="生成超时（秒）" min={30} max={600} value={draft.timeoutSeconds} readOnly={!studio.desktop} disabled={!studio.desktop} onChange={value => field("timeoutSeconds", value)} />
               </div>
               <p>
                 一次只生成一个回答。Token

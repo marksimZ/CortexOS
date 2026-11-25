@@ -29,7 +29,7 @@ summary:hover { color: var(--text); }
 .settings-section:not([hidden]),.knowledge-detail-heading,.knowledge-prose,.graph-inspector,.trace-detail { animation: view-enter var(--motion-enter) var(--ease) both; }
 .prototype-sidebar,.chat-evidence:not(.evidence-overlay) { animation: view-enter var(--motion-enter) var(--ease) both; }
 .message.user,.message.assistant:last-child { animation: view-enter var(--motion-enter) var(--ease) both; }
-.welcome-suggestions { animation: view-enter 240ms var(--ease) 60ms both; }
+.welcome-starters { animation: view-enter 240ms var(--ease) 60ms both; }
 
 /* Overlays. */
 .toast { animation: feedback-pop 180ms var(--ease) both; }

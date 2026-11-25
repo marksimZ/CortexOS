@@ -342,16 +342,18 @@ export function ChatComposer({
       {!!studio.draftPersistence && <small className="inline-help">{studio.draftPersistence === "local" ? "草稿保存在本机" : "草稿只保留在当前窗口"}</small>}
       <details className="composer-help">
         <summary title="展开查看对话说明与常用快捷键">对话说明与快捷键</summary>
-        <p>
-          Enter 发送，Shift+Enter 换行。支持 Markdown 标题、列表、代码和表格，点击眼睛图标预览，返回编辑保留原文。
-          可输入“十分钟后提醒我喝水”来创建提醒。
-          可输入“每个工作日早上九点整理 AI 新闻”来创建定时简报。
-          {cloudAnswer
-            ? cloudSyncDefault ? "云端回答会按当前同步设置使用对话与记忆。自动查找知识可在此关闭。" : "发送前可确认要传给云端的内容。"
-            : "系统会在容量允许的范围内选取最近的完整对话，并查找当前工作区已确认的知识；不会直接搜索文件全文。请结合依据判断回答是否可靠。"}
-        </p>
-        {studio.workspaceId && <a href={navigationHash("settings", { workspace: studio.workspaceId, section: cloudAnswer ? "profiles" : "model" })}>模型设置</a>}
-        {!studio.desktop && <p>浏览器预览不会读取或保存本地数据。</p>}
+        <div className="composer-help-popover">
+          <p>
+            Enter 发送，Shift+Enter 换行。支持 Markdown 标题、列表、代码和表格，点击眼睛图标预览，返回编辑保留原文。
+            可输入“十分钟后提醒我喝水”来创建提醒。
+            可输入“每个工作日早上九点整理 AI 新闻”来创建定时简报。
+            {cloudAnswer
+              ? cloudSyncDefault ? "云端回答会按当前同步设置使用对话与记忆。自动查找知识可在此关闭。" : "发送前可确认要传给云端的内容。"
+              : "系统会在容量允许的范围内选取最近的完整对话，并查找当前工作区已确认的知识；不会直接搜索文件全文。请结合依据判断回答是否可靠。"}
+          </p>
+          {studio.workspaceId && <a href={navigationHash("settings", { workspace: studio.workspaceId, section: cloudAnswer ? "profiles" : "model" })}>模型设置</a>}
+          {!studio.desktop && <p>浏览器预览不会读取或保存本地数据。</p>}
+        </div>
       </details>
     </div>
   );
