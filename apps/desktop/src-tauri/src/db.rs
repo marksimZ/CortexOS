@@ -47,10 +47,49 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0032_memory_summary_provenance.sql"),
     include_str!("../migrations/0033_watched_folders.sql"),
     include_str!("../migrations/0034_watched_folder_sync.sql"),
+    include_str!("../migrations/0035_conversation_archive.sql"),
 ];
 const MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const RUN_COLUMNS: &str = "id,workspace_id,conversation_id,assistant_message_id,model_id,status,started_at,finished_at,error_message";
 const SYSTEM_PROMPT: &str = "你是 CortexOS 本地项目助手。使用中文清晰回答。区分事实、假设与建议；没有来源时不要编造引用，不要声称内容已经验证。当前没有文件检索或工具权限。直接给出可用的回答，无需输出内部思考过程。";
+
+pub(crate) fn smart_fallback_title(content: &str) -> String {
+    let first_line = content
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("新对话");
+    let mut trimmed = first_line;
+    for prefix in [
+        "你好，", "你好,", "你好 ", "请问一下", "请问", "帮我一下", "帮我", "帮忙",
+        "麻烦你", "麻烦", "请帮我", "请你", "我想问", "我想",
+    ] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            let rest = rest.trim_start_matches(['，', ',', '：', ':', ' ', '。', '？', '?']);
+            if rest.chars().count() >= 4 {
+                trimmed = rest;
+                break;
+            }
+        }
+    }
+    let clause = trimmed
+        .split(['。', '？', '?', '！', '!', '\n'])
+        .map(str::trim)
+        .find(|part| part.chars().count() >= 3)
+        .unwrap_or(trimmed);
+    let clean: String = clause
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(22)
+        .collect::<String>()
+        .trim_matches(['"', '\'', '“', '”', '‘', '’', ' ', '，', ',', '：', ':'])
+        .to_string();
+    if clean.is_empty() {
+        "新对话".into()
+    } else {
+        clean
+    }
+}
 
 pub(crate) fn chat_budget(settings: &ModelSettings, content: &str) -> AppResult<(usize, usize)> {
     settings.validate()?;
@@ -493,7 +532,7 @@ impl Database {
         {
             return Err(missing());
         }
-        let mut statement = connection.prepare("SELECT id,workspace_id,title,updated_at,COALESCE((SELECT enabled FROM conversation_retrieval_settings s WHERE s.conversation_id=conversations.id),1) FROM conversations WHERE workspace_id=?1 AND purpose='chat' ORDER BY updated_at DESC,id").map_err(error)?;
+        let mut statement = connection.prepare("SELECT id,workspace_id,title,updated_at,COALESCE((SELECT enabled FROM conversation_retrieval_settings s WHERE s.conversation_id=conversations.id),1),archived_at IS NOT NULL FROM conversations WHERE workspace_id=?1 AND purpose='chat' AND deleted_at IS NULL ORDER BY updated_at DESC,id").map_err(error)?;
         statement
             .query_map(params![workspace_id], |r| {
                 Ok(Conversation {
@@ -502,6 +541,7 @@ impl Database {
                     title: r.get(2)?,
                     updated_at: r.get(3)?,
                     auto_retrieval: r.get(4)?,
+                    archived: r.get(5)?,
                 })
             })
             .map_err(error)?
@@ -517,6 +557,7 @@ impl Database {
             title: "新对话".into(),
             updated_at: now(),
             auto_retrieval: true,
+            archived: false,
         };
         self.connection()?
             .execute(
@@ -541,7 +582,7 @@ impl Database {
         let affected = self
             .connection()?
             .execute(
-                "UPDATE conversations SET title=?1,updated_at=?2 WHERE workspace_id=?3 AND id=?4 AND purpose='chat'",
+                "UPDATE conversations SET title=?1,updated_at=?2 WHERE workspace_id=?3 AND id=?4 AND purpose='chat' AND deleted_at IS NULL",
                 params![validate_name(title)?, now(), workspace_id, conversation_id],
             )
             .map_err(error)?;
@@ -549,6 +590,98 @@ impl Database {
             return Err(missing());
         }
         Ok(())
+    }
+
+    pub fn archive_conversation(
+        &self,
+        workspace_id: &str,
+        conversation_id: &str,
+        archived: bool,
+    ) -> AppResult<()> {
+        let timestamp = now();
+        let archived_at = archived.then_some(timestamp.clone());
+        let affected = self
+            .connection()?
+            .execute(
+                "UPDATE conversations SET archived_at=?1,updated_at=?2 WHERE workspace_id=?3 AND id=?4 AND purpose='chat' AND deleted_at IS NULL",
+                params![archived_at, timestamp, workspace_id, conversation_id],
+            )
+            .map_err(error)?;
+        if affected == 0 {
+            return Err(missing());
+        }
+        Ok(())
+    }
+
+    pub fn delete_conversation(
+        &self,
+        workspace_id: &str,
+        conversation_id: &str,
+    ) -> AppResult<()> {
+        let mut connection = self.connection()?;
+        let tx = connection.transaction().map_err(error)?;
+        let running: bool = tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM execution_runs WHERE workspace_id=?1 AND conversation_id=?2 AND status='running')",
+                params![workspace_id, conversation_id],
+                |r| r.get(0),
+            )
+            .map_err(error)?;
+        if running {
+            return Err("该会话正在生成回答，请先停止生成后再删除。".into());
+        }
+        let timestamp = now();
+        let affected = tx
+            .execute(
+                "UPDATE conversations SET deleted_at=?1,updated_at=?1 WHERE workspace_id=?2 AND id=?3 AND purpose='chat' AND deleted_at IS NULL",
+                params![timestamp, workspace_id, conversation_id],
+            )
+            .map_err(error)?;
+        if affected == 0 {
+            return Err(missing());
+        }
+        let _ = tx.execute(
+            "DELETE FROM conversation_summaries WHERE workspace_id=?1 AND conversation_id=?2",
+            params![workspace_id, conversation_id],
+        );
+        let _ = tx.execute(
+            "DELETE FROM memory_candidates WHERE workspace_id=?1 AND conversation_id=?2 AND status='pending'",
+            params![workspace_id, conversation_id],
+        );
+        tx.commit().map_err(error)?;
+        Ok(())
+    }
+
+    pub fn conversation_turn_count(
+        &self,
+        workspace_id: &str,
+        conversation_id: &str,
+    ) -> AppResult<i64> {
+        self.connection()?
+            .query_row(
+                "SELECT COUNT(*) FROM messages WHERE workspace_id=?1 AND conversation_id=?2 AND role='user'",
+                params![workspace_id, conversation_id],
+                |r| r.get(0),
+            )
+            .map_err(error)
+    }
+
+    pub fn apply_ai_conversation_title(
+        &self,
+        workspace_id: &str,
+        conversation_id: &str,
+        expected_draft_title: &str,
+        new_title: &str,
+    ) -> AppResult<bool> {
+        let clean = validate_name(new_title)?;
+        let affected = self
+            .connection()?
+            .execute(
+                "UPDATE conversations SET title=?1 WHERE workspace_id=?2 AND id=?3 AND purpose='chat' AND deleted_at IS NULL AND (title='新对话' OR title=?4)",
+                params![clean, workspace_id, conversation_id, expected_draft_title],
+            )
+            .map_err(error)?;
+        Ok(affected > 0)
     }
 
     pub fn messages(&self, workspace_id: &str, conversation_id: &str) -> AppResult<Vec<Message>> {
@@ -1110,7 +1243,8 @@ impl Database {
             manifest["cloudTransfer"] = json!({"provider":cloud.target.connection.provider.name(),
                 "connectionId":cloud.target.connection.id,"model":cloud.target.model,
                 "dataTypes":types,"syncContext":cloud_sync});
-            let mut wire = cloud.target.generation_chat_wire(&messages, settings.num_predict)?;
+            let cloud_max_tokens = settings.num_predict.clamp(4096, 8192);
+            let mut wire = cloud.target.generation_chat_wire(&messages, cloud_max_tokens)?;
             wire["messages"] = serde_json::to_value(&messages).map_err(json_error)?;
             wire
         } else {
@@ -1135,7 +1269,8 @@ impl Database {
             &user_id,
             content,
         )?;
-        transaction.execute("UPDATE conversations SET title=CASE WHEN title='新对话' THEN ?1 ELSE title END,updated_at=?2 WHERE workspace_id=?3 AND id=?4",params![content.chars().take(24).collect::<String>(),run.started_at,workspace_id,conversation_id]).map_err(error)?;
+        let draft_title = smart_fallback_title(content);
+        transaction.execute("UPDATE conversations SET title=CASE WHEN title='新对话' THEN ?1 ELSE title END,updated_at=?2 WHERE workspace_id=?3 AND id=?4",params![draft_title,run.started_at,workspace_id,conversation_id]).map_err(error)?;
         event_at(
             &transaction,
             run_id,

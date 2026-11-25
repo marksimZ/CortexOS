@@ -27,6 +27,7 @@ export interface Conversation {
   title: string;
   updatedAt: string;
   autoRetrieval: boolean;
+  archived?: boolean;
 }
 export interface Message {
   id: string;
@@ -275,7 +276,8 @@ export function useStudio() {
   const { settings, settingsDraft, setSettingsDraft, settingsRevision, applySettings, saveSettings } = useStudioSettings();
   const {
     workspaceId, conversationId, conversations, messages: storedMessages, loadingMessages, creatingConversation,
-    view, refreshMessages, refreshConversations, openConversation, openWorkspace, newConversation, renameConversation,
+    view, refreshMessages, refreshConversations, openConversation, openWorkspace, newConversation,
+    renameConversation, renameConversationById, archiveConversation, deleteConversation,
   } = useChatWorkspace();
   const [chatStream] = useState(createChatStream);
   const [activeRun, setActiveRun] = useState<RunSummary | null>(null);
@@ -625,6 +627,10 @@ export function useStudio() {
     openConversation,
     newConversation,
     renameConversation,
+    renameConversationById,
+    archiveConversation,
+    deleteConversation,
+    refreshConversations,
     checkConnection,
     send,
     cancel,

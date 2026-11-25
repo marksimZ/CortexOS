@@ -201,6 +201,8 @@ fn main() {
             "list_conversations",
             "create_conversation",
             "rename_conversation",
+            "archive_conversation",
+            "delete_conversation",
             "load_messages",
             "check_ollama",
             "save_settings",

@@ -547,6 +547,70 @@ impl CloudTarget {
     pub(crate) fn generation_tokens(&self, usage: &Value) -> (Option<u64>, Option<u64>) {
         self.endpoint.generation_tokens(usage)
     }
+
+    pub(crate) async fn summarize_title(
+        &self,
+        user_text: &str,
+        assistant_text: &str,
+    ) -> Option<String> {
+        let user_excerpt: String = user_text.trim().chars().take(280).collect();
+        let assistant_excerpt: String = assistant_text.trim().chars().take(280).collect();
+        if user_excerpt.is_empty() {
+            return None;
+        }
+        let messages = [
+            crate::models::ChatMessage {
+                role: "system".into(),
+                content: "你是对话标题生成器。根据以下首轮对话，只输出一个简短的中文标题（6到18个字），不要引号、不要句号、不要任何解释或前缀。".into(),
+            },
+            crate::models::ChatMessage {
+                role: "user".into(),
+                content: format!("用户：{user_excerpt}\n助手：{assistant_excerpt}"),
+            },
+        ];
+        let (url, mut body) = self
+            .endpoint
+            .generation_chat_wire(&self.model, &messages, 128)
+            .ok()?;
+        // Disable thinking for DeepSeek thinking models so title generation is fast and direct.
+        if self.endpoint.base().is_some_and(|base| {
+            base.host_str() == Some("api.deepseek.com")
+                && base.port().is_none()
+                && matches!(base.path(), "/" | "/v1/")
+        }) && matches!(
+            self.model.as_str(),
+            "deepseek-flash" | "deepseek-v4-pro" | "deepseek-v4-flash" | "deepseek-v4-flash-vision-exp"
+        ) {
+            body["thinking"] = json!({"type":"disabled"});
+        }
+        let mut noop = |_: &str| {};
+        let output = self
+            .endpoint
+            .send_generation_stream(&self.key, &url, &body, Duration::from_secs(12), &mut noop)
+            .await
+            .ok()?;
+        let line = output
+            .text
+            .lines()
+            .map(str::trim)
+            .find(|l| !l.is_empty())?;
+        let cleaned = line
+            .trim_start_matches(['#', '*', '-', '·', '•', ' '])
+            .trim_start_matches("标题：")
+            .trim_start_matches("标题:")
+            .trim_matches(['"', '\'', '“', '”', '‘', '’', '《', '》', '【', '】', '。', '！', '!', ' ', '\t'])
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(24)
+            .collect::<String>()
+            .trim()
+            .to_string();
+        if cleaned.chars().count() >= 2 {
+            Some(cleaned)
+        } else {
+            None
+        }
+    }
 }
 
 fn estimated_bytes<'a>(texts: impl IntoIterator<Item = &'a str>) -> u64 {

@@ -204,6 +204,8 @@
     "allow-list-conversations",
     "allow-create-conversation",
     "allow-rename-conversation",
+    "allow-archive-conversation",
+    "allow-delete-conversation",
     "allow-load-messages",
     "allow-check-ollama",
     "allow-save-settings",

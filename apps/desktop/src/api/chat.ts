@@ -47,6 +47,8 @@ export const chat = createClient<{
   list_conversations: Command<WorkspaceArgs, Conversation[]>;
   create_conversation: Command<WorkspaceArgs, Conversation>;
   rename_conversation: Command<ConversationArgs & { title: string }, void>;
+  archive_conversation: Command<ConversationArgs & { archived: boolean }, void>;
+  delete_conversation: Command<ConversationArgs, void>;
   load_messages: Command<ConversationArgs, Message[]>;
   save_settings: Command<{ settings: ModelSettings }, ModelSettings>;
   set_conversation_retrieval: Command<

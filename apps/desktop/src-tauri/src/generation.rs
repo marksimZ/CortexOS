@@ -435,14 +435,14 @@ async fn attempt_cloud_chat(
 pub(crate) async fn execute_chat(
     database: Arc<Database>,
     provider: Option<Ollama>,
-    cloud: Option<crate::cloud::runtime_connections::CloudTarget>,
+    cloud: Option<&crate::cloud::runtime_connections::CloudTarget>,
     prepared: PreparedRun,
     settings: ModelSettings,
     backup: Option<String>,
     cancel: watch::Receiver<bool>,
     mut notify: impl FnMut(StreamUpdate) + Send,
 ) -> Completion {
-    let mut attempt = if let Some(target) = &cloud {
+    let mut attempt = if let Some(target) = cloud {
         let meter=crate::runtime_usage::Meter::new(database.clone(),prepared.run.workspace_id.clone(),prepared.run.id.clone(),"chat");
         attempt_cloud_chat(
             database.clone(),
@@ -697,7 +697,7 @@ mod tests {
         let prepared = prepare(&clean, &[], false).unwrap();
         let expected = prepared.request["body"].clone();
         let (_keep, cancel) = watch::channel(false);
-        let result = execute_chat(db.clone(), None, Some(target), prepared, settings, None, cancel, |_| {}).await;
+        let result = execute_chat(db.clone(), None, Some(&target), prepared, settings, None, cancel, |_| {}).await;
         assert_eq!(result.update.status, "completed", "{:?}", result.update.error_message);
         server.join().unwrap();
         let body = captured.lock().unwrap().take().unwrap();
@@ -780,7 +780,7 @@ mod tests {
         let finished = execute_chat(
             db.clone(),
             Some(local),
-            Some(target),
+            Some(&target),
             prepared,
             settings,
             Some("backup".into()),

@@ -236,6 +236,14 @@ p,li,dd { text-wrap: pretty; overflow-wrap: anywhere; }
 .pane-divider:focus-visible { outline: none; }
 .pane-divider:focus-visible::after { box-shadow: 0 0 0 2px var(--accent-soft); }
 .pane-drag-shield { position: fixed; inset: 0; z-index: 1000; cursor: col-resize; user-select: none; background: transparent; }
+.archived-conversations { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.archived-conversations > summary { font-size: var(--text-caption); color: var(--muted); padding: 4px 6px; border-radius: var(--radius-inset); }
+.archived-conversations .conversation-list { margin-top: 4px; opacity: 0.85; }
+.conversation-context-menu { position: fixed; z-index: 120; min-width: 148px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-control); box-shadow: var(--shadow-overlay); display: flex; flex-direction: column; gap: 2px; }
+.conversation-context-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px; border-radius: var(--radius-menu-item); font-size: var(--text-compact); color: var(--text); text-align: left; }
+.conversation-context-menu button:hover { background: var(--surface-hover); }
+.conversation-context-menu button.danger-item { color: var(--danger); }
+.conversation-context-menu button.danger-item:hover { background: var(--danger-bg); }
 .file-name { display: inline-flex; max-width: 100%; min-width: 0; vertical-align: bottom; white-space: nowrap; color: inherit; font: inherit; }
 .file-name-stem { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .file-name-extension { flex: 0 0 auto; }

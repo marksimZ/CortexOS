@@ -303,6 +303,8 @@ pub fn run() {
             commands::list_conversations,
             commands::create_conversation,
             commands::rename_conversation,
+            commands::archive_conversation,
+            commands::delete_conversation,
             commands::load_messages,
             commands::check_ollama,
             commands::save_settings,

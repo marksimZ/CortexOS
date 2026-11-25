@@ -61,6 +61,7 @@ pub struct Conversation {
     pub title: String,
     pub updated_at: String,
     pub auto_retrieval: bool,
+    pub archived: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]

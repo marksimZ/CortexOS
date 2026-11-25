@@ -46,9 +46,14 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
       const label = payload.briefStatus ? briefLabels[payload.briefStatus] : "提醒到期";
       notify(`${label}：${payload.title}`, workspaceId);
     }).catch(error => { if (current) reportError(error); });
+    const titleListener = listen<{ workspaceId: string; conversationId: string; title: string }>("conversation-title-updated", ({ payload }) => {
+      if (!current || payload.workspaceId !== workspaceId) return;
+      void studio.refreshConversations(workspaceId).catch(() => {});
+    }).catch(() => undefined);
     return () => {
       current = false;
       void listener.then(unlisten => unlisten?.()).catch(reportError);
+      void titleListener.then(unlisten => unlisten?.()).catch(() => {});
     };
   }, [desktop, workspaceId, reportError]);
   useEffect(() => {

@@ -149,6 +149,31 @@ pub async fn rename_conversation(
 }
 
 #[tauri::command]
+pub async fn archive_conversation(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    conversation_id: String,
+    archived: bool,
+) -> AppResult<()> {
+    blocking(state.database.clone()?, move |db| {
+        db.archive_conversation(&workspace_id, &conversation_id, archived)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn delete_conversation(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    conversation_id: String,
+) -> AppResult<()> {
+    blocking(state.database.clone()?, move |db| {
+        db.delete_conversation(&workspace_id, &conversation_id)
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn load_messages(
     state: State<'_, AppState>,
     workspace_id: String,
@@ -338,6 +363,7 @@ pub async fn cancel_run(
 
 #[tauri::command]
 pub async fn start_chat(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     workspace_id: String,
     conversation_id: String,
@@ -490,6 +516,7 @@ pub async fn start_chat(
     }
     let prepare_id = id.clone();
     let model_settings = settings.clone();
+    let title_user_text = content.trim().to_owned();
     let (prepared, cloud) = blocking(database.clone(), move |db| {
         let runtime = runtime.as_ref().map(|profile| ChatRuntime {
             profile,
@@ -518,12 +545,57 @@ pub async fn start_chat(
     })
     .await?;
     let result = prepared.run.clone();
+    let title_draft = crate::db::smart_fallback_title(&title_user_text);
+    let title_ws = result.workspace_id.clone();
+    let title_conv = result.conversation_id.clone();
+    let title_db = database.clone();
     tauri::async_runtime::spawn(async move {
-        let outcome = crate::generation::execute_chat(database,provider,cloud,prepared,settings,local_backup,
+        let outcome = crate::generation::execute_chat(database,provider,cloud.as_ref(),prepared,settings,local_backup,
             lease.receiver(),|u|{let _=on_update.send(u);}).await;
+        let finished_status = outcome.update.status.clone();
+        let finished_content = outcome.update.content.clone();
         drop(cloud_guard);
         drop(lease);
         let _ = on_update.send(outcome.update);
+        if finished_status == "completed" {
+            if let Some(cloud_target) = cloud {
+                let is_first = blocking(title_db.clone(), {
+                    let (ws, conv) = (title_ws.clone(), title_conv.clone());
+                    move |db| db.conversation_turn_count(&ws, &conv)
+                })
+                .await
+                .is_ok_and(|count| count == 1);
+                if is_first {
+                    if let Some(ai_title) = cloud_target
+                        .summarize_title(&title_user_text, &finished_content)
+                        .await
+                    {
+                        let updated = blocking(title_db, {
+                            let (ws, conv, draft, next) = (
+                                title_ws.clone(),
+                                title_conv.clone(),
+                                title_draft,
+                                ai_title.clone(),
+                            );
+                            move |db| db.apply_ai_conversation_title(&ws, &conv, &draft, &next)
+                        })
+                        .await
+                        .unwrap_or(false);
+                        if updated {
+                            use tauri::Emitter;
+                            let _ = app.emit(
+                                "conversation-title-updated",
+                                serde_json::json!({
+                                    "workspaceId": title_ws,
+                                    "conversationId": title_conv,
+                                    "title": ai_title,
+                                }),
+                            );
+                        }
+                    }
+                }
+            }
+        }
     });
     Ok(result)
 }

@@ -87,7 +87,9 @@ export function useChatWorkspace() {
           return;
         }
         const saved = preference(`conversation.${workspace}`);
-        const first = list.find((item) => item.id === saved) ?? list[0];
+        const activeList = list.filter((item) => !item.archived);
+        const first =
+          list.find((item) => item.id === saved) ?? activeList[0] ?? list[0];
         if (first) await openConversation(workspace, first.id);
       } finally {
         if (version === viewVersion.current) setLoadingMessages(false);
@@ -113,20 +115,63 @@ export function useChatWorkspace() {
     }
   };
 
-  const renameConversation = async (title: string) => {
-    const { workspaceId: workspace, conversationId: conversation } =
-      view.current;
-    if (!workspace || !conversation) return;
+  const renameConversationById = async (conversationId: string, title: string) => {
+    const workspace = view.current.workspaceId;
+    if (!workspace) return;
     await chat("rename_conversation", {
       workspaceId: workspace,
-      conversationId: conversation,
+      conversationId,
       title,
     });
     await refreshConversations(workspace);
   };
 
+  const renameConversation = async (title: string) => {
+    const { conversationId: conversation } = view.current;
+    if (!conversation) return;
+    await renameConversationById(conversation, title);
+  };
+
+  const archiveConversation = async (conversationId: string, archived: boolean) => {
+    const workspace = view.current.workspaceId;
+    if (!workspace) return;
+    await chat("archive_conversation", {
+      workspaceId: workspace,
+      conversationId,
+      archived,
+    });
+    const list = await refreshConversations(workspace);
+    if (archived && view.current.conversationId === conversationId) {
+      const next = list.find((item) => !item.archived && item.id !== conversationId);
+      if (next) {
+        await openConversation(workspace, next.id);
+      }
+    }
+  };
+
+  const deleteConversation = async (conversationId: string) => {
+    const workspace = view.current.workspaceId;
+    if (!workspace) return;
+    await chat("delete_conversation", {
+      workspaceId: workspace,
+      conversationId,
+    });
+    const list = await refreshConversations(workspace);
+    if (view.current.conversationId === conversationId) {
+      const next = list.find((item) => !item.archived) ?? list[0];
+      if (next) {
+        await openConversation(workspace, next.id);
+      } else {
+        view.current = { workspaceId: workspace, conversationId: null };
+        setConversationId(null);
+        setMessages([]);
+      }
+    }
+  };
+
   return {
     workspaceId, conversationId, conversations, messages, loadingMessages, creatingConversation,
-    view, openWorkspace, openConversation, refreshMessages, refreshConversations, newConversation, renameConversation,
+    view, openWorkspace, openConversation, refreshMessages, refreshConversations, newConversation,
+    renameConversation, renameConversationById, archiveConversation, deleteConversation,
   };
 }

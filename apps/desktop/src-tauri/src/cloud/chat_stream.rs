@@ -35,7 +35,7 @@ impl Answer {
                 if let Some(delta) = choice["delta"]["content"].as_str() {
                     self.text.push_str(delta);
                 }
-                if let Some(reason) = choice["finish_reason"].as_str() {
+                if let Some(reason) = choice["finish_reason"].as_str().filter(|r| !r.is_empty()) {
                     self.finish = Some(match reason {
                         "stop" => "stop",
                         "length" => "length",
@@ -178,8 +178,23 @@ pub(super) async fn read(
             line.clear();
         }
     }
+    if !line.is_empty() {
+        let field = line.strip_suffix(b"\r").unwrap_or(&line);
+        if let Some(value) = field.strip_prefix(b"data:") {
+            if !data.is_empty() {
+                data.push(b'\n');
+            }
+            data.extend_from_slice(value.strip_prefix(b" ").unwrap_or(value));
+        }
+        line.clear();
+    }
+    if !data.is_empty() {
+        answer.event(provider, &data)?;
+        answer.publish(key, false, on_delta)?;
+        data.clear();
+    }
     let finish_reason = answer.finish.ok_or(INVALID)?;
-    if answer.text.is_empty() || !line.is_empty() || !data.is_empty() {
+    if answer.text.is_empty() {
         return Err(INVALID);
     }
     answer.publish(key, true, on_delta)?;

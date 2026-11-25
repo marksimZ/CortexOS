@@ -752,7 +752,7 @@ mod tests {
         });
         let (_cancel, receiver) = tokio::sync::watch::channel(false);
         let output =
-            crate::generation::execute_chat(db.clone(),None,Some(target),prepared,settings,None,receiver,|_|{}).await;
+            crate::generation::execute_chat(db.clone(),None,Some(&target),prepared,settings,None,receiver,|_|{}).await;
         assert!(output.saved);
         assert_eq!(output.update.status, "completed");
         service.join().unwrap();
