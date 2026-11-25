@@ -189,15 +189,16 @@ function computeMindMapLayout(
     cursorY += 28; // Subtle breathing gap between independent topic trees
   }
 
-  // Place isolated unlinked cards in a tidy 2-column grid below or beside trees.
+  // Place isolated unlinked cards in a balanced grid that fills the default viewport width first.
   if (isolated.length > 0) {
     const baseY = roots.length > 0 ? cursorY + 24 : 0;
-    const cols = isolated.length > 4 ? 2 : 1;
+    const cols = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(isolated.length * 1.35))));
+    const compactGapX = 244;
     isolated.forEach((node, idx) => {
       const col = idx % cols;
       const row = Math.floor(idx / cols);
       coords[node.id] = {
-        x: col * LEVEL_GAP_X,
+        x: col * compactGapX,
         y: baseY + row * ROW_GAP_Y,
       };
     });
@@ -230,8 +231,8 @@ export default function GraphViewport({
   positions,
   selected,
   multiSelected = [],
-  camera,
-  target,
+  camera: _camera,
+  target: _target,
   apiRef,
   onSelect,
   onMultiSelect,
@@ -241,14 +242,8 @@ export default function GraphViewport({
   onFocused,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [pan, setPan] = useState<{ x: number; y: number }>(() => ({
-    x: -(target?.[0] ?? 0) * 40,
-    y: -(target?.[1] ?? 0) * 40,
-  }));
-  const [zoom, setZoom] = useState<number>(() => {
-    const rawZ = camera?.[2] ?? 22;
-    return Math.min(2.2, Math.max(0.35, 22 / Math.max(6, rawZ)));
-  });
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState<number>(1);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [marquee, setMarquee] = useState<{
     x1: number;
@@ -257,6 +252,7 @@ export default function GraphViewport({
     y2: number;
   } | null>(null);
   const animRef = useRef<number | null>(null);
+  const fittedOnceRef = useRef(false);
 
   const cancelAnimation = useCallback(() => {
     if (animRef.current !== null) {
@@ -265,9 +261,121 @@ export default function GraphViewport({
     }
   }, []);
 
+  const panRef = useRef(pan);
+  const zoomRef = useRef(zoom);
+  panRef.current = pan;
+  zoomRef.current = zoom;
+
+  const mindmap = useMemo(
+    () => computeMindMapLayout(nodes, edges, collapsed, null),
+    [nodes, edges, collapsed],
+  );
+
+  const nodeCoords = useMemo(() => {
+    if (layoutMode === "mindmap") return mindmap.coords;
+    const out: Record<string, { x: number; y: number }> = {};
+    const cols = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(nodes.length * 1.35))));
+    nodes.forEach((node, idx) => {
+      const p = positions[node.id];
+      // Use saved 2D position if reasonable; compactly pack huge legacy 3D spiral positions into default area first.
+      if (p && Math.abs(p[0]) <= 12 && Math.abs(p[1]) <= 12 && p[2] === 0) {
+        out[node.id] = { x: p[0] * WORLD_SCALE_X, y: -p[1] * WORLD_SCALE_Y };
+      } else {
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        const totalRows = Math.ceil(nodes.length / cols);
+        out[node.id] = {
+          x: (col - (cols - 1) / 2) * 244,
+          y: (row - (totalRows - 1) / 2) * ROW_GAP_Y,
+        };
+      }
+    });
+    return out;
+  }, [layoutMode, mindmap.coords, nodes, positions]);
+
+  const visibleNodes = useMemo(
+    () =>
+      layoutMode === "mindmap"
+        ? nodes.filter((n) => !mindmap.hiddenNodes.has(n.id))
+        : nodes,
+    [layoutMode, nodes, mindmap.hiddenNodes],
+  );
+  const visibleSet = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
+
+  const contentBounds = useMemo(() => {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const node of visibleNodes) {
+      const c = nodeCoords[node.id];
+      if (!c) continue;
+      minX = Math.min(minX, c.x - CARD_W / 2);
+      maxX = Math.max(maxX, c.x + CARD_W / 2);
+      minY = Math.min(minY, c.y - CARD_H / 2);
+      maxY = Math.max(maxY, c.y + CARD_H / 2);
+    }
+    if (!Number.isFinite(minX)) {
+      return { minX: -CARD_W / 2, maxX: CARD_W / 2, minY: -CARD_H / 2, maxY: CARD_H / 2 };
+    }
+    return { minX, maxX, minY, maxY };
+  }, [nodeCoords, visibleNodes]);
+
+  // Bounded canvas rule: keep pan locked to the default viewport until nodes fill it,
+  // and once expanded, strictly clamp pan to the expanded node bounding box + padding so nodes can NEVER get lost.
+  const clampCamera = useCallback(
+    (rawPan: { x: number; y: number }, rawZoom: number) => {
+      const el = containerRef.current;
+      const viewW = el ? el.clientWidth : 960;
+      const viewH = el ? el.clientHeight : 600;
+      const pad = 56;
+      const contentW = contentBounds.maxX - contentBounds.minX + pad * 2;
+      const contentH = contentBounds.maxY - contentBounds.minY + pad * 2;
+      const fitZoom = Math.min(viewW / Math.max(1, contentW), viewH / Math.max(1, contentH));
+      const minAllowedZoom = Math.min(0.85, Math.max(0.3, fitZoom * 0.92));
+      const z = Math.min(2.2, Math.max(minAllowedZoom, rawZoom));
+
+      const cx = (contentBounds.minX + contentBounds.maxX) / 2;
+      const cy = (contentBounds.minY + contentBounds.maxY) / 2;
+      const centerPanX = -cx * z;
+      const centerPanY = -cy * z;
+
+      const scaledW = contentW * z;
+      const scaledH = contentH * z;
+
+      let x: number;
+      if (scaledW <= viewW) {
+        // Fits inside default viewport width: allow only tiny elastic nudge (±32px) around center
+        const slack = 32;
+        x = Math.min(centerPanX + slack, Math.max(centerPanX - slack, rawPan.x));
+      } else {
+        // Expanded beyond default width: clamp strictly to expanded bounds
+        const minPanX = viewW / 2 - (contentBounds.maxX + pad) * z;
+        const maxPanX = -viewW / 2 - (contentBounds.minX - pad) * z;
+        x = Math.min(maxPanX, Math.max(minPanX, rawPan.x));
+      }
+
+      let y: number;
+      if (scaledH <= viewH) {
+        const slack = 32;
+        y = Math.min(centerPanY + slack, Math.max(centerPanY - slack, rawPan.y));
+      } else {
+        const minPanY = viewH / 2 - (contentBounds.maxY + pad) * z;
+        const maxPanY = -viewH / 2 - (contentBounds.minY - pad) * z;
+        y = Math.min(maxPanY, Math.max(minPanY, rawPan.y));
+      }
+
+      return { pan: { x, y }, zoom: z, expanded: scaledW > viewW || scaledH > viewH };
+    },
+    [contentBounds],
+  );
+
   const animateCamera = useCallback(
-    (nextPan: { x: number; y: number }, nextZoom: number, done?: () => void) => {
+    (rawNextPan: { x: number; y: number }, rawNextZoom: number, done?: () => void) => {
       cancelAnimation();
+      const clamped = clampCamera(rawNextPan, rawNextZoom);
+      const nextPan = clamped.pan;
+      const nextZoom = clamped.zoom;
       const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       if (reduced) {
         setPan(nextPan);
@@ -278,7 +386,7 @@ export default function GraphViewport({
       const startPan = { ...panRef.current };
       const startZoom = zoomRef.current;
       const started = performance.now();
-      const duration = 220;
+      const duration = 200;
       const step = (now: number) => {
         const t = Math.min(1, (now - started) / duration);
         const eased = 1 - Math.pow(1 - t, 3);
@@ -296,78 +404,44 @@ export default function GraphViewport({
       };
       animRef.current = requestAnimationFrame(step);
     },
-    [cancelAnimation],
+    [cancelAnimation, clampCamera],
   );
-
-  const panRef = useRef(pan);
-  const zoomRef = useRef(zoom);
-  panRef.current = pan;
-  zoomRef.current = zoom;
-
-  const mindmap = useMemo(
-    () => computeMindMapLayout(nodes, edges, collapsed, null),
-    [nodes, edges, collapsed],
-  );
-
-  const nodeCoords = useMemo(() => {
-    if (layoutMode === "mindmap") return mindmap.coords;
-    const out: Record<string, { x: number; y: number }> = {};
-    nodes.forEach((node, idx) => {
-      const p = positions[node.id];
-      if (p) {
-        out[node.id] = { x: p[0] * WORLD_SCALE_X, y: -p[1] * WORLD_SCALE_Y };
-      } else {
-        out[node.id] = { x: (idx % 4) * LEVEL_GAP_X, y: Math.floor(idx / 4) * ROW_GAP_Y };
-      }
-    });
-    return out;
-  }, [layoutMode, mindmap.coords, nodes, positions]);
-
-  const visibleNodes = useMemo(
-    () =>
-      layoutMode === "mindmap"
-        ? nodes.filter((n) => !mindmap.hiddenNodes.has(n.id))
-        : nodes,
-    [layoutMode, nodes, mindmap.hiddenNodes],
-  );
-  const visibleSet = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
 
   const fitView = useCallback(() => {
     const el = containerRef.current;
     if (!el || visibleNodes.length === 0) return;
     const rect = el.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    for (const node of visibleNodes) {
-      const c = nodeCoords[node.id];
-      if (!c) continue;
-      minX = Math.min(minX, c.x - CARD_W / 2);
-      maxX = Math.max(maxX, c.x + CARD_W / 2);
-      minY = Math.min(minY, c.y - CARD_H / 2);
-      maxY = Math.max(maxY, c.y + CARD_H / 2);
-    }
-    if (!Number.isFinite(minX)) return;
-    const pad = 80;
-    const spanX = Math.max(CARD_W + pad, maxX - minX + pad * 2);
-    const spanY = Math.max(CARD_H + pad, maxY - minY + pad * 2);
-    const nextZoom = Math.min(1.25, Math.max(0.32, Math.min(rect.width / spanX, rect.height / spanY)));
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
+    const pad = 64;
+    const spanX = Math.max(CARD_W + pad, contentBounds.maxX - contentBounds.minX + pad * 2);
+    const spanY = Math.max(CARD_H + pad, contentBounds.maxY - contentBounds.minY + pad * 2);
+    // Keep 100% readable scale while everything fits in default area; shrink gracefully only once filled.
+    const nextZoom = Math.min(1.05, Math.max(0.45, Math.min(rect.width / spanX, rect.height / spanY)));
+    const cx = (contentBounds.minX + contentBounds.maxX) / 2;
+    const cy = (contentBounds.minY + contentBounds.maxY) / 2;
     animateCamera({ x: -cx * nextZoom, y: -cy * nextZoom }, nextZoom);
-  }, [animateCamera, nodeCoords, visibleNodes]);
+  }, [animateCamera, contentBounds, visibleNodes.length]);
 
   useEffect(() => {
     onReady?.();
-    const id = requestAnimationFrame(() => fitView());
-    return () => {
-      cancelAnimationFrame(id);
-      cancelAnimation();
-    };
-    // Fit once on mount or layout mode switch
+    fittedOnceRef.current = false;
   }, [layoutMode]);
+
+  useEffect(() => {
+    if (visibleNodes.length > 0 && !fittedOnceRef.current) {
+      fittedOnceRef.current = true;
+      const id = requestAnimationFrame(() => fitView());
+      return () => cancelAnimationFrame(id);
+    }
+    // Re-clamp camera whenever bounds change (e.g. collapsing a branch) so view never gets stranded
+    if (visibleNodes.length > 0) {
+      const clamped = clampCamera(panRef.current, zoomRef.current);
+      setPan(clamped.pan);
+      setZoom(clamped.zoom);
+    }
+  }, [visibleNodes.length, contentBounds, clampCamera, fitView]);
+
+  useEffect(() => () => cancelAnimation(), [cancelAnimation]);
 
   useImperativeHandle(
     apiRef,
@@ -432,20 +506,22 @@ export default function GraphViewport({
       const pointerY = event.clientY - rect.top - rect.height / 2;
       const factor = event.deltaY < 0 ? 1.1 : 0.91;
       const prevZoom = zoomRef.current;
-      const nextZoom = Math.min(2.4, Math.max(0.25, prevZoom * factor));
-      if (nextZoom === prevZoom) return;
       const worldX = (pointerX - panRef.current.x) / prevZoom;
       const worldY = (pointerY - panRef.current.y) / prevZoom;
-      setZoom(nextZoom);
-      setPan({
-        x: pointerX - worldX * nextZoom,
-        y: pointerY - worldY * nextZoom,
-      });
+      const rawNextZoom = prevZoom * factor;
+      const rawNextPan = {
+        x: pointerX - worldX * rawNextZoom,
+        y: pointerY - worldY * rawNextZoom,
+      };
+      const clamped = clampCamera(rawNextPan, rawNextZoom);
+      if (clamped.zoom === prevZoom && clamped.pan.x === panRef.current.x && clamped.pan.y === panRef.current.y) return;
+      setZoom(clamped.zoom);
+      setPan(clamped.pan);
       onChange();
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [cancelAnimation, onChange]);
+  }, [cancelAnimation, clampCamera, onChange]);
 
   const multiSet = useMemo(() => new Set(multiSelected), [multiSelected]);
 
@@ -510,14 +586,15 @@ export default function GraphViewport({
       return;
     }
 
-    // Normal Canvas Pan
+    // Normal Canvas Pan (strictly bounded to default viewport unless nodes exceed it)
     const initialPan = { ...panRef.current };
     let moved = false;
     const onMove = (moveEvent: PointerEvent) => {
       const dx = moveEvent.clientX - startX;
       const dy = moveEvent.clientY - startY;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
-      setPan({ x: initialPan.x + dx, y: initialPan.y + dy });
+      const clamped = clampCamera({ x: initialPan.x + dx, y: initialPan.y + dy }, zoomRef.current);
+      setPan(clamped.pan);
     };
     const onUp = () => {
       el.releasePointerCapture(event.pointerId);
