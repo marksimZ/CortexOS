@@ -46,6 +46,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0031_personal_memory_evolution.sql"),
     include_str!("../migrations/0032_memory_summary_provenance.sql"),
     include_str!("../migrations/0033_watched_folders.sql"),
+    include_str!("../migrations/0034_watched_folder_sync.sql"),
 ];
 const MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const RUN_COLUMNS: &str = "id,workspace_id,conversation_id,assistant_message_id,model_id,status,started_at,finished_at,error_message";
@@ -1353,7 +1354,7 @@ impl Database {
             _ => return Err("无效的运行结束状态。".into()),
         };
         let mut connection = self.connection()?;
-        let transaction = connection.transaction().map_err(error)?;
+        let mut transaction = connection.transaction().map_err(error)?;
         let matching_run: bool = transaction.query_row(
             "SELECT EXISTS(SELECT 1 FROM execution_runs WHERE id=?1 AND workspace_id=?2 AND conversation_id=?3 AND assistant_message_id=?4)",
             params![run.id,run.workspace_id,run.conversation_id,run.assistant_message_id], |r| r.get(0),
@@ -1395,15 +1396,18 @@ impl Database {
             if status == "completed" {
                 let user_message: Option<(String, String)> = transaction
                     .query_row(
-                        "SELECT id,content FROM messages WHERE workspace_id=?1 AND model_run_id=?2 AND role='user' LIMIT 1",
+                        "SELECT m.id,m.content FROM messages m
+                         JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
+                         WHERE m.workspace_id=?1 AND m.model_run_id=?2 AND m.role='user' AND c.purpose='chat' LIMIT 1",
                         params![run.workspace_id, run.id],
                         |r| Ok((r.get(0)?, r.get(1)?)),
                     )
                     .optional()
                     .map_err(error)?;
                 if let Some((user_message_id, user_text)) = user_message {
-                    let _ = crate::memory::record_turn_insights(
-                        &transaction,
+                    let mut memory = transaction.savepoint().map_err(error)?;
+                    let insights = crate::memory::record_turn_insights(
+                        &memory,
                         &run.workspace_id,
                         &run.conversation_id,
                         Some(&run.id),
@@ -1411,6 +1415,18 @@ impl Database {
                         &user_text,
                         content,
                     );
+                    if insights.is_err() {
+                        memory.rollback().map_err(error)?;
+                    }
+                    memory.commit().map_err(error)?;
+                    if let Err(reason) = insights {
+                        event(
+                            &transaction,
+                            &run.id,
+                            "memory_insights_failed",
+                            json!({"errorMessage":reason}),
+                        )?;
+                    }
                 }
             }
         }

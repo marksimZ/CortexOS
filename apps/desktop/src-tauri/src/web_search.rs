@@ -6,9 +6,18 @@ use crate::{
     models::{AppResult, now},
 };
 use quick_xml::{Reader, escape::resolve_predefined_entity, events::Event};
-use reqwest::{RequestBuilder, StatusCode, Url, header::HeaderValue};
+use reqwest::{
+    RequestBuilder, StatusCode, Url,
+    dns::{Addrs, Name, Resolve, Resolving},
+    header::HeaderValue,
+};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, net::IpAddr, path::Path, time::Duration};
+use std::{
+    collections::HashSet,
+    net::{IpAddr, ToSocketAddrs},
+    path::Path,
+    time::Duration,
+};
 use tauri::State;
 use zeroize::Zeroizing;
 
@@ -171,6 +180,32 @@ pub(crate) enum SearchProvider {
     Brave,
 }
 
+fn public_page_ip(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => {
+            let [a, b, c, _] = address.octets();
+            !address.is_private()
+                && !address.is_loopback()
+                && !address.is_link_local()
+                && !address.is_documentation()
+                && a != 0
+                && a < 224
+                && !matches!(
+                    (a, b, c),
+                    (100, 64..=127, _) | (192, 0, 0) | (192, 88, 99) | (198, 18..=19, _)
+                )
+        }
+        IpAddr::V6(address) => {
+            let [a, b, ..] = address.segments();
+            (0x2000..0x4000).contains(&a)
+                && !matches!(
+                    (a, b),
+                    (0x2001, 0..=0x1ff) | (0x2001, 0xdb8) | (0x2002, _) | (0x3fff, _)
+                )
+        }
+    }
+}
+
 fn result_url(value: &str) -> Option<Url> {
     if value.len() > 4096 {
         return None;
@@ -184,27 +219,7 @@ fn result_url(value: &str) -> Option<Url> {
     }
     let host = url.host_str()?.trim_end_matches('.');
     let public = match host.trim_matches(['[', ']']).parse::<IpAddr>() {
-        Ok(IpAddr::V4(address)) => {
-            let [a, b, c, _] = address.octets();
-            !address.is_private()
-                && !address.is_loopback()
-                && !address.is_link_local()
-                && !address.is_documentation()
-                && a != 0
-                && a < 224
-                && !matches!(
-                    (a, b, c),
-                    (100, 64..=127, _) | (192, 0, 0) | (192, 88, 99) | (198, 18..=19, _)
-                )
-        }
-        Ok(IpAddr::V6(address)) => {
-            let [a, b, ..] = address.segments();
-            (0x2000..0x4000).contains(&a)
-                && !matches!(
-                    (a, b),
-                    (0x2001, 0..=0x1ff) | (0x2001, 0xdb8) | (0x2002, _) | (0x3fff, _)
-                )
-        }
+        Ok(address) => public_page_ip(address),
         Err(_) => host.rsplit_once('.').is_some_and(|(_, tld)| {
             !matches!(
                 tld,
@@ -221,6 +236,31 @@ fn result_url(value: &str) -> Option<Url> {
         }),
     };
     public.then_some(url)
+}
+
+struct PublicPageResolver;
+
+impl Resolve for PublicPageResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        Box::pin(async move {
+            let addresses = tokio::task::spawn_blocking(move || {
+                (name.as_str(), 0)
+                    .to_socket_addrs()
+                    .map(|addresses| addresses.collect::<Vec<_>>())
+            })
+            .await??;
+
+            if addresses.is_empty()
+                || addresses
+                    .iter()
+                    .any(|address| !public_page_ip(address.ip()))
+            {
+                return Err("网页域名必须指向公开网络地址。".into());
+            }
+            // The connector dials these same addresses and applies the URL's port.
+            Ok(Box::new(addresses.into_iter()) as Addrs)
+        })
+    }
 }
 
 #[tauri::command]
@@ -542,6 +582,8 @@ pub(crate) async fn fetch_web_page(
 
     let client = model_client(Duration::from_secs(6))
         .timeout(Duration::from_secs(15))
+        .no_proxy()
+        .dns_resolver(PublicPageResolver)
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
             if attempt.previous().len() >= 5 {
                 return attempt.error("网页重定向次数过多。");
@@ -887,6 +929,31 @@ mod tests {
         assert!(result_url("http://192.168.1.10/admin").is_none());
         assert!(result_url("file:///etc/passwd").is_none());
         assert!(result_url("https://example.com/article").is_some());
+    }
+
+    #[test]
+    fn public_page_addresses_exclude_special_use_ranges() {
+        for address in [
+            "0.0.0.0",
+            "100.64.0.1",
+            "169.254.1.1",
+            "192.0.2.1",
+            "198.18.0.1",
+            "224.0.0.1",
+            "255.255.255.255",
+            "::",
+            "::ffff:192.168.1.1",
+            "fc00::1",
+            "fe80::1",
+            "2001:db8::1",
+            "2002::1",
+            "3fff::1",
+        ] {
+            assert!(!public_page_ip(address.parse().unwrap()), "{address}");
+        }
+        for address in ["93.184.215.14", "2606:4700::1111"] {
+            assert!(public_page_ip(address.parse().unwrap()), "{address}");
+        }
     }
 
     #[test]

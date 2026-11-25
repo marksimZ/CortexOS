@@ -1,16 +1,67 @@
-/* Motion communicates state only: short, linear-out, no decorative movement. */
-.button,.icon-button,.send-button,.window-control { transition: background var(--motion) var(--ease), color var(--motion) var(--ease), box-shadow var(--motion) var(--ease); }
-.primary-navigation a,.conversation-item,.knowledge-row,.evidence-reference { transition: background var(--motion) var(--ease), color var(--motion) var(--ease); }
+/* Motion communicates state only: background, colour and opacity. No displacement or scale on hover or press. */
+
+/* Hover and focus transitions for every interactive surface. */
+.button,.icon-button,.send-button,.window-control,.model-status,.toast-close,.answer-citation,
+.primary-navigation a,.conversation-item,.knowledge-row,.evidence-reference,.knowledge-history button,
+.source-list button,.graph-node-index button,.trace-node,.segmented-control label,.new-thread,summary {
+  transition: background-color var(--motion) var(--ease), color var(--motion) var(--ease), box-shadow var(--motion) var(--ease), opacity var(--motion) var(--ease);
+}
+input:not([type=checkbox]):not([type=radio]),select,textarea,.search-field { transition: box-shadow var(--motion) var(--ease), outline-color var(--motion) var(--ease); }
 .composer { transition: border-color var(--motion) var(--ease), box-shadow var(--motion) var(--ease); }
+
+/* Press feedback: one step darker than hover, applied almost immediately. */
+:where(.button,.icon-button,.window-control,.model-status,.toast-close,.primary-navigation a,.conversation-item,.knowledge-row,
+  .evidence-reference,.knowledge-history button,.source-list button,.graph-node-index button,.trace-node,.segmented-control label):active:not(:disabled) {
+  background-color: var(--surface-pressed); transition-duration: var(--motion-fast);
+}
+.button.primary:active:not(:disabled),.send-button:active:not(:disabled) { background-color: var(--primary-pressed); transition-duration: var(--motion-fast); }
+.button.danger:active:not(:disabled) { background-color: var(--danger-bg); box-shadow: inset 0 0 0 1px var(--danger); }
+.window-close:active { background-color: var(--danger-bg); }
+.send-button:hover:not(:disabled) { background-color: var(--primary-hover); }
+.answer-citation:active { background-color: var(--chip); }
+summary:hover { color: var(--text); }
+
+/* Busy controls breathe instead of freezing. */
+.button[aria-busy=true],.send-button[aria-label="正在发送"] { animation: busy-pulse 1.2s var(--ease) infinite alternate; }
+
+/* Page and view changes. Pages remount per route (ErrorBoundary key), so entering replays on each switch. */
+.standard-page,.chat-layout { animation: view-enter var(--motion-enter) var(--ease) both; }
+.settings-section:not([hidden]),.knowledge-detail-heading,.knowledge-prose,.graph-inspector,.trace-detail { animation: view-enter var(--motion-enter) var(--ease) both; }
+.prototype-sidebar,.chat-evidence:not(.evidence-overlay) { animation: view-enter var(--motion-enter) var(--ease) both; }
+.message.user,.message.assistant:last-child { animation: view-enter var(--motion-enter) var(--ease) both; }
+.welcome-suggestions { animation: view-enter 240ms var(--ease) 60ms both; }
+
+/* Overlays. */
 .toast { animation: feedback-pop 180ms var(--ease) both; }
 @supports selector(select::picker(select)) {
   .select-control:open::picker(select) { animation: panel-enter 120ms var(--ease) both; }
 }
 dialog[open] { animation: panel-enter 160ms var(--ease) both; }
-.knowledge-history-drawer[open],.run-drawer[open] { animation: drawer-enter 180ms var(--ease) both; }
+.app-dialog-backdrop { animation: panel-enter 160ms var(--ease) both; }
+.knowledge-history-drawer[open],.run-drawer[open],.side-drawer[open] { animation: drawer-enter 180ms var(--ease) both; }
+
+/* Disclosure: chevron marker rotates, content height eases open and closed. */
+summary { list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::before {
+  content: ""; display: inline-block; width: 12px; height: 12px; margin-inline-end: 6px; vertical-align: -1px;
+  background: currentColor; opacity: .7;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  transition: transform var(--motion) var(--ease);
+}
+details[open] > summary::before { transform: rotate(90deg); }
+@supports selector(::details-content) {
+  :root { interpolate-size: allow-keywords; }
+  details::details-content { block-size: 0; overflow-y: clip; transition: block-size var(--motion-enter) var(--ease), content-visibility var(--motion-enter) allow-discrete; }
+  details[open]::details-content { block-size: auto; }
+}
+
 .stream-fragment { animation: text-bloom 240ms var(--ease) both; }
 @keyframes text-bloom { from { opacity: .35; } to { opacity: 1; } }
+@keyframes view-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes busy-pulse { from { opacity: 1; } to { opacity: .55; } }
 @keyframes feedback-pop { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes panel-enter { from { opacity: 0; } to { opacity: 1; } }
 @keyframes drawer-enter { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
-@media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } .stream-fragment { filter: none !important; opacity: 1 !important; } }
+@media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration: .01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } .stream-fragment { filter: none !important; opacity: 1 !important; } }
+@media(forced-colors:active) { summary::before { background: CanvasText; opacity: 1; } }

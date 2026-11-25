@@ -4,7 +4,7 @@ import { webSearch, type WebSearchProvider } from "./api/web-search";
 import { parseReminder, reminderOccurrences } from "./reminder-draft";
 import { AppDialog, openDialog } from "./components/AppDialog";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ChevronUp, PanelRight, Pencil } from "lucide-react";
+import { ArrowDown, BookOpenText, ChevronUp, Pencil } from "lucide-react";
 import { navigate, useNavigation } from "./navigation";
 import { ChatMessage } from "./components/ChatMessage";
 import { ChatComposer } from "./components/ChatComposer";
@@ -417,7 +417,20 @@ export function ChatPage({
             )}
           </div>
           <div className="heading-actions">
-            <button ref={evidenceToggle} hidden={evidenceOpen} className="icon-button evidence-toggle" aria-label="打开回答依据" aria-expanded={evidenceOpen} aria-controls="chat-evidence" aria-haspopup={!wide ? "dialog" : undefined} title="打开回答依据" onClick={() => setEvidenceOpen(true)}><PanelRight size={17} />{hasCitations && <span>查看引用</span>}</button>
+            <button
+              ref={evidenceToggle}
+              hidden={evidenceOpen || (studio.messages.length === 0 && !hasCitations)}
+              className="icon-button evidence-toggle"
+              aria-label="打开回答依据"
+              aria-expanded={evidenceOpen}
+              aria-controls="chat-evidence"
+              aria-haspopup={!wide ? "dialog" : undefined}
+              title="查看本轮回答引用的知识与来源依据"
+              onClick={() => setEvidenceOpen(true)}
+            >
+              <BookOpenText size={17} aria-hidden="true" />
+              {hasCitations && <span>查看引用</span>}
+            </button>
             {conversation && (
               <button
                 className="icon-button"

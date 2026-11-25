@@ -3,7 +3,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppDialog, openDialog } from "./components/AppDialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { knowledge } from "./api/knowledge";
+import { formatFolderSync, knowledge, type FolderSyncReport } from "./api/knowledge";
 import { AppShell, pages } from "./components/AppShell";
 import { lazyView } from "./components/lazyView";
 import type { EditKnowledge } from "./knowledge-types";
@@ -68,21 +68,36 @@ export default function App() {
   }, [routeWorkspace, routeConversation, loading, knownWorkspace, view, openWorkspace, openConversation, reportError]);
   const mainRef = useRef<HTMLElement>(null);
   const previousPage = useRef(page);
-  const syncedWorkspaces = useRef<Set<string>>(new Set());
+  const folderSyncs = useRef(new Map<string, Promise<FolderSyncReport[]>>());
   useEffect(() => {
     const ws = studio.workspaceId;
-    if (!studio.desktop || !ws || syncedWorkspaces.current.has(ws)) return;
-    syncedWorkspaces.current.add(ws);
-    void knowledge("sync_workspace_watched_folders", { workspaceId: ws })
-      .then((reports) => {
-        const imported = reports.reduce((sum, item) => sum + item.imported, 0);
-        const updated = reports.reduce((sum, item) => sum + item.updated, 0);
-        if (imported > 0 || updated > 0) {
-          notify(`已自动同步本地文件夹：新增 ${imported}、更新 ${updated}`);
-        }
-      })
-      .catch(() => {});
-  }, [studio.desktop, studio.workspaceId]);
+    if (!studio.desktop || !ws) return;
+    let active = true;
+    let sync = folderSyncs.current.get(ws);
+    if (!sync) {
+      sync = knowledge("sync_workspace_watched_folders", { workspaceId: ws })
+        .finally(() => folderSyncs.current.delete(ws));
+      folderSyncs.current.set(ws, sync);
+    }
+    void sync.then(reports => {
+      if (!active) return;
+      const totals = { imported: 0, updated: 0, unchanged: 0, skipped: 0, remaining: 0 };
+      const errors = [];
+      for (const report of reports) {
+        totals.imported += report.imported;
+        totals.updated += report.updated;
+        totals.unchanged += report.unchanged;
+        totals.skipped += report.skipped;
+        totals.remaining += report.remaining;
+        if (report.error) errors.push(`${report.folder}：${report.error}`);
+      }
+      if (totals.imported || totals.updated) setKnowledgeRevision(n => n + 1);
+      if (totals.imported || totals.updated || totals.skipped || totals.remaining)
+        notify(`本地文件夹同步：${formatFolderSync(totals)}`, ws);
+      if (errors.length) reportError(`文件夹同步未完成：${errors.join("；")}`);
+    }).catch(error => { if (active) reportError(`文件夹同步失败：${errorText(error)}`); });
+    return () => { active = false; };
+  }, [studio.desktop, studio.workspaceId, reportError]);
   const workspaceDialog = useRef<HTMLDialogElement>(null);
   const afterWorkspace = useRef<"chat" | "cloud" | null>(null);
   const volatileDialog = useRef<HTMLDialogElement>(null);

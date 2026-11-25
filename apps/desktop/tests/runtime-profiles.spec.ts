@@ -33,6 +33,8 @@ test("switch a workspace profile and confirm cloud transfer per message", async 
           onPreparing?: { onmessage: (message: { id: string; workspaceId: string; conversationId: string }) => void } }) => {
           if (command === "bootstrap") return { workspaces: [{ id: "w", name: "测试工作区" }], settings, activeRun: null };
           if (command === "check_ollama") return { version: "fixture", models: [] };
+          if (command === "sync_workspace_watched_folders") return [];
+          if (command === "read_assistant") return { activeVersion: null, versions: [] };
           if (command.startsWith("plugin:")) return 1;
           if (command === "get_run") return null;
           if (args.workspaceId !== "w") throw Error("Unscoped command " + command);
@@ -206,7 +208,7 @@ test("choose a verified cloud model from chat while Ollama is offline", async ({
       { id: "next", workspaceId: "w", title: "另一会话", autoRetrieval: false, updatedAt },
       { id: "isolated", workspaceId: "other", title: "隔离会话", autoRetrieval: false, updatedAt },
     ];
-    const activity = { sends: [] as object[], cancels: [] as object[], unexpected: [] as string[] };
+    const activity = { sends: [] as object[], cancels: [] as object[], unexpected: [] as string[], syncs: [] as string[] };
     let finishPreparation: (() => void) | undefined;
     const messages: object[] = [];
     Object.assign(window, {
@@ -218,6 +220,11 @@ test("choose a verified cloud model from chat while Ollama is offline", async ({
         transformCallback: () => 1,
         unregisterCallback() {},
         invoke: async (command: string, args: Request) => {
+          if (command === "sync_workspace_watched_folders") {
+            activity.syncs.push(args.workspaceId);
+            return [];
+          }
+          if (command === "read_assistant") return { activeVersion: null, versions: [] };
           if (command.startsWith("plugin:")) return 1;
           if (command === "restore_on_start") return { phase: "idle" };
           if (command === "bootstrap") return {
@@ -291,7 +298,7 @@ test("choose a verified cloud model from chat while Ollama is offline", async ({
   }, { target, updatedAt, connectionName });
 
   const activity = () => page.evaluate(() => (window as unknown as {
-    modelChoiceActivity: { sends: unknown[]; cancels: unknown[]; unexpected: string[] };
+    modelChoiceActivity: { sends: unknown[]; cancels: unknown[]; unexpected: string[]; syncs: string[] };
   }).modelChoiceActivity);
   const choice = page.getByRole("combobox", { name: "回答模型", exact: true });
   const send = page.getByRole("button", { name: "发送消息", exact: true });
@@ -364,7 +371,7 @@ test("choose a verified cloud model from chat while Ollama is offline", async ({
   await page.screenshot({ path: info.outputPath("chat-model-cloud-answer.png") });
 
   await openConversation("other", "isolated");
-  await expect(page.getByRole("banner").getByText("隔离工作区", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("当前工作区", { exact: true })).toHaveValue("other");
   await expect(choice.getByRole("option")).toHaveText([/自动/]);
   await draft.fill("隔离工作区草稿");
   await expect(send).toBeDisabled();
@@ -389,6 +396,7 @@ test("choose a verified cloud model from chat while Ollama is offline", async ({
       },
     })),
     cancels: [{ workspaceId: "w", runId: "fixture-run" }],
+    syncs: ["w", "other", "w"],
     unexpected: [],
   });
   expect(browserErrors).toEqual([]);

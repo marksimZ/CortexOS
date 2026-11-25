@@ -95,18 +95,26 @@ pub(crate) fn select_generation(
     settings: &ModelSettings,
     generation: Option<Target>,
 ) -> AppResult<Selection> {
-    let Some(generation) = generation else {
-        return select(c, workspace, knowledge, settings);
-    };
     require_workspace(c, workspace)?;
+    let mut automatic = select(c, workspace, knowledge, settings)?;
+    if !knowledge && let Some(profile) = &mut automatic.profile {
+        profile.input.embedding = Target::Off;
+        profile.input.reranking = Target::Off;
+        profile.input.mode = match profile.input.generation {
+            Target::Cloud { .. } => super::Mode::Cloud,
+            _ => super::Mode::Local,
+        };
+    }
+    let Some(generation) = generation else {
+        return Ok(automatic);
+    };
     if matches!(generation, Target::Off | Target::Local { model: None }) {
         return Err("请选择有效的回答模型。".into());
     }
-    let automatic = select(c, workspace, knowledge, settings)?;
     let inherited_id = automatic.profile.as_ref().map(|profile| profile.id.clone());
     let mut profile = automatic.profile.unwrap_or_else(|| {
         let mut defaults = Profile::default_local();
-        if matches!(generation, Target::Cloud { .. }) {
+        if !knowledge || matches!(generation, Target::Cloud { .. }) {
             defaults.input.embedding = Target::Off;
             defaults.input.reranking = Target::Off;
         }
@@ -451,5 +459,19 @@ mod tests {
         })).unwrap();
         assert!(matches!(local.profile.unwrap().input.generation, Target::Local { model: Some(name) } if name == "installed:latest"));
         assert!(local.local_backup.is_none());
+
+        // An unavailable retrieval connection must only affect turns using knowledge.
+        let mut hybrid = get(&c, &ws, config.question.preferred.as_ref().unwrap()).unwrap();
+        hybrid.input.mode = Mode::Hybrid;
+        hybrid.input.embedding = Target::Cloud { connection_id: new_id(), model: "vectors".into() };
+        c.execute("UPDATE model_runtime_profiles SET profile_json=?1 WHERE workspace_id=?2 AND id=?3",
+            params![serde_json::to_string(&hybrid).unwrap(), ws, hybrid.id]).unwrap();
+        let generation = Target::Local { model: Some("installed:latest".into()) };
+        for target in [None, Some(generation)] {
+            let question = select_generation(&c, &ws, false, &settings, target).unwrap().profile.unwrap();
+            assert!(matches!(question.input.mode, Mode::Local));
+            assert!(!question.has_cloud_target());
+            assert!(matches!(question.input.embedding, Target::Off));
+        }
     }
 }

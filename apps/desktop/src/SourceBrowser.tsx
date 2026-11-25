@@ -1,4 +1,4 @@
-import { knowledge } from "./api/knowledge";
+import { formatFolderSync, knowledge } from "./api/knowledge";
 import { webSearch } from "./api/web-search";
 import { AppDialog, openDialog } from "./components/AppDialog";
 import { SelectMenu } from "./components/SelectMenu";
@@ -48,11 +48,13 @@ export function SourceBrowser({
   workspace,
   initial,
   onClose,
+  onChanged,
   onDraft,
 }: {
   workspace: string;
   initial?: SourceRef;
   onClose: () => void;
+  onChanged?: () => void;
   onDraft?: (request: EditKnowledge) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -194,8 +196,9 @@ export function SourceBrowser({
                     workspaceId: workspace,
                   });
                   if (report && live.current) {
+                    if (report.imported || report.updated) onChanged?.();
                     await refresh();
-                    notify(`同步完成：新增 ${report.imported}、更新 ${report.updated}、未变 ${report.unchanged}`);
+                    notify(`同步完成：${formatFolderSync(report)}`);
                   }
                 })
               }
@@ -250,6 +253,7 @@ export function SourceBrowser({
                 });
                 if (live.current) {
                   setWebUrl("");
+                  onChanged?.();
                   notify(`已抓取网页并存入知识：${page.title}`);
                 }
               });
@@ -303,8 +307,9 @@ export function SourceBrowser({
                           folderId: folder.id,
                         });
                         if (live.current) {
+                          if (report.imported || report.updated) onChanged?.();
                           await refresh();
-                          notify(`同步完成：新增 ${report.imported}、更新 ${report.updated}、未变 ${report.unchanged}`);
+                          notify(`同步完成：${formatFolderSync(report)}`);
                         }
                       })
                     }
@@ -596,6 +601,7 @@ export function SourceBrowser({
                     );
                     if (!live.current) return;
                     notify("文件文字副本已保存");
+                    onChanged?.();
                     setPreview(null);
                     await refresh();
                     await read(saved.id, saved.latestVersion);
@@ -639,6 +645,7 @@ export function SourceBrowser({
                   expectedRevision: selected.document.revision,
                 });
                 revoke.current?.close();
+                onChanged?.();
                 await refresh();
                 await read(selected.document.id, selected.version);
               })

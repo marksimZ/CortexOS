@@ -26,9 +26,9 @@ export function AppearanceControl() {
     return () => media.removeEventListener("change", update);
   }, [appearance]);
   const Icon = appearance === "system" ? Monitor : appearance === "dark" ? Moon : Sun;
-  return <label className="appearance-control" title="外观" htmlFor={id}>
+  return <label className="appearance-control" title="切换外观主题（跟随系统 / 浅色 / 深色）" htmlFor={id}>
     <Icon size={16} aria-hidden="true" />
-    <SelectMenu id={id} aria-label="外观" value={appearance} onChange={event => {
+    <SelectMenu id={id} aria-label="外观主题" value={appearance} onChange={event => {
       const value = event.target.value as Appearance;
       setAppearance(value);
       remember("appearance", value);

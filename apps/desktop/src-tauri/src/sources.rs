@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeSet,
     io::Read,
     path::{Path, PathBuf},
     time::Instant,
@@ -166,36 +167,81 @@ pub struct FolderSyncReport {
     pub updated: usize,
     pub unchanged: usize,
     pub skipped: usize,
+    pub remaining: usize,
+    pub error: Option<String>,
 }
 
 pub fn sync_folder(root: &Path, workspace: &str, db: &Database) -> AppResult<FolderSyncReport> {
-    if !root.is_absolute() || !root.is_dir() {
-        return Err("请选择有效的本地文件夹。".into());
-    }
+    let canonical = canonical_folder(root)?;
+    let path = canonical.to_str().ok_or("文件夹路径编码无效。")?;
+    let id = db.bind_watched_folder(workspace, path)?;
+    db.sync_watched_folder(workspace, &id)
+}
+
+fn canonical_folder(root: &Path) -> AppResult<PathBuf> {
+    validate_local_path(root)?;
     for parent in root.ancestors() {
         let meta = std::fs::symlink_metadata(parent)
             .map_err(|_| "无法访问所选文件夹，请检查权限。".to_string())?;
-        if meta.file_type().is_symlink() {
+        if linked(&meta) {
             return Err("不支持通过符号链接同步文件夹，请选择实际目录。".into());
         }
     }
+    if !root.is_dir() {
+        return Err("请选择有效的本地文件夹。".into());
+    }
     let canonical = std::fs::canonicalize(root).map_err(|_| "无法解析文件夹位置。".to_string())?;
+    validate_local_path(&canonical)?;
+    Ok(canonical)
+}
+
+fn linked(meta: &std::fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if meta.file_attributes() & 0x400 != 0 {
+            return true;
+        }
+    }
+    meta.file_type().is_symlink()
+}
+
+fn scan_folder(
+    root: &Path,
+    workspace: &str,
+    db: &Database,
+    folder_id: &str,
+    cursor: Option<&str>,
+) -> AppResult<FolderSyncReport> {
+    let canonical = canonical_folder(root)?;
+    if canonical != root {
+        return Err("该文件夹位置已变化，请移除绑定后重新选择。".into());
+    }
     let mut stack = vec![canonical.clone()];
-    let mut files = Vec::new();
+    let mut files = BTreeSet::new();
+    let mut candidates = 0usize;
     let mut skipped = 0usize;
     const MAX_FILES: usize = 60;
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            skipped += 1;
-            continue;
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) if dir == canonical => return Err("无法读取绑定文件夹，请检查权限。".into()),
+            Err(_) => {
+                skipped += 1;
+                continue;
+            }
         };
-        for entry in entries.flatten() {
+        for entry in entries {
+            let Ok(entry) = entry else {
+                skipped += 1;
+                continue;
+            };
             let path = entry.path();
             let Ok(meta) = std::fs::symlink_metadata(&path) else {
                 skipped += 1;
                 continue;
             };
-            if meta.file_type().is_symlink() {
+            if linked(&meta) {
                 skipped += 1;
                 continue;
             }
@@ -215,10 +261,16 @@ pub fn sync_folder(root: &Path, workspace: &str, db: &Database) -> AppResult<Fol
                     .unwrap_or("")
                     .to_lowercase();
                 if SUPPORTED_EXTENSIONS.contains(&ext.as_str()) {
-                    if files.len() < MAX_FILES {
-                        files.push(path);
-                    } else {
-                        skipped += 1;
+                    match path.to_str() {
+                        Some(path) if cursor.is_none_or(|cursor| path > cursor) => {
+                            candidates += 1;
+                            files.insert(path.to_owned());
+                            if files.len() > MAX_FILES {
+                                files.pop_last();
+                            }
+                        }
+                        Some(_) => {}
+                        None => skipped += 1,
                     }
                 }
             }
@@ -227,11 +279,14 @@ pub fn sync_folder(root: &Path, workspace: &str, db: &Database) -> AppResult<Fol
     let mut imported = 0usize;
     let mut updated = 0usize;
     let mut unchanged = 0usize;
-    for path in files {
-        match read_selected(&path, workspace, db) {
+    let remaining = candidates - files.len();
+    let next_cursor = files.last().filter(|_| remaining > 0);
+    for path in &files {
+        match read_selected(Path::new(path), workspace, db) {
             Ok(pending) => {
                 let prev = pending.preview.previous_version;
-                match db.import_source(pending) {
+                match db.import_source_with_binding(pending, Some(folder_id)) {
+                    Ok(doc) if !doc.enabled => skipped += 1,
                     Ok(doc) => match prev {
                         None => imported += 1,
                         Some(old) if doc.latest_version > old => updated += 1,
@@ -243,44 +298,49 @@ pub fn sync_folder(root: &Path, workspace: &str, db: &Database) -> AppResult<Fol
             Err(_) => skipped += 1,
         }
     }
+    let c = db.connection()?;
+    let changed = c.execute(
+        "UPDATE watched_folders SET scan_cursor=?4,last_synced_at=?5
+         WHERE workspace_id=?1 AND id=?2 AND scan_cursor IS ?3",
+        params![workspace, folder_id, cursor, next_cursor, now()],
+    ).map_err(error)?;
+    if changed != 1 {
+        return Err("文件夹绑定或同步进度已变化，请重新同步。".into());
+    }
     let report = FolderSyncReport {
         folder: canonical.to_string_lossy().into_owned(),
         imported,
         updated,
         unchanged,
         skipped,
+        remaining,
+        error: None,
     };
-    let _ = db.upsert_watched_folder(workspace, &report.folder);
     Ok(report)
 }
 
-pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<PendingSource> {
+fn validate_local_path(path: &Path) -> AppResult<()> {
     if !path.is_absolute() {
-        return Err("请用文件选择窗口选择本机文件。".into());
+        return Err("请用选择窗口选择本机位置。".into());
     }
     #[cfg(windows)]
     {
         use std::path::{Component, Prefix};
         if !matches!(path.components().next(), Some(Component::Prefix(p)) if matches!(p.kind(),Prefix::Disk(_) | Prefix::VerbatimDisk(_)))
         {
-            return Err("仅支持本机磁盘文件，不支持网络路径。".into());
+            return Err("请选择本机磁盘上的位置。".into());
         }
     }
+    Ok(())
+}
+
+pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<PendingSource> {
+    validate_local_path(path)?;
     for parent in path.ancestors() {
         let meta = std::fs::symlink_metadata(parent)
             .map_err(|_| "无法读取所选文件，请检查权限。".to_string())?;
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::MetadataExt;
-            if meta.file_attributes() & 0x400 != 0 {
-                return Err(
-                    "文件或所在文件夹有链接跳转（符号链接或重解析点），请从实际位置选择原文件。"
-                        .into(),
-                );
-            }
-        }
-        if meta.file_type().is_symlink() {
-            return Err("这个路径是符号链接，请从实际位置选择原文件。".into());
+        if linked(&meta) {
+            return Err("文件或所在文件夹有链接跳转，请从实际位置选择原文件。".into());
         }
     }
     let name = path
@@ -459,8 +519,25 @@ impl Database {
         c.query_row("SELECT latest_version,revision FROM source_documents WHERE workspace_id=?1 AND canonical_path=?2",params![workspace,path],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(error)
     }
     pub fn import_source(&self, pending: PendingSource) -> AppResult<Source> {
+        self.import_source_with_binding(pending, None)
+    }
+    fn import_source_with_binding(
+        &self,
+        pending: PendingSource,
+        folder_id: Option<&str>,
+    ) -> AppResult<Source> {
         let mut c = self.connection()?;
         let tx = c.transaction().map_err(error)?;
+        if let Some(folder_id) = folder_id {
+            let path: String = tx.query_row(
+                "SELECT path FROM watched_folders WHERE workspace_id=?1 AND id=?2",
+                params![pending.workspace, folder_id],
+                |r| r.get(0),
+            ).optional().map_err(error)?.ok_or("未找到该同步文件夹绑定。")?;
+            if !Path::new(&pending.path).starts_with(Path::new(&path)) {
+                return Err("文件位置已变化，或不在绑定文件夹中。".into());
+            }
+        }
         let previous:Option<(Source,String)>=tx.query_row("SELECT s.id,s.name,s.latest_version,s.enabled,s.revision,v.raw_hash FROM source_documents s JOIN source_versions v ON v.source_id=s.id AND v.version=s.latest_version WHERE s.workspace_id=?1 AND s.canonical_path=?2",params![pending.workspace,pending.path],|r|Ok((source(r)?,r.get(5)?))).optional().map_err(error)?;
         if previous
             .as_ref()
@@ -474,7 +551,7 @@ impl Database {
         }
         let timestamp = now();
         let (id, version, kind) = if let Some((old, raw)) = previous {
-            if raw == pending.raw_hash && old.enabled {
+            if (raw == pending.raw_hash && old.enabled) || (folder_id.is_some() && !old.enabled) {
                 tx.commit().map_err(error)?;
                 return Ok(old);
             }
@@ -523,8 +600,16 @@ impl Database {
             params![new_id(), id, kind, timestamp],
         )
         .map_err(error)?;
-        // Auto-sync imported document into an effective, directly searchable knowledge node.
-        if kind != "reauthorized" {
+        let managed: Option<(String, i64, bool)> = tx.query_row(
+            "SELECT n.id,n.latest_version,n.latest_version=m.managed_version
+                    AND n.effective_version IS m.managed_version
+             FROM source_managed_knowledge m JOIN knowledge_nodes n ON n.id=m.node_id
+             WHERE m.source_id=?1 AND n.workspace_id=?2",
+            params![id, pending.workspace],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        ).optional().map_err(error)?;
+        // Continue the imported knowledge history while its active version is still source-managed.
+        if kind != "reauthorized" && managed.as_ref().is_none_or(|(_, _, active)| *active) {
             let line_count = pending.preview.content.split('\n').count().max(1) as i64;
             let content_excerpt: String = pending.preview.content.chars().take(20000).collect();
             let doc_title = pending
@@ -536,18 +621,7 @@ impl Database {
                 .chars()
                 .take(80)
                 .collect::<String>();
-            let existing_node: Option<(String, i64)> = tx
-                .query_row(
-                    "SELECT n.id, n.latest_version FROM knowledge_nodes n
-                     JOIN knowledge_source_links l ON l.node_id=n.id AND l.knowledge_version=n.latest_version
-                     WHERE n.workspace_id=?1 AND l.source_id=?2 AND l.start_line=1
-                     ORDER BY n.updated_at DESC LIMIT 1",
-                    params![pending.workspace, id],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
-                )
-                .optional()
-                .map_err(error)?;
-            let (node_id, node_version) = if let Some((existing_id, prev_ver)) = existing_node {
+            let (node_id, node_version) = if let Some((existing_id, prev_ver, _)) = managed {
                 let next_ver = prev_ver + 1;
                 tx.execute(
                     "UPDATE knowledge_nodes SET latest_version=?2,effective_version=?2,revision=revision+1,updated_at=?3 WHERE id=?1",
@@ -579,13 +653,21 @@ impl Database {
                 params![node_id, node_version, id, version, line_count, content_excerpt],
             )
             .map_err(error)?;
+            tx.execute(
+                "INSERT INTO source_managed_knowledge VALUES(?1,?2,?3)
+                 ON CONFLICT(source_id) DO UPDATE SET managed_version=excluded.managed_version",
+                params![id, node_id, node_version],
+            )
+            .map_err(error)?;
         }
         refresh_nodes(&tx, &id)?;
+        let document = tx.query_row(
+            "SELECT id,name,latest_version,enabled,revision FROM source_documents WHERE id=?1",
+            params![id],
+            source,
+        ).map_err(error)?;
         tx.commit().map_err(error)?;
-        drop(c);
-        Ok(self
-            .source_snapshot(&pending.workspace, &id, version)?
-            .document)
+        Ok(document)
     }
     pub fn sources(&self, workspace: &str) -> AppResult<Vec<Source>> {
         let c = self.connection()?;
@@ -622,40 +704,19 @@ impl Database {
         tx.commit().map_err(error)
     }
 
-    pub fn upsert_watched_folder(&self, workspace: &str, path: &str) -> AppResult<WatchedFolder> {
+    fn bind_watched_folder(&self, workspace: &str, path: &str) -> AppResult<String> {
         let timestamp = now();
         let c = self.connection()?;
-        let existing: Option<(String, String)> = c
-            .query_row(
-                "SELECT id, created_at FROM watched_folders WHERE workspace_id=?1 AND path=?2",
-                params![workspace, path],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .optional()
-            .map_err(error)?;
-        let (id, created_at) = if let Some((id, created_at)) = existing {
-            c.execute(
-                "UPDATE watched_folders SET last_synced_at=?2 WHERE id=?1",
-                params![id, timestamp],
-            )
-            .map_err(error)?;
-            (id, created_at)
-        } else {
-            let id = new_id();
-            c.execute(
-                "INSERT INTO watched_folders(id, workspace_id, path, last_synced_at, created_at) VALUES(?1, ?2, ?3, ?4, ?4)",
-                params![id, workspace, path, timestamp],
-            )
-            .map_err(error)?;
-            (id, timestamp.clone())
-        };
-        Ok(WatchedFolder {
-            id,
-            workspace_id: workspace.to_string(),
-            path: path.to_string(),
-            last_synced_at: Some(timestamp),
-            created_at,
-        })
+        c.execute(
+            "INSERT INTO watched_folders(id, workspace_id, path, created_at) VALUES(?1, ?2, ?3, ?4)
+             ON CONFLICT(workspace_id,path) DO NOTHING",
+            params![new_id(), workspace, path, timestamp],
+        ).map_err(error)?;
+        c.query_row(
+            "SELECT id FROM watched_folders WHERE workspace_id=?1 AND path=?2",
+            params![workspace, path],
+            |r| r.get(0),
+        ).map_err(error)
     }
 
     pub fn list_watched_folders(&self, workspace: &str) -> AppResult<Vec<WatchedFolder>> {
@@ -701,22 +762,19 @@ impl Database {
         workspace: &str,
         folder_id: &str,
     ) -> AppResult<FolderSyncReport> {
-        let path: String = {
+        let (path, cursor): (String, Option<String>) = {
             let c = self.connection()?;
             c.query_row(
-                "SELECT path FROM watched_folders WHERE workspace_id=?1 AND id=?2",
+                "SELECT path,scan_cursor FROM watched_folders WHERE workspace_id=?1 AND id=?2",
                 params![workspace, folder_id],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?,r.get(1)?)),
             )
             .optional()
             .map_err(error)?
             .ok_or_else(|| "未找到该同步文件夹绑定。".to_string())?
         };
         let dir = PathBuf::from(&path);
-        if !dir.is_dir() {
-            return Err("该文件夹当前不存在或已移动，请移除绑定或重新选择文件夹。".into());
-        }
-        sync_folder(&dir, workspace, self)
+        scan_folder(&dir, workspace, self, folder_id, cursor.as_deref())
     }
 
     pub fn sync_workspace_watched_folders(
@@ -724,16 +782,18 @@ impl Database {
         workspace: &str,
     ) -> AppResult<Vec<FolderSyncReport>> {
         let folders = self.list_watched_folders(workspace)?;
-        let mut reports = Vec::new();
-        for folder in folders {
-            let dir = PathBuf::from(&folder.path);
-            if dir.is_dir() {
-                if let Ok(report) = sync_folder(&dir, workspace, self) {
-                    reports.push(report);
-                }
-            }
-        }
-        Ok(reports)
+        Ok(folders.into_iter().map(|folder| {
+            self.sync_watched_folder(workspace, &folder.id)
+                .unwrap_or_else(|error| FolderSyncReport {
+                    folder: folder.path,
+                    imported: 0,
+                    updated: 0,
+                    unchanged: 0,
+                    skipped: 0,
+                    remaining: 0,
+                    error: Some(error),
+                })
+        }).collect())
     }
 }
 
@@ -754,6 +814,25 @@ mod tests {
         let report = sync_folder(&notes, &workspace.id, &db).unwrap();
         assert_eq!(report.imported, 1);
         assert_eq!(report.updated, 0);
+        let source = db.sources(&workspace.id).unwrap().remove(0);
+        let managed = db.knowledge_list(&workspace.id).unwrap().remove(0);
+        let mut edit = crate::knowledge::SaveKnowledge {
+            workspace_id: workspace.id.clone(),
+            node_id: None,
+            expected_revision: None,
+            title: "我的引用".into(),
+            kind: "knowledge".into(),
+            content: "手工整理的内容".into(),
+            change_reason: "测试手工编辑".into(),
+            source_message_id: None,
+            source_excerpt: None,
+        };
+        let manual = db.save_knowledge_with_evidence(edit.clone(), Some(SourceRef {
+            source_id: source.id.clone(),
+            version: 1,
+            start_line: 1,
+            end_line: 1,
+        })).unwrap();
 
         let folders = db.list_watched_folders(&workspace.id).unwrap();
         assert_eq!(folders.len(), 1);
@@ -764,15 +843,77 @@ mod tests {
             .sync_watched_folder(&workspace.id, &folders[0].id)
             .unwrap();
         assert_eq!(rerun.updated, 1);
+        let nodes = db.knowledge_list(&workspace.id).unwrap();
+        assert_eq!(nodes.iter().find(|node| node.id == manual).unwrap().latest_version, 1);
+        let managed = nodes.iter().find(|node| node.id == managed.id).unwrap();
+        assert_eq!(managed.latest_version, 2);
+        edit.node_id = Some(managed.id.clone());
+        edit.expected_revision = Some(managed.revision);
+        db.save_knowledge(edit).unwrap();
+
+        std::fs::write(notes.join("plan.md"), "# 计划\n第三版更新内容").unwrap();
+        assert_eq!(db.sync_watched_folder(&workspace.id, &folders[0].id).unwrap().updated, 1);
+        let nodes = db.knowledge_list(&workspace.id).unwrap();
+        assert_eq!(nodes.len(), 2);
+        let edited = nodes.iter().find(|node| node.id == managed.id).unwrap();
+        assert_eq!(edited.title, "我的引用");
+        assert_eq!(edited.latest_version, 3);
 
         let all_reports = db.sync_workspace_watched_folders(&workspace.id).unwrap();
         assert_eq!(all_reports.len(), 1);
         assert_eq!(all_reports[0].unchanged, 1);
 
+        let source = db.sources(&workspace.id).unwrap().remove(0);
+        db.revoke_source(&workspace.id, &source.id, source.revision).unwrap();
+        std::fs::write(notes.join("plan.md"), "# 计划\n停用后的文件变更").unwrap();
+        assert_eq!(db.sync_watched_folder(&workspace.id, &folders[0].id).unwrap().skipped, 1);
+        let disabled = db.sources(&workspace.id).unwrap().remove(0);
+        assert!(!disabled.enabled);
+        assert_eq!(disabled.latest_version, 3);
+
+        let pending = read_selected(&notes.join("plan.md"), &workspace.id, &db).unwrap();
         db.remove_watched_folder(&workspace.id, &folders[0].id)
             .unwrap();
+        assert!(db.import_source_with_binding(pending.clone(), Some(&folders[0].id)).is_err());
         assert!(db.list_watched_folders(&workspace.id).unwrap().is_empty());
+        let reauthorized = db.import_source(pending).unwrap();
+        assert!(reauthorized.enabled);
+        assert_eq!(reauthorized.latest_version, 4);
 
+        drop(db);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn watched_folder_sync_resumes_in_path_order() {
+        let root = std::env::temp_dir().join(format!("cortexos-watched-{}", new_id()));
+        let notes = root.join("notes");
+        std::fs::create_dir_all(&notes).unwrap();
+        let db = Database::open(&root.join("data")).unwrap();
+        let workspace = db.create_workspace("分页同步测试").unwrap();
+        for n in 0..61 {
+            std::fs::write(notes.join(format!("{n:02}.md")), "文件内容").unwrap();
+        }
+        let first = sync_folder(&notes, &workspace.id, &db).unwrap();
+        assert_eq!((first.imported, first.remaining), (60, 1));
+        let folder = db.list_watched_folders(&workspace.id).unwrap().remove(0);
+
+        std::fs::write(notes.join("00-new.md"), "应在下一轮读取的内容").unwrap();
+        let second = db.sync_watched_folder(&workspace.id, &folder.id).unwrap();
+        assert_eq!((second.imported, second.remaining), (1, 0));
+        let third = db.sync_watched_folder(&workspace.id, &folder.id).unwrap();
+        assert_eq!((third.imported, third.remaining), (1, 2));
+
+        let moved = root.join("moved");
+        std::fs::create_dir(&moved).unwrap();
+        sync_folder(&moved, &workspace.id, &db).unwrap();
+        std::fs::remove_dir(&moved).unwrap();
+        let reports = db.sync_workspace_watched_folders(&workspace.id).unwrap();
+        assert_eq!(reports.len(), 2);
+        assert!(reports.iter().any(|report| report.error.is_some()));
+        assert!(reports.iter().any(|report| report.error.is_none() && report.unchanged == 2));
+
+        drop(db);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

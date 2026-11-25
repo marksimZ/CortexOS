@@ -29,6 +29,8 @@ test("Chinese cloud presets keep keys masked and select models per connection", 
           if (command === "check_ollama") return { version: "fixture", models: [] };
           if (command === "list_conversations") return [];
           if (command === "rag_index_status") return { index: null };
+          if (command === "sync_workspace_watched_folders") return [];
+          if (command === "read_assistant") return { activeVersion: null, versions: [] };
           if (command.startsWith("plugin:")) return 1;
           if (command === "model_cloud_privacy_rules") return { blockEmail: false, blockPhone: false };
           if (command === "list_runtime_cloud_connections") return args.workspaceId === "w" ? [...rows.values()] : [];
@@ -111,11 +113,11 @@ test("Chinese cloud presets keep keys masked and select models per connection", 
   await expect(cloud.getByLabel("模型", { exact: true })).toHaveValue("");
   await cloud.getByLabel("模型", { exact: true }).selectOption("deepseek-catalog-fixture");
   await page.evaluate(() => { location.hash = "/settings?workspace=other"; });
-  await expect(page.getByRole("banner").getByText("隔离工作区", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("当前工作区", { exact: true })).toHaveValue("other");
   await page.getByRole("button", { name: "云端模型", exact: true }).click();
   await expect(cloud.getByText("当前工作区还没有云端连接。", { exact: true })).toBeVisible();
   await page.evaluate(() => { location.hash = "/settings?workspace=w"; });
-  await expect(page.getByRole("banner").getByText("预设验收", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("当前工作区", { exact: true })).toHaveValue("w");
   await page.getByRole("button", { name: "云端模型", exact: true }).click();
   await expect(selected).toHaveValue("deepseek");
   const persisted = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
@@ -146,6 +148,8 @@ test("cloud capabilities require an explicit probe and keep workspace scope", as
           if (command === "bootstrap") return { workspaces: [{ id: "w", name: "甲工作区" }, { id: "other", name: "乙工作区" }], settings, activeRun: null };
           if (command === "check_ollama") return { version: "fixture", models: [] };
           if (command === "list_conversations") return [];
+          if (command === "sync_workspace_watched_folders") return [];
+          if (command === "read_assistant") return { activeVersion: null, versions: [] };
           if (command.startsWith("plugin:")) return 1;
           if (command === "list_runtime_cloud_connections") return args.workspaceId === "w" && saved ? [record] : [];
           if (args.workspaceId !== "w") throw Error("Unscoped command");
@@ -188,12 +192,11 @@ test("cloud capabilities require an explicit probe and keep workspace scope", as
 
   await page.goto("/#/settings?workspace=w");
   await page.getByRole("button", { name: "云端模型", exact: true }).click();
-  await page.getByText("发送隐私检查", { exact: true }).click();
   await page.getByRole("checkbox", { name: "拦截常见邮箱地址", exact: true }).check();
-  await page.getByRole("button", { name: "保存隐私检查", exact: true }).click();
+  await page.getByRole("button", { name: "保存隐私策略", exact: true }).click();
   await expect(page.getByText("已保存隐私检查。", { exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath("cloud-privacy-settings.png") });
-  await page.getByText("发送隐私检查", { exact: true }).click();
+  await page.getByText("云端隐私与同步策略", { exact: true }).click();
   await page.getByRole("button", { name: "添加连接", exact: true }).click();
   await page.getByLabel("服务商", { exact: true }).selectOption("gemini");
   await page.getByLabel("连接名称", { exact: true }).fill("测试账号");
@@ -240,11 +243,11 @@ test("cloud capabilities require an explicit probe and keep workspace scope", as
     }
   }
   await page.evaluate(() => { location.hash = "/settings?workspace=other"; });
-  await expect(page.getByRole("banner").getByText("乙工作区", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("当前工作区", { exact: true })).toHaveValue("other");
   await page.getByRole("button", { name: "云端模型", exact: true }).click();
   await expect(page.getByText("当前工作区还没有云端连接。", { exact: true })).toBeVisible();
   await page.evaluate(() => { location.hash = "/settings?workspace=w"; });
-  await expect(page.getByRole("banner").getByText("甲工作区", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("当前工作区", { exact: true })).toHaveValue("w");
   await page.getByRole("button", { name: "云端模型", exact: true }).click();
   await expect(cloud.getByRole("combobox", { name: "当前工作区的连接" })).toHaveValue("connection");
   await page.getByRole("button", { name: "移除连接", exact: true }).click();
@@ -263,6 +266,8 @@ test("resource panel distinguishes measured usage, unknown costs and missing GPU
           if (command === "bootstrap") return { workspaces: [{ id: "w", name: "项目甲" }, { id: "other", name: "项目乙" }], settings, activeRun: null };
           if (command === "check_ollama") return { version: "fixture", models: [] };
           if (command === "list_conversations") return [];
+          if (command === "sync_workspace_watched_folders") return [];
+          if (command === "read_assistant") return { activeVersion: null, versions: [] };
           if (command.startsWith("plugin:")) return 1;
           if (command === "model_runtime_resources") return { sampledAt: "2026-11-17T07:11:00Z", cpuPercent: 19, systemMemory: { usedBytes: 8 * 1024 ** 3, totalBytes: 16 * 1024 ** 3 }, gpus: null };
           if (command === "model_runtime_usage") return {
@@ -291,7 +296,7 @@ test("resource panel distinguishes measured usage, unknown costs and missing GPU
   await page.getByLabel("记录范围", { exact: true }).selectOption("168");
   await expect(page.getByText("当前范围暂无模型用量。", { exact: true })).toBeVisible();
   await page.evaluate(() => { location.hash = "/settings?workspace=other"; });
-  await expect(page.getByRole("banner").getByText("项目乙", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("当前工作区", { exact: true })).toHaveValue("other");
   await page.getByRole("button", { name: "资源与用量", exact: true }).click();
   await expect(page.getByText("当前范围暂无模型用量。", { exact: true })).toBeVisible();
   await expect(page.getByText("fixture-embedding", { exact: true })).toHaveCount(0);

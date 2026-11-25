@@ -2,6 +2,7 @@ use crate::{
     benchmark::dataset::require_workspace,
     commands::{AppState, blocking},
     db::{error, json_error},
+    knowledge_scope::SOURCE_AVAILABLE,
     models::{AppResult, new_id, now},
 };
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
@@ -561,8 +562,8 @@ pub(crate) async fn generate_weekly_digest_draft(
             .prepare(
                 "SELECT c.title, s.summary, s.updated_at
                  FROM conversation_summaries s
-                 JOIN conversations c ON c.id=s.conversation_id
-                 WHERE s.workspace_id=?1 AND s.updated_at>=?2
+                 JOIN conversations c ON c.id=s.conversation_id AND c.workspace_id=s.workspace_id
+                 WHERE s.workspace_id=?1 AND s.updated_at>=?2 AND c.purpose='chat'
                  ORDER BY s.updated_at DESC LIMIT 20",
             )
             .map_err(error)?;
@@ -575,13 +576,17 @@ pub(crate) async fn generate_weekly_digest_draft(
             .map_err(error)?;
 
         let mut kn_stmt = c
-            .prepare(
+            .prepare(&format!(
                 "SELECT v.title, v.kind, v.content
                  FROM knowledge_nodes n
                  JOIN knowledge_versions v ON v.node_id=n.id AND v.version=n.effective_version
+                 LEFT JOIN knowledge_validity d ON d.node_id=v.node_id AND d.version=v.version
                  WHERE n.workspace_id=?1 AND n.updated_at>=?2
+                   AND (d.valid_from IS NULL OR d.valid_from<=date('now','localtime'))
+                   AND (d.valid_to IS NULL OR d.valid_to>date('now','localtime'))
+                   AND {SOURCE_AVAILABLE}
                  ORDER BY n.updated_at DESC LIMIT 20",
-            )
+            ))
             .map_err(error)?;
         let knowledges: Vec<(String, String, String)> = kn_stmt
             .query_map(params![workspace_id, cutoff], |r| {

@@ -281,7 +281,7 @@ export function ChatComposer({
                   void send();
                 }}
                 aria-label={studio.sending ? "正在发送" : taskPreview ?? "发送消息"}
-                title={taskPreview}
+                title={canSend ? (taskPreview ?? "发送消息（Enter）") : "请先选择可用模型并输入问题"}
               >
                 <Send size={19} aria-hidden="true" />
               </button>
@@ -327,13 +327,6 @@ export function ChatComposer({
           generationTarget={generationTarget}
         />
       </div>
-      {studio.desktop && studio.workspaceId && !studio.draft && !currentRunning && !studio.sending &&
-        !studio.loadingMessages && !studio.creatingConversation && (
-          <button className="button secondary reminder-example" type="button" onClick={() => {
-            studio.setDraft("十分钟后提醒我喝水");
-            textarea.current?.focus();
-          }}>试试「十分钟后提醒我喝水」</button>
-        )}
       {draftTooLong && <small className="form-error" id="message-length-error">问题超过输入上限。请缩短后再发送。</small>}
       {modelError && <div className="composer-context">
         <small className="form-error" role="status">{modelError}</small>
@@ -348,7 +341,7 @@ export function ChatComposer({
       </div>}
       {!!studio.draftPersistence && <small className="inline-help">{studio.draftPersistence === "local" ? "草稿保存在本机" : "草稿只保留在当前窗口"}</small>}
       <details className="composer-help">
-        <summary>对话说明与快捷键</summary>
+        <summary title="展开查看对话说明与常用快捷键">对话说明与快捷键</summary>
         <p>
           Enter 发送，Shift+Enter 换行。支持 Markdown 标题、列表、代码和表格，点击眼睛图标预览，返回编辑保留原文。
           可输入“十分钟后提醒我喝水”来创建提醒。

@@ -359,7 +359,7 @@ pub async fn start_chat(
     let (ws, chat) = (workspace_id.clone(),conversation_id.clone());
     let manual_selection = generation_target.is_some();
     let manual_cloud_guard = if manual_selection {
-        Some(state.runtime_cloud.clone().try_lock_owned().map_err(|_| "正在处理另一项云端设置。")?)
+        state.runtime_cloud.clone().try_lock_owned().ok()
     } else {
         None
     };
@@ -388,6 +388,7 @@ pub async fn start_chat(
         };
         let guard = match manual_cloud_guard {
             Some(guard) => guard,
+            None if manual_selection => return Err("正在处理另一项云端设置，请重试。".into()),
             None => state.runtime_cloud.clone().try_lock_owned().map_err(|_| "正在处理另一项云端设置。")?,
         };
         (Some(consent),Some(guard))

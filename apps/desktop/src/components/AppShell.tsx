@@ -19,9 +19,9 @@ export const pages = [
   { id: "graph", label: "图谱" }, { id: "settings", label: "设置" },
 ] as const;
 function Brand() {
-  return <a className="prototype-brand" href="#/chat" aria-label="CortexOS 首页">
+  return <a className="prototype-brand" href="#/chat" aria-label="CortexOS 首页" title="CortexOS · 专属个人 AI 工作台">
     <BrandMark />
-    <span>CortexOS <span className="brand-dimension">3D</span></span>
+    <span>CortexOS</span>
   </a>;
 }
 export function AppShell({ studio, page, openCreateWorkspace, children }: {

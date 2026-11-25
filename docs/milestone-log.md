@@ -1,5 +1,14 @@
 # 里程碑记录
 
+## 2026-11-25 个人助手审查修复
+
+- 公开网页抓取在建立连接时校验 DNS 返回的整组地址，连接使用同一组地址。重定向沿用相同策略，网页正文抓取使用直连。
+- 文件夹绑定与后台扫描分开。数据库迁移 0034 保存扫描位置和自动生成知识的归属，旧数据按原始导入记录回填。同步保留停用授权、手工摘录和人工编辑版本，每次每个文件夹最多读取 60 个文件，后续同步从上次位置继续。重新进入工作区会再同步，有改动时刷新知识列表和图谱，并显示跳过、待续和失败信息。
+- 普通问答只使用生成模型，自动路由和手动选模都跳过本次用不到的向量与重排连接。周报按来源授权和生效日期筛选知识。记忆候选与摘要在同一保存点写入，提取失败会记录事件并保留已完成的聊天回答。
+- 浏览器验收使用模拟服务。执行 `npm.cmd --prefix apps/desktop run build`，以及在 `apps/desktop` 运行 `npm.cmd run test:smoke -- --project=edge runtime-cloud.spec.ts runtime-profiles.spec.ts --output=../../artifacts/review-fixes-final`。更新工作区选择器、隐私设置和后台同步的验收断言后，最终 5 项通过；查看了窄屏深色对话截图。
+- 后端使用 `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --offline --lib <过滤器>`，分别检查 `sources::tests::watched_folder`、`chat_router_prices_only_workspace_candidates_and_honors_task_preferences`、`public_page_addresses_exclude_special_use_ranges` 和 `upgrades_existing_database_with_consistent_backup_and_checks_all_migrations`，合计 5 项通过。离线 SQLite 样例另验证了旧库归属回填、周报资格筛选和记忆写入失败回滚。`git diff --check` 通过。全仓 Rust 格式检查仍报告既有格式差异。
+- 本轮更新原生诊断用例的预期数据库版本至 34。未执行原生 WebView2 诊断导出、真实网页抓取或真实模型调用。
+
 ## 2026-11-24 专属个人 AI 演进（Phase 4 收口：网页正文抓取、持久化文件夹同步、对话栏助手切换）
 
 - **安全网页正文抓取与一键入库**：在 `web_search.rs` 新增 `fetch_web_page` 命令，复用 `result_url` 并在自定义重定向策略的每一跳拦截内网/回环/非 http(s) 地址（SSRF 防护），限制 1 MiB 与 15 秒超时，提取标题与纯文本正文；支持直接调用 `save_knowledge` 生效并同步进入 FTS5 检索。对话联网来源卡片新增「抓取并存入知识」按钮，资料文件对话框新增公开网页链接直接抓取入库入口。

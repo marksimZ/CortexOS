@@ -110,6 +110,7 @@ export function KnowledgePage({
         <SourceBrowser
           workspace={workspace}
           onClose={() => setSourcesOpen(false)}
+          onChanged={() => setRefresh(n => n + 1)}
           onDraft={(request) => {
             setSourcesOpen(false);
             onEdit(request);
@@ -239,7 +240,7 @@ export function KnowledgePage({
           workspace={workspace}
           selected={selected}
           requestedVersion={requestedVersion}
-          revision={revision}
+          revision={revision + refresh}
           onBack={() => {
             setListOpen(true);
             onSelect(null);
@@ -406,6 +407,10 @@ export function KnowledgeInspector({
           workspace={workspace}
           initial={sourceFocus}
           onClose={() => setSourceFocus(null)}
+          onChanged={() => {
+            setRefresh(n => n + 1);
+            onChanged?.();
+          }}
           onDraft={(request) => {
             setSourceFocus(null);
             onEdit(request);

@@ -13,6 +13,15 @@ import { createClient, type Command, type WorkspaceArgs } from "./request";
 type NodeArgs = WorkspaceArgs & { nodeId: string };
 type SourceArgs = WorkspaceArgs & { sourceId: string };
 type TicketArgs = WorkspaceArgs & { ticket: string };
+export type FolderSyncReport = {
+  folder: string; imported: number; updated: number; unchanged: number;
+  skipped: number; remaining: number; error: string | null;
+};
+export function formatFolderSync(report: Pick<FolderSyncReport, "imported" | "updated" | "unchanged" | "skipped" | "remaining">) {
+  return `新增 ${report.imported}、更新 ${report.updated}、未变 ${report.unchanged}` +
+    (report.skipped ? `、跳过 ${report.skipped}` : "") +
+    (report.remaining ? `，剩余 ${report.remaining} 个文件将在下次同步时继续` : "");
+}
 type SaveKnowledge = {
   input: WorkspaceArgs & {
     nodeId: string | null;
@@ -45,7 +54,7 @@ export const knowledge = createClient<{
   choose_source: Command<WorkspaceArgs, Preview | null>;
   import_source_folder: Command<
     WorkspaceArgs,
-    { folder: string; imported: number; updated: number; unchanged: number; skipped: number } | null
+    FolderSyncReport | null
   >;
   list_watched_folders: Command<
     WorkspaceArgs,
@@ -53,12 +62,12 @@ export const knowledge = createClient<{
   >;
   sync_watched_folder: Command<
     WorkspaceArgs & { folderId: string },
-    { folder: string; imported: number; updated: number; unchanged: number; skipped: number }
+    FolderSyncReport
   >;
   remove_watched_folder: Command<WorkspaceArgs & { folderId: string }, void>;
   sync_workspace_watched_folders: Command<
     WorkspaceArgs,
-    { folder: string; imported: number; updated: number; unchanged: number; skipped: number }[]
+    FolderSyncReport[]
   >;
   commit_source: Command<TicketArgs, SourceDocument>;
   discard_source: Command<TicketArgs, void>;
