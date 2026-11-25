@@ -76,10 +76,10 @@ pub struct GraphNode {
 fn graph_node(r: &rusqlite::Row<'_>) -> rusqlite::Result<GraphNode> {
     Ok(GraphNode {
         node: node(r)?,
-        layout_index: r.get(9)?,
+        layout_index: r.get(10)?,
         saved_position: r
-            .get::<_, Option<f64>>(10)?
-            .map(|x| -> rusqlite::Result<_> { Ok([x, r.get(11)?, r.get(12)?]) })
+            .get::<_, Option<f64>>(11)?
+            .map(|x| -> rusqlite::Result<_> { Ok([x, r.get(12)?, r.get(13)?]) })
             .transpose()?,
     })
 }
@@ -439,5 +439,72 @@ impl Database {
             latest_version,
             next_before,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        graph::{NodePosition, SaveGraphView},
+        knowledge::SaveKnowledge,
+        models::new_id,
+    };
+
+    #[test]
+    fn graph_node_page_reads_nodes_and_positions_with_local_only_column() {
+        let dir = std::env::temp_dir().join(format!("cortexos-gq-{}", new_id()));
+        let db = Database::open(&dir).unwrap();
+        let ws = db.create_workspace("图谱测试").unwrap().id;
+        let node_id = db
+            .save_knowledge(SaveKnowledge {
+                workspace_id: ws.clone(),
+                node_id: None,
+                expected_revision: None,
+                title: "核心节点".into(),
+                kind: "knowledge".into(),
+                content: "测试二维思维导图读取".into(),
+                change_reason: "初始化".into(),
+                source_message_id: None,
+                source_excerpt: None,
+            })
+            .unwrap();
+        db.save_graph_view(SaveGraphView {
+            workspace_id: ws.clone(),
+            expected_revision: 0,
+            camera: [0.0, 9.0, 22.0],
+            target: [0.0, 0.0, 0.0],
+            positions: vec![NodePosition {
+                node_id: node_id.clone(),
+                position: [1.5, -2.0, 0.0],
+            }],
+        })
+        .unwrap();
+
+        let page = db
+            .graph_node_page(NodeQuery {
+                workspace_id: ws.clone(),
+                query: String::new(),
+                kind: "all".into(),
+                status: "all".into(),
+                since_utc: None,
+                root_node_id: None,
+                root_node_ids: None,
+                offset: 0,
+                limit: 50,
+                expected_snapshot: None,
+            })
+            .unwrap();
+        assert_eq!(page.total_nodes, 1);
+        assert_eq!(page.nodes.len(), 1);
+        assert_eq!(page.nodes[0].node.id, node_id);
+        assert_eq!(page.nodes[0].layout_index, 0);
+        assert_eq!(page.nodes[0].saved_position, Some([1.5, -2.0, 0.0]));
+
+        let links = db
+            .graph_links(&ws, vec![node_id], &page.snapshot)
+            .unwrap();
+        assert!(links.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
