@@ -1,5 +1,13 @@
 # 里程碑记录
 
+## 2026-11-25 Phase 9：Windows 原生 Alt+Space 全局呼出随手记与秒问浮窗
+
+- **零新增依赖 Win32 全局热键与浮窗生命周期（独立 Codex 新会话 `01a2121d-d924-7623-a33f-7b295bbd0bb3` 交付后端）**：新增 `src-tauri/src/quickbar.rs` 与最小权限窗口能力配置 `capabilities/quickbar.json`，通过 Windows `user32.dll`（`RegisterHotKey` / `UnregisterHotKey` / `GetMessageW` / `PostThreadMessageW`）在独立消息泵线程监听 `Alt + Space`（支持 `<data_dir>/quickbar.json` 持久化开关与热键占用冲突提示，并在自动化测试环境自动隔离不抢占宿主热键）。关闭浮窗自动转为隐藏，退出主窗口时同步投递 `WM_QUIT` 释放热键并销毁浮窗，杜绝残留后台僵尸进程。
+- **无边框置顶 `#/quickbar` 双模交互（`QuickBar.tsx` + `QuickBarSettingsPanel.tsx`）**：`main.tsx` 对 `#/quickbar` 独立轻量挂载 `QuickBar`：
+  - **「⚡ 秒问 AI」**：直接向当前活跃工作区提问并流式展示回答（窗口高度自适应展开至 416px），支持一键「在主窗口继续深聊」唤醒主窗口并跳转对应会话；
+  - **「📌 随手记」**（按 `Tab` 或输入 `/` 前缀秒切）：输入灵感/待办按 `Enter` 直接调用 `quickbar_save_note` 写入生效知识并同步 FTS5 索引，向主窗口广播 `quickbar-knowledge-saved` 后自动收起浮窗；「设置 → 我的助手」支持随时开关全局热键或点击「立即呼出浮窗」。
+- **实测与未验证范围**：执行 `npm.cmd --prefix apps/desktop run build`、`node --experimental-strip-types --test apps/desktop/tests/unit/navigation.test.ts`（2/2 通过）、`cargo test --offline --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --lib quickbar::tests`（1/1 通过，覆盖配置持久化与随手记入库即刻可检索）及 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`（通过）。未运行真实模型推理及跨进程物理按键/多显示器 WebView2 实机自动化测试。
+
 ## 2026-11-25 Phase 8：主动式「今日聚焦」工作台晨间卡片
 
 - **工作区上下文零延迟聚合（独立 Codex 新会话 `01a2120c-d4b9-7ba2-ad66-e5a10f29a58a` 交付后端）**：在 `memory.rs` 新增 `read_daily_focus` 命令（同步注册至 `lib.rs`、`build.rs`、`capabilities/default.json`），纯本地聚合当前工作区近期未归档活跃会话及一句话摘要、近 48 小时新增/更新的启用资料文件（含关联知识节点 ID）、待确认记忆候选数量、最新一期已生成的定时新闻简报要点（兼容 `ready`/`completed` 状态）与即将到期的提醒，并动态生成 3 条上下文相关的推荐追问词。

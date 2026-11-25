@@ -23,6 +23,7 @@ mod memory;
 mod ollama;
 mod personal_assistant;
 mod portability;
+mod quickbar;
 mod retrieval;
 mod rag;
 mod reminders;
@@ -95,6 +96,7 @@ pub fn run() {
             if let Some(window) = &primary_window {
                 tauri::WebviewWindowBuilder::from_config(app.handle(), window)?.build()?;
             }
+            app.manage(quickbar::QuickbarState::start(app.handle().clone(), &directory));
             reminders::start_scheduler(app.handle(), app.state::<commands::AppState>().inner());
             Ok(())
         })
@@ -331,9 +333,26 @@ pub fn run() {
             commands::load_graph_edge_history,
             commands::save_knowledge_edge,
             commands::save_graph_view,
+            quickbar::quickbar_status,
+            quickbar::set_quickbar_enabled,
+            quickbar::toggle_quickbar,
+            quickbar::hide_quickbar,
+            quickbar::resize_quickbar,
+            quickbar::quickbar_save_note,
+            quickbar::open_in_main_window,
             commands::start_chat
         ])
         .on_window_event(|window, event| {
+            if window.label() == "quickbar" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                return;
+            }
+            if window.label() != "main" {
+                return;
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let state = window.state::<commands::AppState>().inner().clone();
                 let was_closing = state.closing.swap(true, Ordering::SeqCst);
@@ -352,12 +371,22 @@ pub fn run() {
                                 let _ = tauri::async_runtime::spawn_blocking(move || { let _ = benchmark::harness::workspace::cleanup_on_close(&db); let _ = benchmark::harness::runtime::cleanup_on_close(&db); benchmark::harness::session::cleanup_on_close(&db) }).await;
                             }
                             state.close_cleanup.store(false, Ordering::SeqCst);
+                            shutdown_quickbar(window.app_handle());
                             let _ = window.close();
                         });
                     }
+                } else {
+                    shutdown_quickbar(window.app_handle());
                 }
             }
         })
         .run(context)
         .expect("CortexOS desktop failed to start");
+}
+
+fn shutdown_quickbar(app: &tauri::AppHandle) {
+    app.state::<quickbar::QuickbarState>().shutdown();
+    if let Some(window) = app.get_webview_window("quickbar") {
+        let _ = window.destroy();
+    }
 }

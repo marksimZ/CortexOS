@@ -239,6 +239,13 @@
     "allow-query-graph-relations",
     "allow-load-graph-edge-history",
     "allow-save-knowledge-edge",
-    "allow-save-graph-view"
+    "allow-save-graph-view",
+    "allow-quickbar-status",
+    "allow-set-quickbar-enabled",
+    "allow-toggle-quickbar",
+    "allow-hide-quickbar",
+    "allow-resize-quickbar",
+    "allow-quickbar-save-note",
+    "allow-open-in-main-window"
   ]
 }

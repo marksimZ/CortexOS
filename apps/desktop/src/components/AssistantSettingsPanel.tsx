@@ -6,6 +6,7 @@ import { errorText } from "../frontend-error";
 import { StatusLabel } from "./StatusLabel";
 import { WebSearchSettings } from "./WebSearchSettings";
 import { GlobalPersonaPanel } from "./GlobalPersonaPanel";
+import { QuickBarSettingsPanel } from "./QuickBarSettingsPanel";
 
 const assistantPresets: { name: string; tag: string; instructions: string }[] = [
   {
@@ -103,6 +104,7 @@ export function AssistantSettingsPanel({ workspaceId, focusSearch }: { workspace
       <p>为当前工作区设置专属回答方式。本地对话始终生效；云端对话在开启工作区同步策略时同步生效。</p>
     </div>
     <div className="settings-fields assistant-settings-fields">
+      <QuickBarSettingsPanel />
       <GlobalPersonaPanel />
       {loadError && <div className="form-error" role="alert">
         <p>{loadError}</p><button className="button secondary" type="button" onClick={() => {

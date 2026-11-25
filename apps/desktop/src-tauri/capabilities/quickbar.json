@@ -1,0 +1,23 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "quickbar-window",
+  "description": "Minimal workspace capture and quick-ask permissions for the floating QuickBar window.",
+  "windows": ["quickbar"],
+  "permissions": [
+    "allow-bootstrap",
+    "allow-create-conversation",
+    "allow-start-chat",
+    "allow-cancel-run",
+    "allow-chat-runtime-route",
+    "allow-list-runtime-cloud-connections",
+    "allow-model-cloud-privacy-rules",
+    "allow-quickbar-status",
+    "allow-hide-quickbar",
+    "allow-resize-quickbar",
+    "allow-quickbar-save-note",
+    "allow-open-in-main-window",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-start-dragging"
+  ]
+}

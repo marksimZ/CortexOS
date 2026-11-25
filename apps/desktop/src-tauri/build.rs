@@ -230,6 +230,13 @@ fn main() {
             "load_graph_edge_history",
             "save_knowledge_edge",
             "save_graph_view",
+            "quickbar_status",
+            "set_quickbar_enabled",
+            "toggle_quickbar",
+            "hide_quickbar",
+            "resize_quickbar",
+            "quickbar_save_note",
+            "open_in_main_window",
         ]),
     ))
     .expect("Failed to build the CortexOS command permission manifest");

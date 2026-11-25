@@ -1,6 +1,7 @@
 import { closeDraftWindow, useDraftWindow } from "./draft-store";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppDialog, openDialog } from "./components/AppDialog";
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { formatFolderSync, knowledge, type FolderSyncReport } from "./api/knowledge";
@@ -69,6 +70,53 @@ export default function App() {
   const mainRef = useRef<HTMLElement>(null);
   const previousPage = useRef(page);
   const folderSyncs = useRef(new Map<string, Promise<FolderSyncReport[]>>());
+  useEffect(() => {
+    if (!studio.desktop) return;
+    let active = true;
+    const navSub = listen<{
+      workspaceId: string;
+      conversationId?: string | null;
+      nodeId?: string | null;
+    }>("quickbar-navigate", ({ payload }) => {
+      if (!active || !payload.workspaceId) return;
+      if (payload.nodeId) {
+        setKnowledgeSelection({ workspace: payload.workspaceId, id: payload.nodeId });
+        setKnowledgeRevision((n) => n + 1);
+        navigate("knowledge", { workspace: payload.workspaceId, node: payload.nodeId });
+        return;
+      }
+      void studio
+        .openWorkspace(payload.workspaceId, payload.conversationId ?? undefined)
+        .then(async () => {
+          await studio.refreshConversations(payload.workspaceId);
+          if (payload.conversationId) {
+            await studio.openConversation(payload.workspaceId, payload.conversationId);
+          }
+          navigate("chat", {
+            workspace: payload.workspaceId,
+            conversation: payload.conversationId ?? undefined,
+          });
+        })
+        .catch(reportError);
+    }).catch(() => undefined);
+
+    const savedSub = listen<{ workspaceId: string; nodeId: string }>(
+      "quickbar-knowledge-saved",
+      ({ payload }) => {
+        if (!active) return;
+        setKnowledgeRevision((n) => n + 1);
+        if (payload.workspaceId === studio.view.current.workspaceId) {
+          notify("随手记已存入当前工作区知识库", payload.workspaceId);
+        }
+      },
+    ).catch(() => undefined);
+
+    return () => {
+      active = false;
+      void navSub.then((unlisten) => unlisten?.()).catch(() => {});
+      void savedSub.then((unlisten) => unlisten?.()).catch(() => {});
+    };
+  }, [studio.desktop, studio.openWorkspace, studio.openConversation, studio.refreshConversations, studio.view, reportError]);
   useEffect(() => {
     const ws = studio.workspaceId;
     if (!studio.desktop || !ws) return;
