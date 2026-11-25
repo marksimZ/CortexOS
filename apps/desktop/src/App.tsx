@@ -27,10 +27,10 @@ const SettingsPage = lazyView(() => import("./Settings"), (module) => module.Set
 
 export default function App() {
   const studio = useStudio();
-  const { desktop, workspaceId, openWorkspace, openConversation, reportError, view, loading } = studio;
+  const { desktop, workspaceId, openWorkspace, openConversation, startTopicChat, reportError, view, loading } = studio;
   const graphStudio = useMemo(
-    () => ({ desktop, workspaceId, openConversation, reportError }),
-    [desktop, workspaceId, openConversation, reportError],
+    () => ({ desktop, workspaceId, openConversation, startTopicChat, reportError }),
+    [desktop, workspaceId, openConversation, startTopicChat, reportError],
   );
   const [edgeEdit, setEdgeEdit] = useState<EditEdge | null>(null);
   const [knowledgeEdit, setKnowledgeEdit] = useState<EditKnowledge | null>(

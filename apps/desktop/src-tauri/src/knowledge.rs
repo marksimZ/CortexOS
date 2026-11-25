@@ -5,6 +5,7 @@ use crate::{
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +20,17 @@ pub struct KnowledgeNode {
     pub updated_at: String,
     pub source_message_id: Option<String>,
     pub local_only: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestedKnowledgeLink {
+    pub node_id: String,
+    pub title: String,
+    pub kind: String,
+    pub suggested_relation: String,
+    pub reason: String,
+    pub score: f64,
 }
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -122,6 +134,23 @@ fn revision(current: &KnowledgeNode, expected: Option<i64>) -> AppResult<()> {
     }
     Ok(())
 }
+
+fn suggestion_terms(title: &str, content: &str) -> Vec<(String, bool)> {
+    let excerpt: String = content.chars().take(2_000).collect();
+    let mut seen = HashSet::new();
+    crate::retrieval::terms(title)
+        .into_iter()
+        .map(|term| (term, true))
+        .chain(
+            crate::retrieval::terms(&excerpt)
+                .into_iter()
+                .map(|term| (term, false)),
+        )
+        .filter(|(term, _)| seen.insert(term.clone()))
+        .take(24)
+        .collect()
+}
+
 impl Database {
     pub fn context_options(
         &self,
@@ -170,6 +199,119 @@ impl Database {
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(error)
     }
+
+    pub fn suggest_knowledge_links(
+        &self,
+        workspace: &str,
+        node_id: &str,
+    ) -> AppResult<Vec<SuggestedKnowledgeLink>> {
+        let mut connection = self.connection()?;
+        let tx = connection.transaction().map_err(error)?;
+        let (title, kind, content): (String, String, String) = tx
+            .query_row(
+                "SELECT v.title,v.kind,v.content
+                 FROM knowledge_nodes n
+                 JOIN knowledge_versions v ON v.node_id=n.id
+                   AND v.version=COALESCE(n.effective_version,n.latest_version)
+                 WHERE n.workspace_id=?1 AND n.id=?2",
+                params![workspace, node_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()
+            .map_err(error)?
+            .ok_or_else(missing)?;
+
+        let source_terms = suggestion_terms(&title, &content);
+        let source_title = title.to_lowercase();
+        let source_content = content.to_lowercase();
+        let mut statement = tx
+            .prepare(
+                "WITH linked AS (
+                    SELECT CASE WHEN v.from_node_id=?2 THEN v.to_node_id ELSE v.from_node_id END AS id
+                    FROM knowledge_edges e
+                    JOIN knowledge_edge_versions v ON v.edge_id=e.id
+                      AND v.workspace_id=e.workspace_id AND v.version=e.latest_version
+                    WHERE e.workspace_id=?1 AND v.active=1
+                      AND (v.from_node_id=?2 OR v.to_node_id=?2)
+                 )
+                 SELECT n.id,v.title,v.kind,v.content
+                 FROM knowledge_nodes n
+                 JOIN knowledge_versions v ON v.node_id=n.id
+                   AND v.version=COALESCE(n.effective_version,n.latest_version)
+                 WHERE n.workspace_id=?1 AND n.id<>?2 AND n.id NOT IN (SELECT id FROM linked)",
+            )
+            .map_err(error)?;
+        let candidates = statement
+            .query_map(params![workspace, node_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })
+            .map_err(error)?;
+        let mut suggestions = Vec::new();
+        for candidate in candidates {
+            let (node_id, candidate_title, candidate_kind, candidate_content) =
+                candidate.map_err(error)?;
+            let normalized_title = candidate_title.to_lowercase();
+            let mention = if source_content.contains(&normalized_title) {
+                Some(format!("正文提及「{candidate_title}」"))
+            } else if candidate_content.to_lowercase().contains(&source_title) {
+                Some(format!("候选正文提及「{title}」"))
+            } else if source_title.contains(&normalized_title) {
+                Some(format!("标题提及「{candidate_title}」"))
+            } else if normalized_title.contains(&source_title) {
+                Some(format!("候选标题提及「{title}」"))
+            } else {
+                None
+            };
+
+            let candidate_terms = suggestion_terms(&candidate_title, &candidate_content);
+            let mut shared = Vec::new();
+            let mut score = if mention.is_some() { 100.0 } else { 0.0 };
+            for (term, in_source_title) in &source_terms {
+                if let Some((_, in_candidate_title)) =
+                    candidate_terms.iter().find(|(candidate, _)| candidate == term)
+                {
+                    let weight = 1 + u8::from(*in_source_title) + u8::from(*in_candidate_title);
+                    score += f64::from(weight);
+                    shared.push((weight, term.as_str()));
+                }
+            }
+            if score == 0.0 {
+                continue;
+            }
+            let reason = mention.unwrap_or_else(|| {
+                shared.sort_by_key(|&(weight, _)| std::cmp::Reverse(weight));
+                let keywords = shared
+                    .iter()
+                    .take(3)
+                    .map(|&(_, term)| term)
+                    .collect::<Vec<_>>();
+                format!("共享主题词：{}", keywords.join("、"))
+            });
+            let relation = match (kind.as_str(), candidate_kind.as_str()) {
+                ("conflict", _) | (_, "conflict") => "contradicts",
+                ("decision", "evidence") => "derived_from",
+                (_, "context") => "depends_on",
+                _ => "supports",
+            };
+            suggestions.push(SuggestedKnowledgeLink {
+                node_id,
+                title: candidate_title,
+                kind: candidate_kind,
+                suggested_relation: relation.into(),
+                reason,
+                score,
+            });
+        }
+        suggestions.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.node_id.cmp(&b.node_id)));
+        suggestions.truncate(4);
+        Ok(suggestions)
+    }
+
     pub fn knowledge_detail(&self, workspace: &str, id: &str) -> AppResult<KnowledgeDetail> {
         let connection = self.connection()?;
         let node = read_node(&connection, workspace, id)?;
@@ -424,6 +566,91 @@ mod tests {
             source_excerpt: None,
         }
     }
+    #[test]
+    fn suggests_related_knowledge_links_excluding_existing_edges() {
+        let directory = std::env::temp_dir().join(format!("cortexos-link-suggestions-{}", new_id()));
+        {
+            let db = Database::open(&directory).unwrap();
+            let workspace = db.create_workspace("A").unwrap().id;
+            let other_workspace = db.create_workspace("B").unwrap().id;
+            let save = |workspace: &str, title: &str, kind: &str, content: &str| {
+                db.save_knowledge(SaveKnowledge {
+                    title: title.into(),
+                    kind: kind.into(),
+                    content: content.into(),
+                    ..draft(workspace)
+                })
+                .unwrap()
+            };
+            let source = save(&workspace, "缓存决策", "decision", "参考延迟测量，优化冷启动。");
+            let evidence = save(&workspace, "延迟测量", "evidence", "记录请求耗时。");
+            let context = save(&workspace, "运行背景", "context", "冷启动影响峰值。");
+            save(&workspace, "园艺计划", "knowledge", "种植番茄。");
+            save(&other_workspace, "延迟测量", "evidence", "冷启动。");
+
+            // Seed a pending revision because manual saves currently take effect immediately.
+            let mut connection = db.connection().unwrap();
+            let tx = connection.transaction().unwrap();
+            tx.execute(
+                "INSERT INTO knowledge_versions
+                 (node_id,version,title,kind,content,author,change_reason,created_at)
+                 VALUES(?1,2,'园艺计划','knowledge','种植番茄。','user','待确认草案',?2)",
+                params![source, now()],
+            )
+            .unwrap();
+            tx.execute(
+                "UPDATE knowledge_nodes SET latest_version=2,revision=revision+1 WHERE id=?1",
+                [&source],
+            )
+            .unwrap();
+            tx.commit().unwrap();
+            drop(connection);
+
+            assert_eq!(
+                db.suggest_knowledge_links(&other_workspace, &source)
+                    .unwrap_err(),
+                missing()
+            );
+            let suggestions = db.suggest_knowledge_links(&workspace, &source).unwrap();
+            assert_eq!(suggestions.len(), 2);
+            assert_eq!(suggestions[0].node_id, evidence);
+            assert_eq!(suggestions[0].suggested_relation, "derived_from");
+            assert_eq!(suggestions[0].reason, "正文提及「延迟测量」");
+            assert_eq!(suggestions[1].node_id, context);
+            assert_eq!(suggestions[1].suggested_relation, "depends_on");
+            assert!(suggestions[1].reason.starts_with("共享主题词："));
+            assert!(suggestions[0].score > suggestions[1].score && suggestions[1].score > 0.0);
+
+            let mut edge = crate::graph::SaveEdge {
+                workspace_id: workspace.clone(),
+                edge_id: None,
+                expected_version: None,
+                from_node_id: evidence,
+                to_node_id: source.clone(),
+                relation: "supports".into(),
+                active: true,
+                change_reason: "验证关系建议".into(),
+            };
+            let edge_id = db.save_knowledge_edge(edge.clone()).unwrap();
+            let suggestions = db.suggest_knowledge_links(&workspace, &source).unwrap();
+            assert_eq!(suggestions.len(), 1);
+            assert_eq!(suggestions[0].node_id, context);
+
+            edge.edge_id = Some(edge_id);
+            edge.expected_version = Some(1);
+            edge.active = false;
+            db.save_knowledge_edge(edge).unwrap();
+            assert_eq!(
+                db.suggest_knowledge_links(&workspace, &source).unwrap().len(),
+                2
+            );
+        }
+        for entry in std::fs::read_dir(&directory).unwrap() {
+            std::fs::remove_file(entry.unwrap().path()).unwrap();
+        }
+        std::fs::remove_dir(directory).unwrap();
+    }
+
     #[test]
     fn revisions_approvals_scope_and_rollback() {
         let directory = std::env::temp_dir().join(format!("cortexos-knowledge-{}", new_id()));

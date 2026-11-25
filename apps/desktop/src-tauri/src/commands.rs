@@ -624,6 +624,17 @@ pub async fn list_knowledge(
     .await
 }
 #[tauri::command]
+pub async fn suggest_knowledge_links(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    node_id: String,
+) -> AppResult<Vec<crate::knowledge::SuggestedKnowledgeLink>> {
+    blocking(state.database.clone()?, move |db| {
+        db.suggest_knowledge_links(&workspace_id, &node_id)
+    })
+    .await
+}
+#[tauri::command]
 pub async fn get_knowledge(
     state: State<'_, AppState>,
     workspace_id: String,

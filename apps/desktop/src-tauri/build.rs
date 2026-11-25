@@ -217,6 +217,7 @@ fn main() {
             "start_chat",
             "list_context_options",
             "list_knowledge",
+            "suggest_knowledge_links",
             "get_knowledge",
             "save_knowledge",
             "approve_knowledge",

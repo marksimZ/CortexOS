@@ -11,25 +11,30 @@ import {
   useState,
 } from "react";
 import {
+  BookOpenCheck,
   Focus,
+  GitBranch,
+  GraduationCap,
+  LayoutGrid,
   List,
+  MessageSquarePlus,
   Network,
   RotateCcw,
   Save,
   X,
 } from "lucide-react";
 import { KnowledgeInspector } from "./Knowledge";
+import { SuggestedLinksPanel } from "./components/SuggestedLinksPanel";
 import { kinds, type EditKnowledge } from "./knowledge-types";
 import type { EditEdge } from "./RelationshipEditor";
 import { navigate, useNavigation } from "./navigation";
 import { errorText, type GraphStudio } from "./studio";
 import {
   defaultPositions,
-  shapes,
   type GraphData,
   type Point,
 } from "./graph-data";
-import type { ViewportApi } from "./GraphViewport";
+import type { LayoutMode, ViewportApi } from "./GraphViewport";
 import { GraphRelations } from "./GraphRelations";
 import { GraphMotionControl } from "./GraphMotionControl";
 import {
@@ -51,6 +56,7 @@ interface BrowseState {
   since: string;
   expansions: GraphExpansion[] | null;
   showEdgeLabels: boolean;
+  layoutMode: LayoutMode;
 }
 // Like execution sessionViews: browsing preferences last for this app session only.
 const sessionBrowse = new Map<string, BrowseState>();
@@ -144,6 +150,11 @@ function KnowledgeGraph({
   const [showEdgeLabels, setShowEdgeLabels] = useState(
     previousBrowse?.showEdgeLabels ?? false,
   );
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>(
+    previousBrowse?.layoutMode ?? "mindmap",
+  );
+  const [multiSelected, setMultiSelected] = useState<string[]>([]);
+  const [startingChat, setStartingChat] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [inspectorReady, setInspectorReady] = useState(!!route.node);
@@ -180,6 +191,7 @@ function KnowledgeGraph({
       since,
       expansions,
       showEdgeLabels,
+      layoutMode,
     });
   }, [
     browseKey,
@@ -189,6 +201,7 @@ function KnowledgeGraph({
     since,
     expansions,
     showEdgeLabels,
+    layoutMode,
   ]);
   const [failed, setFailed] = useState(false);
   const [canvasKey, setCanvasKey] = useState(0);
@@ -431,6 +444,39 @@ function KnowledgeGraph({
       if (generation === scopeGeneration.current) setLoading(false);
     }
   };
+  const launchTopicChat = async (
+    nodeIds: string[],
+    intent: "discuss" | "quiz" | "synthesis",
+  ) => {
+    if (!workspace || startingChat || nodeIds.length === 0) return;
+    const nodesForChat = nodeIds
+      .map((id) => catalog[id] ?? graph?.nodes.find((n) => n.id === id))
+      .filter((n): n is GraphNode => !!n);
+    const effectiveSelection = nodesForChat
+      .filter((n) => n.effectiveVersion !== null)
+      .map((n) => ({ nodeId: n.id, version: n.effectiveVersion! }));
+    if (effectiveSelection.length === 0) {
+      notify("请至少选择一个已生效的知识节点后再发起专题对话");
+      return;
+    }
+    const titleList = nodesForChat.map((n) => `《${n.title}》`).join("、");
+    const prompt =
+      intent === "quiz"
+        ? `请严格围绕已挂载的知识节点（${titleList}），由浅入深给我出 3 道考点自测或逻辑辨析题。先只给出题目，等我回答后再逐题点评并指出我的盲区。`
+        : intent === "synthesis"
+          ? `请梳理已挂载的这组知识节点（${titleList}）之间的核心逻辑脉络、相互支撑依据以及潜在冲突或待补充盲点，生成一份结构清晰的专题综述。`
+          : `围绕知识节点 ${titleList}，我想进一步探讨：`;
+    setStartingChat(true);
+    try {
+      const conv = await studio.startTopicChat(effectiveSelection, prompt);
+      navigate("chat", { workspace: conv.workspaceId, conversation: conv.id });
+    } catch (err) {
+      studio.reportError(err);
+    } finally {
+      setStartingChat(false);
+    }
+  };
+
   if (!demo && (!studio.desktop || !workspace))
     return (
       <div className="graph-empty">
@@ -475,6 +521,28 @@ function KnowledgeGraph({
             : ""}
         </button>
         {sourceControl}
+        <div className="segmented-control" role="radiogroup" aria-label="图谱排布方式">
+          <label>
+            <input
+              type="radio"
+              name="graph-layout-mode"
+              checked={layoutMode === "mindmap"}
+              onChange={() => setLayoutMode("mindmap")}
+            />
+            <GitBranch size={14} aria-hidden="true" />
+            思维导图
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="graph-layout-mode"
+              checked={layoutMode === "freeform"}
+              onChange={() => setLayoutMode("freeform")}
+            />
+            <LayoutGrid size={14} aria-hidden="true" />
+            自由白板
+          </label>
+        </div>
         <span className="graph-visible-count" role="status">
           {loading ? "正在读取… " : ""}已加载 {visible.length} /{" "}
           {counts.totalNodes} 节点
@@ -766,7 +834,7 @@ function KnowledgeGraph({
             </div>
           ) : failed ? (
             <div className="graph-empty" role="status">
-              <h2>3D 暂不可用</h2>
+              <h2>导图画布暂不可用</h2>
               <p>继续使用节点列表查看和编辑知识。</p>
               <button
                 className="button secondary"
@@ -775,13 +843,14 @@ function KnowledgeGraph({
                   setCanvasKey((n) => n + 1);
                 }}
               >
-                重试 3D
+                重试画布
               </button>
             </div>
           ) : (
-            <Suspense fallback={<p className="inline-loading">正在加载 3D…</p>}>
+            <Suspense fallback={<p className="inline-loading">正在准备二维思维导图…</p>}>
               <Viewport
                 key={canvasKey}
+                layoutMode={layoutMode}
                 nodes={visible.map((node) => ({
                   ...node,
                   badge:
@@ -795,18 +864,63 @@ function KnowledgeGraph({
                 }))}
                 positions={positions}
                 selected={visibleIds.has(selected ?? "") ? selected : null}
+                multiSelected={multiSelected}
                 camera={initialView.current?.camera ?? [0, 9, 22]}
                 target={initialView.current?.target ?? [0, 0, 0]}
                 onReady={demo ? () => api.current?.fit() : undefined}
                 apiRef={api}
                 showEdgeLabels={showEdgeLabels}
                 onSelect={select}
+                onMultiSelect={setMultiSelected}
+                onNodeDrag={(id, nextPoint) => {
+                  dirtyPositions.current.add(id);
+                  setPositions((prev) => ({ ...prev, [id]: nextPoint }));
+                }}
                 onExitFocus={closeInspector}
                 onFocused={() => setInspectorReady(true)}
                 onChange={viewChanged}
                 onFailure={onFailure}
               />
             </Suspense>
+          )}
+          {multiSelected.length > 0 && (
+            <div className="mindmap-topic-bar" role="region" aria-label="多选节点专题操作">
+              <span className="mindmap-topic-count">已框选 {multiSelected.length} 个节点</span>
+              <button
+                type="button"
+                className="button primary"
+                disabled={startingChat}
+                onClick={() => void launchTopicChat(multiSelected, "discuss")}
+              >
+                <MessageSquarePlus size={15} aria-hidden="true" />
+                围绕选中节点深聊
+              </button>
+              <button
+                type="button"
+                className="button secondary"
+                disabled={startingChat}
+                onClick={() => void launchTopicChat(multiSelected, "quiz")}
+              >
+                <GraduationCap size={15} aria-hidden="true" />
+                考考我
+              </button>
+              <button
+                type="button"
+                className="button secondary"
+                disabled={startingChat}
+                onClick={() => void launchTopicChat(multiSelected, "synthesis")}
+              >
+                <BookOpenCheck size={15} aria-hidden="true" />
+                串联生成综述
+              </button>
+              <button
+                type="button"
+                className="button text-button"
+                onClick={() => setMultiSelected([])}
+              >
+                取消选择
+              </button>
+            </div>
           )}
           <details className="graph-legend">
             <summary>图例与操作</summary>
@@ -817,25 +931,21 @@ function KnowledgeGraph({
                 checked={showEdgeLabels}
                 onChange={(e) => setShowEdgeLabels(e.target.checked)}
               />
-              显示选中节点的连线名称
+              显示全部连线关系名称
             </label>
             <ul>
               {Object.entries(kinds).map(([key, name]) => (
                 <li key={key}>
                   <i className={`node-key node-${key}`} />
                   {name}
-                  <span>{shapes[key]}</span>
                 </li>
               ))}
             </ul>
             <p>
-              左键拖动旋转，右键拖动平移，滚轮缩放。点击节点聚焦；拖动画布空白或按
-              Esc 返回原视角。方向按“起点 → 关系 → 终点”阅读。
+              滚轮无极缩放，左键拖动画布平移；思维导图模式下点击节点右侧 −/+ 可折叠或展开下级分支，自由白板模式下可直接拖拽节点并保存布局。
             </p>
-            <p>节点的位置只是排布方式，不能据此判断因果关系或内容是否可信。</p>
             <p>
-              直接关联只包含当前有效的连线，每次最多增加显示 50
-              个节点。搜索与筛选仍然生效；显示范围不会修改知识或关系。
+              按住 Shift 拖拽框选（或 Shift+点击节点）可多选一组知识节点，一键开启专题对话、考点自测或脉络综述。
             </p>
           </details>
           <div className="graph-view-status" role="status">
@@ -892,6 +1002,14 @@ function KnowledgeGraph({
               <p role="status">已临时显示这个节点，其他筛选保持不变。</p>
             )}
             <div className="graph-explore-actions">
+              <button
+                className="button primary"
+                disabled={startingChat || selectedNode.effectiveVersion === null}
+                onClick={() => void launchTopicChat([selectedNode.id], "discuss")}
+              >
+                <MessageSquarePlus size={14} aria-hidden="true" />
+                围绕此节点对话
+              </button>
               <button
                 className="button secondary"
                 onClick={() => {
@@ -960,25 +1078,34 @@ function KnowledgeGraph({
               </details>
             )}
             {graph && (
-              <GraphRelations
-                key={selectedNode.id}
-                workspace={workspace ?? "demo"}
-                selected={selectedNode.id}
-                graph={{
-                  ...graph!,
-                  nodes: [
-                    ...graph!.nodes,
-                    ...Object.values(catalog).filter(
-                      (n) => !graph!.nodes.some((item) => item.id === n.id),
-                    ),
-                  ],
-                }}
-                demo={demo}
-                revision={revision + refresh}
-                onNodes={acceptNodes}
-                onSelect={select}
-                onEdit={onEditEdge}
-              />
+              <>
+                <SuggestedLinksPanel
+                  workspaceId={workspace}
+                  nodeId={selectedNode.id}
+                  revision={revision + refresh}
+                  onLinked={() => setRefresh((n) => n + 1)}
+                  onSelectNode={select}
+                />
+                <GraphRelations
+                  key={selectedNode.id}
+                  workspace={workspace ?? "demo"}
+                  selected={selectedNode.id}
+                  graph={{
+                    ...graph!,
+                    nodes: [
+                      ...graph!.nodes,
+                      ...Object.values(catalog).filter(
+                        (n) => !graph!.nodes.some((item) => item.id === n.id),
+                      ),
+                    ],
+                  }}
+                  demo={demo}
+                  revision={revision + refresh}
+                  onNodes={acceptNodes}
+                  onSelect={select}
+                  onEdit={onEditEdge}
+                />
+              </>
             )}
             <details className="node-position">
               <summary>节点位置</summary>

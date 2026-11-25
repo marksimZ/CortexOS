@@ -318,6 +318,7 @@ pub fn run() {
             commands::cancel_run,
             commands::list_context_options,
             commands::list_knowledge,
+            commands::suggest_knowledge_links,
             commands::get_knowledge,
             commands::save_knowledge,
             commands::approve_knowledge,

@@ -331,6 +331,18 @@ export function useStudio() {
     }
   }, [openWorkspace, reportError, clearError, applySettings, settingsRevision]);
 
+  const startTopicChat = useCallback(
+    async (selection: ContextSelection[], promptDraft: string) => {
+      const conv = await newConversation();
+      const key = `${conv.workspaceId}:${conv.id}`;
+      setContexts((previous) => ({ ...previous, [key]: selection }));
+      setGraphLookups((previous) => ({ ...previous, [key]: true }));
+      writeDraft(key, promptDraft);
+      return conv;
+    },
+    [newConversation],
+  );
+
   const checkConnection = useCallback(async () => {
     if (!desktop) return;
     setChecking(true);
@@ -631,6 +643,7 @@ export function useStudio() {
     archiveConversation,
     deleteConversation,
     refreshConversations,
+    startTopicChat,
     checkConnection,
     send,
     cancel,
@@ -644,5 +657,5 @@ export function useStudio() {
 export type Studio = ReturnType<typeof useStudio>;
 export type GraphStudio = Pick<
   Studio,
-  "desktop" | "workspaceId" | "openConversation" | "reportError"
+  "desktop" | "workspaceId" | "openConversation" | "startTopicChat" | "reportError"
 >;

@@ -220,6 +220,7 @@
     "allow-start-chat",
     "allow-list-context-options",
     "allow-list-knowledge",
+    "allow-suggest-knowledge-links",
     "allow-get-knowledge",
     "allow-save-knowledge",
     "allow-approve-knowledge",

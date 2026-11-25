@@ -1,5 +1,12 @@
 # 里程碑记录
 
+## 2026-11-25 Phase 5：2D 思维导图知识图谱、框选专题深聊与智能连线推荐
+
+- **2D 思维导图画布重构**：将 `GraphViewport.tsx` 从 Three.js 3D 球体视图替换为零第三方运行时依赖的 2D 思维导图画布（SVG 贝塞尔曲线 + 清晰圆角节点卡片），支持「思维导图（树状层级自动排版 + `−/+` 子树折叠展开）」与「自由白板（手拖节点保存坐标）」双模式切换、滚轮无极以光标为中心缩放、可打断平滑聚焦动画；`GraphViewport` 分包体积从 `941.15 kB` 降至 `10.66 kB`（缩减约 930 kB）。
+- **多选 / 框选节点驱动专题对话**：支持 `Shift+拖拽` 框选与 `Shift/Ctrl+点击` 多选节点，浮出操作栏支持一键「围绕选中节点深聊」「考考我（考点自测）」「串联生成综述」，自动创建新会话、挂载所选生效知识版本并开启图谱关联。
+- **智能关联推荐（独立 Codex 新会话交付后端）**：在 `knowledge.rs` / `commands.rs` 新增 `suggest_knowledge_links` 命令（权限同步注册至 `lib.rs`、`build.rs`、`capabilities/default.json`），基于有效版本标题提及与词项重叠自动推荐最多 4 条尚未连线的同工作区节点及建议关系；前端图谱详情侧栏新增 `SuggestedLinksPanel` 支持一键建立连线。
+- **实测与未验证范围**：执行 `npm.cmd --prefix apps/desktop run build`、`node --experimental-strip-types --test apps/desktop/tests/unit/navigation.test.ts`（2/2 通过）、`cargo test --offline --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --lib suggests_related_knowledge_links_excluding_existing_edges`（1/1 通过）与 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`（通过）。未运行真实模型推理及原生 WebView2 自动化截图回归。
+
 ## 2026-11-25 个人助手审查修复
 
 - 公开网页抓取在建立连接时校验 DNS 返回的整组地址，连接使用同一组地址。重定向沿用相同策略，网页正文抓取使用直连。
@@ -3001,3 +3008,20 @@ Markdown用原文存储，不改变请求或证据；不支持数学公式/代�
 截图：`artifacts/ui-redesign/before`（改造前）、`artifacts/ui-redesign/s1`（浏览器与原生）、`artifacts/ui-redesign/native`（真实数据页面）。临时截图脚本 `.capture-native.ts`、`.capture-chat.ts` 已在验证后删除。
 
 未验证：打包安装后的原生窗口未重新走查；任务中心、执行过程面板、数据可迁移对话框等次级界面只做了继承样式，未逐页截图；系统 150% 缩放与读屏未复测。
+
+### 2026-11-25 界面排版与动效收尾（第 3–7 步）
+
+补齐 ui-review.md 剩余的第 3–7 步视觉与交互收尾：
+
+- **空状态与输入框**：`EmptyState.tsx` 快速开始示例点击后自动聚焦输入框并清理冗余变量；`layout.css` 将模型选择器与上下文工具行提升为 `--text-compact`（12px），为 `.composer-help > summary` 增加悬停底色与内边距；`motion.css` 为 `.message-actions .button svg`（复制/对勾切换）补入淡入过渡。
+- **知识页**：`Knowledge.tsx` 去掉面包屑中的重复版本号（保留下方状态行与列表行版本）；`features.css` 对齐 `.knowledge-page > .page-heading` 与详情区 `860px` 右边界，并对齐「在知识图谱定位」文字按钮左侧。
+- **设置页**：`Settings.tsx` 将「检测连接」移至服务地址输入框右侧同行（`.field-inline-action`），为 `LocalRuntimeSettings` / `RagIndexSettings` 增加 `.settings-subsections` 顶部分隔线，明确「保存设置」作用域；`.connection-status` 改用 `--text-control`。
+- **图谱页与令牌清理**：`features.css` 消除 `.graph-page > .page-heading` 空白高度、放大 `.graph-legend > summary` 点击区，并将 `features.css` 中写死的字号与圆角统一替换为 `tokens.css` 变量。
+
+实际验证（目录 `apps/desktop`）：
+
+- `npm run build`：`tsc --noEmit` 与 `vite build` 通过（Vite 720ms，退出码 0）。
+- `git diff --check`：无空白/格式错误。
+- Edge 浏览器预览（`vite preview` + Playwright）：检查 `1366×768`、`1600×900`、`1920×1080` 三尺寸 × 浅/深主题 × 对话/知识/图谱/设置共 24 组组合，页面错误 0、横向溢出 0；截图保存于 `artifacts/ui-polish/`。
+
+未验证：本次未重启原生 WebView2 桌面端重跑或重新打包安装包，亦未调用任何本地或云端模型。

@@ -42,6 +42,15 @@ type PageArgs = {
   expectedSnapshot: string | null;
 };
 
+export type SuggestedKnowledgeLink = {
+  nodeId: string;
+  title: string;
+  kind: string;
+  suggestedRelation: string;
+  reason: string;
+  score: number;
+};
+
 export const knowledge = createClient<{
   list_knowledge: Command<WorkspaceArgs, KnowledgeNode[]>;
   get_knowledge: Command<NodeArgs, KnowledgeDetail>;
@@ -121,5 +130,6 @@ export const knowledge = createClient<{
     },
     string
   >;
+  suggest_knowledge_links: Command<NodeArgs, SuggestedKnowledgeLink[]>;
   list_runs: Command<WorkspaceArgs & { offset?: number }, RunSummary[]>;
 }>();
