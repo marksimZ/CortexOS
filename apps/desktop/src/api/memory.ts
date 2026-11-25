@@ -25,6 +25,50 @@ export interface MemoryCandidate {
   conflictReason?: string | null;
 }
 
+export interface FocusEpisode {
+  conversationId: string;
+  title: string;
+  summary: string;
+  updatedAt: string;
+}
+
+export interface FocusSourceUpdate {
+  sourceId: string;
+  nodeId: string | null;
+  name: string;
+  version: number;
+  updatedAt: string;
+}
+
+export interface FocusBrief {
+  title: string;
+  query: string;
+  scheduledAt: string;
+  headlines: { title: string; url: string }[];
+}
+
+export interface FocusReminder {
+  id: string;
+  title: string;
+  nextDate: string;
+  time: string;
+  isBriefing: boolean;
+}
+
+export interface DailyFocus {
+  workspaceId: string;
+  workspaceName: string;
+  displayName: string;
+  hasActivity: boolean;
+  knowledgeCount: number;
+  pendingMemoryCount: number;
+  recentEpisodes: FocusEpisode[];
+  recentSources: FocusSourceUpdate[];
+  latestBrief: FocusBrief | null;
+  upcomingReminders: FocusReminder[];
+  suggestedPrompts: string[];
+}
+
 export const memoryApi = createClient<{
   get_global_persona: Command<undefined, GlobalPersona>;
   save_global_persona: Command<{ input: GlobalPersona }, GlobalPersona>;
@@ -51,4 +95,5 @@ export const memoryApi = createClient<{
       markdown: string;
     }
   >;
+  read_daily_focus: Command<WorkspaceArgs, DailyFocus>;
 }>();

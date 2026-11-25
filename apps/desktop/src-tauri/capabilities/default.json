@@ -28,6 +28,7 @@
     "allow-resolve-memory-candidate",
     "allow-promote-rule-from-chat",
     "allow-generate-weekly-digest-draft",
+    "allow-read-daily-focus",
     "allow-read-web-search-status",
     "allow-save-web-search-key",
     "allow-search-web",

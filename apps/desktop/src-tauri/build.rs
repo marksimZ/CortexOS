@@ -25,6 +25,7 @@ fn main() {
             "resolve_memory_candidate",
             "promote_rule_from_chat",
             "generate_weekly_digest_draft",
+            "read_daily_focus",
             "read_web_search_status",
             "save_web_search_key",
             "search_web",

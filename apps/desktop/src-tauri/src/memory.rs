@@ -971,6 +971,285 @@ pub(crate) async fn generate_weekly_digest_draft(
     .await
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FocusEpisode {
+    pub conversation_id: String,
+    pub title: String,
+    pub summary: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FocusSourceUpdate {
+    pub source_id: String,
+    pub node_id: Option<String>,
+    pub name: String,
+    pub version: i64,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FocusBriefItem {
+    pub title: String,
+    pub url: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FocusBrief {
+    pub title: String,
+    pub query: String,
+    pub scheduled_at: String,
+    pub headlines: Vec<FocusBriefItem>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FocusReminder {
+    pub id: String,
+    pub title: String,
+    pub next_date: String,
+    pub time: String,
+    pub is_briefing: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DailyFocus {
+    pub workspace_id: String,
+    pub workspace_name: String,
+    pub display_name: String,
+    pub has_activity: bool,
+    pub knowledge_count: usize,
+    pub pending_memory_count: usize,
+    pub recent_episodes: Vec<FocusEpisode>,
+    pub recent_sources: Vec<FocusSourceUpdate>,
+    pub latest_brief: Option<FocusBrief>,
+    pub upcoming_reminders: Vec<FocusReminder>,
+    pub suggested_prompts: Vec<String>,
+}
+
+pub(crate) fn query_daily_focus(c: &Connection, workspace_id: &str) -> AppResult<DailyFocus> {
+    require_workspace(c, workspace_id)?;
+    let workspace_name = c
+        .query_row(
+            "SELECT name FROM workspaces WHERE id=?1",
+            [workspace_id],
+            |r| r.get(0),
+        )
+        .map_err(error)?;
+    let display_name = read_persona(c)?.display_name;
+    let knowledge_count: i64 = c
+        .query_row(
+            &format!(
+                "SELECT COUNT(*) FROM knowledge_nodes n
+                 JOIN knowledge_versions v ON v.node_id=n.id AND v.version=n.effective_version
+                 WHERE n.workspace_id=?1 AND n.effective_version IS NOT NULL AND {SOURCE_AVAILABLE}"
+            ),
+            [workspace_id],
+            |r| r.get(0),
+        )
+        .map_err(error)?;
+    let pending_memory_count: i64 = c
+        .query_row(
+            "SELECT COUNT(*) FROM memory_candidates WHERE workspace_id=?1 AND status='pending'",
+            [workspace_id],
+            |r| r.get(0),
+        )
+        .map_err(error)?;
+
+    let mut episodes = c
+        .prepare(
+            "SELECT c.id, c.title, s.summary, COALESCE(s.updated_at, c.updated_at)
+             FROM conversations c
+             LEFT JOIN conversation_summaries s ON s.conversation_id=c.id AND s.workspace_id=c.workspace_id
+             WHERE c.workspace_id=?1 AND c.purpose='chat' AND c.deleted_at IS NULL AND c.archived_at IS NULL
+               AND EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id
+                          AND m.conversation_id=c.id AND m.status='completed')
+             ORDER BY COALESCE(s.updated_at, c.updated_at) DESC, c.id LIMIT 3",
+        )
+        .map_err(error)?;
+    let recent_episodes = episodes
+        .query_map([workspace_id], |r| {
+            let conversation_id: String = r.get(0)?;
+            let summary: Option<String> = r.get(2)?;
+            let summary = match summary.filter(|text| !text.trim().is_empty()) {
+                Some(summary) => summary,
+                None => {
+                    let content: String = c.query_row(
+                        "SELECT content FROM messages WHERE workspace_id=?1 AND conversation_id=?2
+                         AND status='completed' ORDER BY seq DESC LIMIT 1",
+                        params![workspace_id, conversation_id],
+                        |message| message.get(0),
+                    )?;
+                    let excerpt: String = content
+                        .split_whitespace()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .chars()
+                        .take(80)
+                        .collect();
+                    excerpt.trim_end().to_owned()
+                }
+            };
+            Ok(FocusEpisode {
+                conversation_id,
+                title: r.get(1)?,
+                summary,
+                updated_at: r.get(3)?,
+            })
+        })
+        .map_err(error)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(error)?;
+
+    let cutoff_48h = (chrono::Utc::now() - chrono::Duration::hours(48)).to_rfc3339();
+    let mut sources = c
+        .prepare(
+            "SELECT d.id, smk.node_id, d.name, d.latest_version, sv.created_at
+             FROM source_documents d
+             JOIN source_versions sv ON sv.source_id=d.id AND sv.version=d.latest_version
+             LEFT JOIN source_managed_knowledge smk ON smk.source_id=d.id
+             WHERE d.workspace_id=?1 AND d.enabled=1 AND sv.created_at>=?2
+             ORDER BY sv.created_at DESC, d.id LIMIT 4",
+        )
+        .map_err(error)?;
+    let recent_sources = sources
+        .query_map(params![workspace_id, cutoff_48h], |r| {
+            Ok(FocusSourceUpdate {
+                source_id: r.get(0)?,
+                node_id: r.get(1)?,
+                name: r.get(2)?,
+                version: r.get(3)?,
+                updated_at: r.get(4)?,
+            })
+        })
+        .map_err(error)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(error)?;
+
+    // The reminder writer stores successful briefings as 'ready'.
+    let brief_row: Option<(String, i64, String, Option<String>)> = c
+        .query_row(
+            "SELECT title, scheduled_at, brief_query, brief_results
+             FROM reminder_runs
+             WHERE workspace_id=?1 AND brief_query IS NOT NULL AND brief_status IN ('completed', 'ready')
+             ORDER BY scheduled_at DESC, id DESC LIMIT 1",
+            [workspace_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .optional()
+        .map_err(error)?;
+    let latest_brief = if let Some((title, timestamp, query, results)) = brief_row {
+        let scheduled_at = chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0)
+            .ok_or("本地提醒记录时间无效。")?
+            .to_rfc3339();
+        let mut headlines: Vec<FocusBriefItem> =
+            serde_json::from_str(results.as_deref().unwrap_or("[]")).unwrap_or_default();
+        headlines.truncate(3);
+        Some(FocusBrief {
+            title,
+            query,
+            scheduled_at,
+            headlines,
+        })
+    } else {
+        None
+    };
+
+    let mut reminders = c
+        .prepare(
+            "SELECT id, title, next_date, time, news_query IS NOT NULL
+             FROM reminders
+             WHERE workspace_id=?1 AND state='active' AND next_date IS NOT NULL
+             ORDER BY next_date ASC, time ASC, id LIMIT 3",
+        )
+        .map_err(error)?;
+    let upcoming_reminders = reminders
+        .query_map([workspace_id], |r| {
+            Ok(FocusReminder {
+                id: r.get(0)?,
+                title: r.get(1)?,
+                next_date: r.get(2)?,
+                time: r.get(3)?,
+                is_briefing: r.get(4)?,
+            })
+        })
+        .map_err(error)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(error)?;
+
+    let has_activity = knowledge_count > 0
+        || pending_memory_count > 0
+        || !recent_episodes.is_empty()
+        || !recent_sources.is_empty()
+        || latest_brief.is_some()
+        || !upcoming_reminders.is_empty();
+    let mut suggested_prompts = Vec::new();
+    if let Some(source) = recent_sources.first() {
+        suggested_prompts.push(format!(
+            "梳理近期更新的《{}》核心要点，并指出与现有资料的关联",
+            source.name
+        ));
+    }
+    if let Some(episode) = recent_episodes.first() {
+        suggested_prompts.push(format!(
+            "接着上次「{}」的讨论，帮我梳理下一步行动项",
+            episode.title
+        ));
+    }
+    if let Some(brief) = &latest_brief {
+        suggested_prompts.push(format!(
+            "结合最新一期「{}」简报，分析值得跟进的重点动态",
+            brief.title
+        ));
+    }
+    if knowledge_count >= 2 {
+        suggested_prompts.push("串联当前工作区的知识卡片，总结关键决策与潜在盲点".into());
+    }
+    suggested_prompts.truncate(3);
+    suggested_prompts.extend(
+        [
+            "记住我的工作偏好：回答尽量简洁，先给结论再展开细节",
+            "总结当前工作区里已有的项目资料和关键决策",
+            "每个工作日早上 9 点给我整理一份 AI 行业简报",
+        ]
+        .into_iter()
+        .take(3 - suggested_prompts.len())
+        .map(str::to_owned),
+    );
+
+    Ok(DailyFocus {
+        workspace_id: workspace_id.to_owned(),
+        workspace_name,
+        display_name,
+        has_activity,
+        knowledge_count: usize::try_from(knowledge_count).map_err(|err| err.to_string())?,
+        pending_memory_count: usize::try_from(pending_memory_count)
+            .map_err(|err| err.to_string())?,
+        recent_episodes,
+        recent_sources,
+        latest_brief,
+        upcoming_reminders,
+        suggested_prompts,
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn read_daily_focus(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> AppResult<DailyFocus> {
+    blocking(state.database.clone()?, move |db| {
+        let c = db.connection()?;
+        query_daily_focus(&c, &workspace_id)
+    })
+    .await
+}
+
 #[tauri::command]
 pub(crate) async fn promote_rule_from_chat(
     state: State<'_, AppState>,
@@ -996,6 +1275,215 @@ pub(crate) async fn promote_rule_from_chat(
 mod tests {
     use super::*;
     use crate::db::Database;
+
+    #[test]
+    fn daily_focus_aggregates_episodes_sources_briefings_and_respects_empty_workspace() {
+        let db = Database::rag_evaluation_database().unwrap();
+        let ws = db.create_workspace("今日聚焦").unwrap().id;
+        let other_ws = db.create_workspace("其他工作区").unwrap().id;
+        let mut c = db.connection().unwrap();
+        let empty = query_daily_focus(&c, &ws).unwrap();
+        assert!(!empty.has_activity);
+        assert!(empty.recent_episodes.is_empty());
+        assert!(empty.recent_sources.is_empty());
+        assert!(empty.latest_brief.is_none());
+        assert_eq!(empty.suggested_prompts.len(), 3);
+        assert_eq!(
+            empty
+                .suggested_prompts
+                .iter()
+                .collect::<BTreeSet<_>>()
+                .len(),
+            3
+        );
+
+        let tx = c.transaction().unwrap();
+        write_persona(
+            &tx,
+            &mut GlobalPersona {
+                display_name: "阿明".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let timestamp = now();
+        for (workspace, id, title, updated_at, archived) in [
+            (&ws, "chat", "发布计划", "2026-11-23", false),
+            (&ws, "fallback", "日常讨论", "2026-11-22", false),
+            (&ws, "archived", "归档讨论", "2026-11-25", true),
+            (&other_ws, "other-chat", "其他项目", "2026-11-25", false),
+        ] {
+            tx.execute(
+                "INSERT INTO conversations(id,workspace_id,title,created_at,updated_at,archived_at)
+                 VALUES(?1,?2,?3,?4,?4,?5)",
+                params![
+                    id,
+                    workspace,
+                    title,
+                    updated_at,
+                    archived.then_some(updated_at)
+                ],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO execution_runs(id,workspace_id,conversation_id,assistant_message_id,
+                    model_id,model_config_json,context_manifest_json,status,started_at,finished_at)
+                 VALUES(?1,?2,?1,?1,'fixture','{}','{}','completed',?3,?3)",
+                params![id, workspace, updated_at],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO messages VALUES
+                    (?1 || '-question',?2,?1,1,'user','下一步是什么？','completed',?1,?3,?3),
+                    (?1,?2,?1,2,'assistant',?4,'completed',?1,?3,?3)",
+                params![
+                    id,
+                    workspace,
+                    updated_at,
+                    format!("  下一步\n  {}  ", "测".repeat(85))
+                ],
+            )
+            .unwrap();
+        }
+        tx.execute(
+            "INSERT INTO conversation_summaries(conversation_id,workspace_id,summary,message_count,updated_at)
+             VALUES('chat',?1,'已确定发布顺序',2,'2026-11-24')",
+            [&ws],
+        ).unwrap();
+
+        for (
+            workspace,
+            chat,
+            source,
+            source_name,
+            reminder,
+            brief_title,
+            scheduled_at,
+            next_date,
+        ) in [
+            (
+                &ws,
+                "chat",
+                "source",
+                "项目说明.md",
+                "reminder",
+                "AI 行业",
+                1_700_000_000_i64,
+                "2030-01-02",
+            ),
+            (
+                &other_ws,
+                "other-chat",
+                "other-source",
+                "其他资料.md",
+                "other-reminder",
+                "其他简报",
+                1_700_086_400,
+                "2030-01-01",
+            ),
+        ] {
+            tx.execute(
+                "INSERT INTO source_documents VALUES(?1,?2,?3,?3,1,1,1,?4,?4)",
+                params![source, workspace, source_name, timestamp],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO source_versions VALUES(?1,1,'资料正文','content-hash','raw-hash',?2)",
+                params![source, timestamp],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO memory_candidates(id,workspace_id,conversation_id,scope,title,content,created_at)
+                 VALUES(?1,?2,?1,'workspace_fact','候选记忆','待审核内容',?3)",
+                params![chat, workspace, timestamp],
+            ).unwrap();
+            tx.execute(
+                "INSERT INTO reminders(id,workspace_id,title,kind,date,time,weekday,state,next_date,news_query)
+                 VALUES(?1,?2,?3,'daily','2026-11-01','09:00',1,'active',?4,'AI 新闻')",
+                params![reminder, workspace, brief_title, next_date],
+            ).unwrap();
+            let results = serde_json::json!(
+                (1..=4)
+                    .map(|i| serde_json::json!({
+                        "title": format!("新闻 {i}"),
+                        "url": format!("https://example.com/{i}"),
+                        "snippet": "摘要",
+                    }))
+                    .collect::<Vec<_>>()
+            );
+            tx.execute(
+                "INSERT INTO reminder_runs(id,workspace_id,reminder_id,title,scheduled_at,status,brief_query,brief_status,brief_results)
+                 VALUES(?1,?2,?1,?3,?4,'delivered','AI 新闻','ready',?5)",
+                params![reminder, workspace, brief_title, scheduled_at, results.to_string()],
+            ).unwrap();
+        }
+        tx.execute(
+            "INSERT INTO knowledge_nodes(id,workspace_id,latest_version,effective_version,revision,created_at,updated_at)
+             VALUES('node',?1,1,1,1,?3,?3),('other-node',?2,1,1,1,?3,?3),('draft',?1,1,NULL,1,?3,?3)",
+            params![ws, other_ws, timestamp],
+        ).unwrap();
+        tx.execute(
+            "INSERT INTO knowledge_versions(node_id,version,title,kind,content,author,change_reason,created_at)
+             SELECT id,1,'知识','knowledge','正文','user','测试',?1 FROM knowledge_nodes",
+            [&timestamp],
+        ).unwrap();
+        tx.execute(
+            "INSERT INTO source_managed_knowledge VALUES('source','node',1)",
+            [],
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        let focus = query_daily_focus(&c, &ws).unwrap();
+        assert_eq!(focus.workspace_id, ws);
+        assert_eq!(focus.workspace_name, "今日聚焦");
+        assert_eq!(focus.display_name, "阿明");
+        assert!(focus.has_activity);
+        assert_eq!(focus.knowledge_count, 1);
+        assert_eq!(focus.pending_memory_count, 1);
+        let [episode, fallback] = focus.recent_episodes.as_slice() else {
+            panic!(
+                "expected two active episodes, got {:?}",
+                focus.recent_episodes
+            );
+        };
+        assert_eq!(episode.conversation_id, "chat");
+        assert_eq!(episode.summary, "已确定发布顺序");
+        assert_eq!(episode.updated_at, "2026-11-24");
+        assert_eq!(fallback.conversation_id, "fallback");
+        assert_eq!(fallback.summary, format!("下一步 {}", "测".repeat(76)));
+        let [source] = focus.recent_sources.as_slice() else {
+            panic!("expected one source, got {:?}", focus.recent_sources);
+        };
+        assert_eq!(source.source_id, "source");
+        assert_eq!(source.node_id.as_deref(), Some("node"));
+        assert_eq!(source.name, "项目说明.md");
+        assert_eq!(source.version, 1);
+        assert_eq!(source.updated_at, timestamp);
+        let brief = focus.latest_brief.unwrap();
+        assert_eq!(brief.title, "AI 行业");
+        assert_eq!(brief.query, "AI 新闻");
+        assert_eq!(brief.scheduled_at, "2023-11-14T22:13:20+00:00");
+        assert_eq!(brief.headlines.len(), 3);
+        assert_eq!(brief.headlines[0].title, "新闻 1");
+        assert_eq!(brief.headlines[2].url, "https://example.com/3");
+        let [reminder] = focus.upcoming_reminders.as_slice() else {
+            panic!("expected one reminder, got {:?}", focus.upcoming_reminders);
+        };
+        assert_eq!(reminder.id, "reminder");
+        assert_eq!(reminder.title, "AI 行业");
+        assert_eq!(reminder.next_date, "2030-01-02");
+        assert_eq!(reminder.time, "09:00");
+        assert!(reminder.is_briefing);
+        assert_eq!(
+            focus.suggested_prompts,
+            [
+                "梳理近期更新的《项目说明.md》核心要点，并指出与现有资料的关联",
+                "接着上次「发布计划」的讨论，帮我梳理下一步行动项",
+                "结合最新一期「AI 行业」简报，分析值得跟进的重点动态",
+            ]
+        );
+    }
 
     #[test]
     fn global_persona_and_memory_extraction_cycle() {

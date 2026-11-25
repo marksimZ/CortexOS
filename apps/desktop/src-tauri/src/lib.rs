@@ -125,6 +125,7 @@ pub fn run() {
             memory::resolve_memory_candidate,
             memory::promote_rule_from_chat,
             memory::generate_weekly_digest_draft,
+            memory::read_daily_focus,
             web_search::read_web_search_status,
             web_search::save_web_search_key,
             web_search::search_web,

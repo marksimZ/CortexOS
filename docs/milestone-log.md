@@ -1,5 +1,11 @@
 # 里程碑记录
 
+## 2026-11-25 Phase 8：主动式「今日聚焦」工作台晨间卡片
+
+- **工作区上下文零延迟聚合（独立 Codex 新会话 `01a2120c-d4b9-7ba2-ad66-e5a10f29a58a` 交付后端）**：在 `memory.rs` 新增 `read_daily_focus` 命令（同步注册至 `lib.rs`、`build.rs`、`capabilities/default.json`），纯本地聚合当前工作区近期未归档活跃会话及一句话摘要、近 48 小时新增/更新的启用资料文件（含关联知识节点 ID）、待确认记忆候选数量、最新一期已生成的定时新闻简报要点（兼容 `ready`/`completed` 状态）与即将到期的提醒，并动态生成 3 条上下文相关的推荐追问词。
+- **首屏工作台升级（`EmptyState.tsx`）**：空工作区与首次启动保持清爽引导；当工作区存在历史沉淀时，新对话首屏自动切换为自适应双栏「今日聚焦」工作台卡片（「接着上次聊」一键续聊、「近期资料与待办记忆」直达卡片或收件箱、「今日简报与提醒」支持一键围绕本期简报深聊），并在监听到 `memory-candidates-updated` 时自动刷新待确认计数。
+- **实测与未验证范围**：执行 `npm.cmd --prefix apps/desktop run build`、`node --experimental-strip-types --test apps/desktop/tests/unit/navigation.test.ts`（2/2 通过）、`cargo test --offline --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --lib memory::tests`（3/3 通过，覆盖空工作区、归档排除、资料与简报聚合及跨工作区隔离）与 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`（通过）。未运行真实模型推理及原生 WebView2 自动化截图回归。
+
 ## 2026-11-25 Phase 7：划词追问/存卡悬浮气泡与 Ctrl+V 粘贴截图多模态问答
 
 - **阅读区划词悬浮气泡（`SelectionPopover.tsx`）**：在 `ChatMessage.tsx` 与 `SourceBrowser.tsx` 接入无侵入划词快捷胶囊（选中 4–8000 字时自动浮出，点击不丢失选区）：
