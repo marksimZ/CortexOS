@@ -19,6 +19,10 @@ export interface MemoryCandidate {
   content: string;
   status: "pending" | "accepted" | "dismissed";
   createdAt: string;
+  replacesNodeId?: string | null;
+  replacesTitle?: string | null;
+  replacesValue?: string | null;
+  conflictReason?: string | null;
 }
 
 export const memoryApi = createClient<{

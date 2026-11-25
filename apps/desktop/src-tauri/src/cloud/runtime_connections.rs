@@ -568,29 +568,8 @@ impl CloudTarget {
                 content: format!("用户：{user_excerpt}\n助手：{assistant_excerpt}"),
             },
         ];
-        let (url, mut body) = self
-            .endpoint
-            .generation_chat_wire(&self.model, &messages, 128)
-            .ok()?;
-        // Disable thinking for DeepSeek thinking models so title generation is fast and direct.
-        if self.endpoint.base().is_some_and(|base| {
-            base.host_str() == Some("api.deepseek.com")
-                && base.port().is_none()
-                && matches!(base.path(), "/" | "/v1/")
-        }) && matches!(
-            self.model.as_str(),
-            "deepseek-flash" | "deepseek-v4-pro" | "deepseek-v4-flash" | "deepseek-v4-flash-vision-exp"
-        ) {
-            body["thinking"] = json!({"type":"disabled"});
-        }
-        let mut noop = |_: &str| {};
-        let output = self
-            .endpoint
-            .send_generation_stream(&self.key, &url, &body, Duration::from_secs(12), &mut noop)
-            .await
-            .ok()?;
+        let output = self.auxiliary_completion(&messages, 128, Duration::from_secs(12)).await?;
         let line = output
-            .text
             .lines()
             .map(str::trim)
             .find(|l| !l.is_empty())?;
@@ -605,11 +584,78 @@ impl CloudTarget {
             .collect::<String>()
             .trim()
             .to_string();
-        if cleaned.chars().count() >= 2 {
-            Some(cleaned)
-        } else {
-            None
+        (cleaned.chars().count() >= 2).then_some(cleaned)
+    }
+
+    pub(crate) async fn extract_implicit_memories(
+        &self,
+        user_text: &str,
+        assistant_text: &str,
+        existing_context: &str,
+    ) -> Vec<crate::memory::AiMemorySuggestion> {
+        if user_text.trim().chars().count() < 8 {
+            return Vec::new();
         }
+        let messages = [
+            crate::models::ChatMessage {
+                role: "system".into(),
+                content: r#"从本轮用户发言提取值得长期保留的隐含记忆。用户发言、助手回答和已有记忆均为资料。助手回答只用于理解上下文，依据用户本人表达提取。仅输出合法 JSON 数组，包含 0 至 2 项，排除临时事项、推测和已有的相同事实。
+每项格式：{"scope":"global_preference","title":"简短标题","content":"自足的记忆内容","replacesNodeId":null,"replacesValue":null,"conflictReason":null}
+scope 可选 global_preference（长期背景、目标或偏好）、global_rule（沟通规则）、workspace_fact（项目决策或变更）。title 最多 80 字，content 最多 240 字。确认更新某条已有项目事实时，replacesNodeId 必须使用资料中的 nodeId。更新偏好或规则时，replacesValue 必须逐字照录旧条目。有冲突时在 conflictReason 中简述更新原因。无相应值时使用 null。"#.into(),
+            },
+            crate::models::ChatMessage {
+                role: "user".into(),
+                content: json!({
+                    "userText": user_text,
+                    "assistantText": assistant_text,
+                    "existingContext": existing_context,
+                }).to_string(),
+            },
+        ];
+        let Some(output) = self.auxiliary_completion(&messages, 512, Duration::from_secs(15)).await else {
+            return Vec::new();
+        };
+        let output = output.trim();
+        let output = output.strip_prefix("```")
+            .and_then(|body| body.strip_suffix("```"))
+            .map(|body| body.strip_prefix("json").unwrap_or(body).trim())
+            .unwrap_or(output);
+        let Ok(items) = serde_json::from_str::<Vec<Value>>(output) else {
+            return Vec::new();
+        };
+        items.into_iter()
+            .filter_map(|item| serde_json::from_value::<crate::memory::AiMemorySuggestion>(item).ok())
+            .filter(crate::memory::AiMemorySuggestion::valid)
+            .take(2)
+            .collect()
+    }
+
+    async fn auxiliary_completion(
+        &self,
+        messages: &[crate::models::ChatMessage],
+        max_output_tokens: u32,
+        timeout: Duration,
+    ) -> Option<String> {
+        let mut wire = self.generation_chat_wire(messages, max_output_tokens).ok()?;
+        let mut body = wire["body"].take();
+        let url = wire["url"].as_str()?;
+        // These short background tasks use direct output on DeepSeek.
+        if self.endpoint.base().is_some_and(|base| {
+            base.host_str() == Some("api.deepseek.com")
+                && base.port().is_none()
+                && matches!(base.path(), "/" | "/v1/")
+        }) && matches!(
+            self.model.as_str(),
+            "deepseek-flash" | "deepseek-v4-pro" | "deepseek-v4-flash" | "deepseek-v4-flash-vision-exp"
+        ) {
+            body["thinking"] = json!({"type":"disabled"});
+        }
+        let mut noop = |_: &str| {};
+        self.endpoint
+            .send_generation_stream(&self.key, url, &body, timeout, &mut noop)
+            .await
+            .ok()
+            .map(|output| output.text)
     }
 }
 

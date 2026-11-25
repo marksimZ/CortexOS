@@ -548,6 +548,7 @@ pub async fn start_chat(
     let title_draft = crate::db::smart_fallback_title(&title_user_text);
     let title_ws = result.workspace_id.clone();
     let title_conv = result.conversation_id.clone();
+    let completed_run_id = result.id.clone();
     let title_db = database.clone();
     tauri::async_runtime::spawn(async move {
         let outcome = crate::generation::execute_chat(database,provider,cloud.as_ref(),prepared,settings,local_backup,
@@ -559,6 +560,26 @@ pub async fn start_chat(
         let _ = on_update.send(outcome.update);
         if finished_status == "completed" {
             if let Some(cloud_target) = cloud {
+                use rusqlite::OptionalExtension;
+                use tauri::Emitter;
+
+                let user_message_id = blocking(title_db.clone(), {
+                    let (ws, conv) = (title_ws.clone(), title_conv.clone());
+                    move |db| {
+                        db.connection()?.query_row(
+                            "SELECT m.id FROM messages m
+                             JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
+                             WHERE m.workspace_id=?1 AND m.conversation_id=?2 AND m.model_run_id=?3
+                               AND m.role='user' AND c.purpose='chat'
+                               AND NOT EXISTS(SELECT 1 FROM model_backup_requests WHERE run_id=?3)",
+                            rusqlite::params![ws, conv, completed_run_id],
+                            |row| row.get::<_, String>(0),
+                        ).optional().map_err(crate::db::error)
+                    }
+                }).await;
+                let Ok(Some(user_message_id)) = user_message_id else {
+                    return;
+                };
                 let is_first = blocking(title_db.clone(), {
                     let (ws, conv) = (title_ws.clone(), title_conv.clone());
                     move |db| db.conversation_turn_count(&ws, &conv)
@@ -570,7 +591,7 @@ pub async fn start_chat(
                         .summarize_title(&title_user_text, &finished_content)
                         .await
                     {
-                        let updated = blocking(title_db, {
+                        let updated = blocking(title_db.clone(), {
                             let (ws, conv, draft, next) = (
                                 title_ws.clone(),
                                 title_conv.clone(),
@@ -582,7 +603,6 @@ pub async fn start_chat(
                         .await
                         .unwrap_or(false);
                         if updated {
-                            use tauri::Emitter;
                             let _ = app.emit(
                                 "conversation-title-updated",
                                 serde_json::json!({
@@ -592,6 +612,42 @@ pub async fn start_chat(
                                 }),
                             );
                         }
+                    }
+                }
+                if title_user_text.trim().chars().count() < 8 {
+                    return;
+                }
+                let context = blocking(title_db.clone(), {
+                    let ws = title_ws.clone();
+                    let (user, assistant) = (title_user_text.clone(), finished_content.clone());
+                    move |db| {
+                        let conn = db.connection()?;
+                        let context = crate::memory::cloud_memory_context(&conn, &ws)?;
+                        if let Some(context) = &context {
+                            crate::cloud::privacy::check_workspace(&conn, &ws, &[&user, &assistant, context])?;
+                        }
+                        Ok(context)
+                    }
+                }).await;
+                if let Ok(Some(context)) = context {
+                    let items = cloud_target
+                        .extract_implicit_memories(&title_user_text, &finished_content, &context)
+                        .await;
+                    if items.is_empty() {
+                        return;
+                    }
+                    let saved = blocking(title_db, {
+                        let (ws, conv) = (title_ws.clone(), title_conv.clone());
+                        move |db| {
+                            let conn = db.connection()?;
+                            crate::memory::save_ai_memory_suggestions(&conn, &ws, &conv, Some(&user_message_id), &items)
+                        }
+                    }).await.unwrap_or(0);
+                    if saved > 0 {
+                        let _ = app.emit(
+                            "memory-candidates-updated",
+                            serde_json::json!({"workspaceId": title_ws, "conversationId": title_conv}),
+                        );
                     }
                 }
             }

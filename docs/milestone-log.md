@@ -1,5 +1,11 @@
 # 里程碑记录
 
+## 2026-11-25 Phase 6：AI 隐式记忆提炼、冲突检测与版本演进
+
+- **云端对话后置隐式记忆提炼（Codex 桌面独立新会话 `01a211c9-eb18-71b3-a8ad-3e39895bc351` 交付后端）**：在 `cloud/runtime_connections.rs` 新增 `extract_implicit_memories`，于云端聊天正常完成且工作区开启 `syncMemoryAndHistory` 时后台异步提炼 0–2 条长期背景、沟通规则或项目变更候选。上下文组装 `cloud_memory_context` 严格排除 `local_only` 私密节点、本地备用回退轮次并经过 `privacy::check_workspace` 隐私校验；写入新候选后发出 `memory-candidates-updated` 事件驱动前端实时刷新。
+- **Schema 36 旧记忆冲突检测与一键版本演进**：新增迁移 `0036_memory_conflict_evolution.sql`（扩展 `replaces_node_id`、`replaces_value`、`conflict_reason`），同时升级本地零开销规则提取与词项重叠冲突识别。前端 `MemoryCandidatesBar.tsx` 对冲突候选展示「记忆演进」警示标签、旧记录删除线对照与「更新并保留历史」操作；确认采纳后，项目事实自动在原知识节点上递增 `effective_version` / `latest_version`、写入审批事件建立 `knowledge_version_lineage` 版本演进链并刷新 FTS5 索引（旧版本自动退居历史不再干扰召回），全局偏好与长期规则原位替换并去重。
+- **实测与未验证范围**：执行 `npm.cmd --prefix apps/desktop run build`、`node --experimental-strip-types --test apps/desktop/tests/unit/navigation.test.ts`（2/2 通过）、`cargo test --offline --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --lib memory::tests`（2/2 通过，覆盖冲突检测、跨工作区拒绝、`local_only` 隔离、版本演进链与 FTS5 索引替换）、`cargo test --offline --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --lib upgrades_existing_database_with_consistent_backup_and_checks_all_migrations`（1/1 通过）及 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`（通过）。未运行真实本地/云端模型推理及原生 WebView2 自动化截图回归。
+
 ## 2026-11-25 Phase 5：2D 思维导图知识图谱、框选专题深聊与智能连线推荐
 
 - **2D 思维导图画布重构**：将 `GraphViewport.tsx` 从 Three.js 3D 球体视图替换为零第三方运行时依赖的 2D 思维导图画布（SVG 贝塞尔曲线 + 清晰圆角节点卡片），支持「思维导图（树状层级自动排版 + `−/+` 子树折叠展开）」与「自由白板（手拖节点保存坐标）」双模式切换、滚轮无极以光标为中心缩放、可打断平滑聚焦动画；`GraphViewport` 分包体积从 `941.15 kB` 降至 `10.66 kB`（缩减约 930 kB）。
