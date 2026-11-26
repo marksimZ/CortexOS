@@ -29,7 +29,7 @@ export function KnowledgeEditor({
   const [cached] = useState(() => knowledgeDrafts.get(draftKey));
   const [title, setTitle] = useState(
     cached?.title ?? original?.title ??
-      request.sourceName?.replace(/\.(md|txt)$/i, "").slice(0, 80) ??
+      request.sourceName?.replace(/\.(pdf|pptx|docx|xlsx|epub|md|txt|csv)$/i, "").slice(0, 80) ??
       "",
   );
   const [kind, setKind] = useState(cached?.kind ?? original?.kind ?? "knowledge");
@@ -55,7 +55,7 @@ export function KnowledgeEditor({
   const busy = useRef(false);
   const changed =
     excerpt !== (request.excerpt ?? "") ||
-    title !== (original?.title ?? request.sourceName?.replace(/\.(md|txt)$/i, "").slice(0, 80) ?? "") ||
+    title !== (original?.title ?? request.sourceName?.replace(/\.(pdf|pptx|docx|xlsx|epub|md|txt|csv)$/i, "").slice(0, 80) ?? "") ||
     kind !== (original?.kind ?? "knowledge") ||
     content !== (original?.content ?? request.excerpt ?? "") ||
     validFrom !== (original?.validity?.validFrom ?? "") ||

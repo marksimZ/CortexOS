@@ -1,5 +1,6 @@
 use crate::{
     db::Database,
+    doc_extract,
     models::{AppResult, new_id, now},
 };
 use rusqlite::{Connection, OptionalExtension, params};
@@ -79,85 +80,9 @@ pub struct PendingSource {
 }
 
 pub const SUPPORTED_EXTENSIONS: &[&str] = &[
-    "txt", "md", "docx", "csv", "json", "toml", "yaml", "yml",
+    "txt", "md", "docx", "pptx", "xlsx", "epub", "pdf", "csv", "json", "toml", "yaml", "yml",
     "rs", "ts", "tsx", "js", "jsx", "py", "go", "java", "c", "cpp", "h", "html", "css", "sql",
 ];
-
-fn extract_docx_text(bytes: &[u8]) -> AppResult<String> {
-    let cursor = std::io::Cursor::new(bytes);
-    let mut archive = zip::ZipArchive::new(cursor).map_err(|_| "无法解析 .docx 文档结构。".to_string())?;
-    let mut xml_bytes = Vec::new();
-    {
-        let doc = archive
-            .by_name("word/document.xml")
-            .map_err(|_| ".docx 文件缺少正文内容。".to_string())?;
-        doc.take(4 * 1024 * 1024 + 1)
-            .read_to_end(&mut xml_bytes)
-            .map_err(|_| "读取 .docx 正文失败。".to_string())?;
-    }
-    if xml_bytes.len() > 4 * 1024 * 1024 {
-        return Err(".docx 解压后的正文过大，请精简后重试。".into());
-    }
-    let xml_str = std::str::from_utf8(&xml_bytes).map_err(|_| ".docx 正文编码无效。".to_string())?;
-    let mut reader = quick_xml::Reader::from_str(xml_str);
-    reader.config_mut().trim_text(false);
-    let mut paragraphs = Vec::new();
-    let mut current = String::new();
-    let mut in_text = false;
-    loop {
-        match reader.read_event() {
-            Ok(quick_xml::events::Event::Start(e)) => {
-                let local = e.local_name();
-                if local.as_ref() == "t" {
-                    in_text = true;
-                } else if local.as_ref() == "br" {
-                    current.push('\n');
-                }
-            }
-            Ok(quick_xml::events::Event::Empty(e)) => {
-                let local = e.local_name();
-                if local.as_ref() == "br" {
-                    current.push('\n');
-                } else if local.as_ref() == "tab" {
-                    current.push('\t');
-                }
-            }
-            Ok(quick_xml::events::Event::Text(e)) if in_text => {
-                let raw = e.as_ref();
-                let decoded = raw
-                    .replace("&amp;", "&")
-                    .replace("&lt;", "<")
-                    .replace("&gt;", ">")
-                    .replace("&quot;", "\"")
-                    .replace("&apos;", "'");
-                current.push_str(&decoded);
-            }
-            Ok(quick_xml::events::Event::End(e)) => {
-                let local = e.local_name();
-                if local.as_ref() == "t" {
-                    in_text = false;
-                } else if local.as_ref() == "p" {
-                    let trimmed = current.trim_end();
-                    if !trimmed.is_empty() {
-                        paragraphs.push(trimmed.to_owned());
-                    }
-                    current.clear();
-                }
-            }
-            Ok(quick_xml::events::Event::Eof) => break,
-            Err(_) => return Err(".docx 正文 XML 格式异常。".into()),
-            _ => {}
-        }
-    }
-    if !current.trim().is_empty() {
-        paragraphs.push(current.trim_end().to_owned());
-    }
-    let joined = paragraphs.join("\n");
-    if joined.trim().is_empty() {
-        return Err(".docx 文档中没有可提取的文字内容。".into());
-    }
-    Ok(joined)
-}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -361,7 +286,7 @@ pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<P
             .any(|term| lower.contains(term))
     {
         return Err(
-            "支持 .txt/.md/.docx 及常见代码与配置文件；名称涉及密码、访问密钥等敏感信息的文件不能导入。".into(),
+            "支持 .pdf / .pptx / .docx / .xlsx / .epub / .md / .txt 及常见代码与配置文件；名称涉及密码、访问密钥等敏感信息的文件不能导入。".into(),
         );
     }
     let canonical =
@@ -379,8 +304,14 @@ pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<P
     let metadata = file
         .metadata()
         .map_err(|_| "无法读取文件属性。".to_string())?;
-    if !metadata.is_file() || metadata.len() > 2 * 1024 * 1024 {
-        return Err("请选择不超过 2 MiB 的普通文本文件。".into());
+    let max_mib = if matches!(extension.as_str(), "docx" | "pptx" | "xlsx" | "epub" | "pdf") {
+        32
+    } else {
+        2
+    };
+    let max_bytes = max_mib * 1024 * 1024;
+    if !metadata.is_file() || metadata.len() > max_bytes {
+        return Err(format!("请选择不超过 {max_mib} MiB 的普通文件。"));
     }
     // Validate the opened handle, so a changed parent path cannot redirect the read.
     #[cfg(windows)]
@@ -415,19 +346,24 @@ pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<P
         }
     }
     let mut bytes = Vec::new();
-    file.take(2 * 1024 * 1024 + 1)
+    file.take(max_bytes + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "文件读取失败。".to_string())?;
-    if bytes.len() > 2 * 1024 * 1024 {
-        return Err("文件超过 2 MiB，请缩小后重试。".into());
+    if bytes.len() as u64 > max_bytes {
+        return Err(format!("文件超过 {max_mib} MiB，请缩小后重试。"));
     }
     let raw_hash = hash(&bytes);
-    let content = if extension == "docx" {
-        extract_docx_text(&bytes)?
-    } else {
-        let text = String::from_utf8(bytes)
-            .map_err(|_| "文件不是 UTF-8，请转换编码后重新选择。".to_string())?;
-        text.trim_start_matches('\u{feff}').replace("\r\n", "\n")
+    let content = match extension.as_str() {
+        "docx" => doc_extract::extract_docx(&bytes)?,
+        "pptx" => doc_extract::extract_pptx(&bytes)?,
+        "xlsx" => doc_extract::extract_xlsx(&bytes)?,
+        "epub" => doc_extract::extract_epub(&bytes)?,
+        "pdf" => doc_extract::extract_pdf(&bytes)?,
+        _ => {
+            let text = String::from_utf8(bytes)
+                .map_err(|_| "文件不是 UTF-8，请转换编码后重新选择。".to_string())?;
+            text.trim_start_matches('\u{feff}').replace("\r\n", "\n")
+        }
     };
     if content.trim().is_empty() || content.contains('\0') {
         return Err("文件为空或含有二进制内容，请选择普通文档或文本。".into());

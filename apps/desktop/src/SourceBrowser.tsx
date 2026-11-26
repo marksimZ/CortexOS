@@ -372,8 +372,7 @@ export function SourceBrowser({
             <details>
               <summary>会保存哪些内容</summary>
               <p>
-                只保存这个文件的 UTF-8 文字，不读取文件夹。最多2
-                MiB。保存的是文字内容，不包含原文件的其他属性；行号以这里显示的内容为准。添加后可选择文字保存为知识草稿，确认后才用于回答。原文件修改后，需重新添加。
+                支持 PDF、PPTX、DOCX、XLSX、EPUB、Markdown、TXT 及常见代码文件（课件与办公文档上限 32 MiB，纯文本上限 2 MiB）。只在本机保存提取后的文字副本，不修改原文件；行号以这里显示的内容为准。原文件修改后，需重新添加或通过同步文件夹更新。
               </p>
               <code className="source-hash">SHA-256 {preview.contentHash}</code>
             </details>
@@ -403,7 +402,7 @@ export function SourceBrowser({
                 </button>
               ))}
               {!items.length && !loading && (
-                <p>还没有文件，点击“添加文件”选择 TXT 或 Markdown 文件。</p>
+                <p>还没有文件，点击“添加文件”导入 PDF、PPT、Word、Excel、EPUB 或 Markdown/TXT 资料。</p>
               )}
             </aside>
             <section hidden={readerCollapsed} className="source-reader" aria-label="文件内容">

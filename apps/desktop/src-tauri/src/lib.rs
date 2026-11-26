@@ -29,6 +29,7 @@ mod rag;
 mod reminders;
 mod source_chunks;
 mod sources;
+mod doc_extract;
 mod storage;
 mod tasks;
 mod web_search;

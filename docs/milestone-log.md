@@ -1,5 +1,16 @@
 # 里程碑记录
 
+## 2026-11-26 Phase 10：全人群多格式文档零依赖解析（PDF / PPTX / XLSX / EPUB）
+
+- **后端多格式提取引擎（独立 Codex/GPT 新会话 `01a215ba-d3c7-7fe2-95f3-da110c40140b` 交付）**：新增 `src-tauri/src/doc_extract.rs`，零新增 Rust crate 依赖，实现：
+  - **`.pptx`（课件/汇报）**：按幻灯片数字页序提取正文与演讲者备注，输出带 `## 第 N 页` 的结构化文本；
+  - **`.xlsx`（办公表格）**：解析 `workbook.xml`、`sharedStrings.xml` 与各工作表，转为标准 Markdown 表格；
+  - **`.epub`（电子书）**：按 OPF `spine` 阅读顺序剥离标签输出干净章节正文；
+  - **`.pdf`（课件/论文/合同/报告）**：纯 Rust 实现 RFC 1950/1951 DEFLATE 解压（覆盖存储块、固定/动态哈夫曼块，单流上限 16 MiB）与 `/ToUnicode` CMap 中英文文字提取；对纯扫描件或加密 PDF 给出明确诚实提示；
+  - 接入 `sources.rs` 与原生文件选择器，二进制文档原始读取上限提升至 32 MiB，提取纯文本与 XML 解压保持防炸弹上限；单文件导入与授权文件夹同步自动生效。
+- **前端资料界面同步**：更新 `SourceBrowser.tsx` 与 `KnowledgeEditor.tsx` 支持格式说明与自动去后缀标题推导。
+- **实测与未验证范围**：执行 `npm.cmd --prefix apps/desktop run build`、`node --experimental-strip-types --test apps/desktop/tests/unit/navigation.test.ts`（2/2 通过）、`cargo test --offline --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --lib doc_extract::tests`（3/3 通过）、`--lib sources::tests`（3/3 通过）及 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`（通过）。未运行真实模型推理，真实复杂排版商业 PDF/PPTX 样本与原生 WebView2 选择框待实机试用复核。
+
 ## 2026-11-25 专属助手起名引导、全站称呼联动与消除启动黑框
 
 - **消除 Windows 启动黑色控制台窗口（独立 Codex/GPT 新会话 `01a2124c-1dd1-7092-ae66-1c0fb0b7a55c` 交付后端）**：将 `src-tauri/src/main.rs` 的子系统属性由 `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` 调整为 `#![cfg_attr(windows, windows_subsystem = "windows")]`，桌面快捷方式启动开发版与正式版 `cortexos-desktop.exe` 均不再弹出全黑命令行窗口。
