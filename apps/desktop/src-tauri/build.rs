@@ -205,6 +205,7 @@ fn main() {
             "rename_conversation",
             "archive_conversation",
             "delete_conversation",
+            "search_chat_messages",
             "load_messages",
             "check_ollama",
             "save_settings",

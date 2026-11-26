@@ -782,3 +782,71 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.conversation-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.conversation-search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.conversation-search-box input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 28px 6px 30px;
+  font-size: var(--text-compact);
+}
+.conversation-search-clear {
+  position: absolute;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+}
+.conversation-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.conversation-search-hit {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px 10px;
+  text-align: left;
+}
+.conversation-search-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: var(--text-caption);
+}
+.conversation-search-meta strong {
+  font-weight: var(--font-medium);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conversation-search-meta span {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.conversation-search-snippet {
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.conversation-search-state {
+  margin: 8px 4px;
+  font-size: var(--text-compact);
+  color: var(--muted);
+}

@@ -138,6 +138,18 @@ pub struct Conversation {
     pub archived: bool,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatSearchHit {
+    pub conversation_id: String,
+    pub conversation_title: String,
+    pub archived: bool,
+    pub message_id: String,
+    pub role: String,
+    pub snippet: String,
+    pub created_at: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MessageImage {

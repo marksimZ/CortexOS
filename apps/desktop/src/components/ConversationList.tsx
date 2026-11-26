@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Archive, ArchiveRestore, HardDrive, MessageSquare, Pencil, Plus, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, HardDrive, MessageSquare, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { chat, type ChatSearchHit } from "../api/chat";
 import { errorText, type Conversation, type Studio } from "../studio";
 import { navigate } from "../navigation";
 import { AppDialog, openDialog } from "./AppDialog";
@@ -28,6 +29,46 @@ export function ConversationList({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const renameDialog = useRef<HTMLDialogElement>(null);
   const deleteDialog = useRef<HTMLDialogElement>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchHits, setSearchHits] = useState<ChatSearchHit[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSearchQuery("");
+    setSearchHits(null);
+    setSearchError(null);
+  }, [studio.workspaceId]);
+
+  useEffect(() => {
+    const workspaceId = studio.workspaceId;
+    const trimmed = searchQuery.trim();
+    if (!studio.desktop || !workspaceId || !trimmed) {
+      setSearchHits(null);
+      setSearchError(null);
+      setSearching(false);
+      return;
+    }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setSearching(true);
+      setSearchError(null);
+      void chat("search_chat_messages", { workspaceId, query: trimmed, limit: 20 })
+        .then((hits) => {
+          if (active) setSearchHits(hits);
+        })
+        .catch((value) => {
+          if (active) setSearchError(errorText(value));
+        })
+        .finally(() => {
+          if (active) setSearching(false);
+        });
+    }, 180);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [studio.desktop, studio.workspaceId, searchQuery]);
 
   useEffect(() => {
     if (!menu) return;
@@ -94,6 +135,28 @@ export function ConversationList({
         <h2>会话</h2>
         <span className="count">{activeConversations.length}</span>
       </div>
+      {studio.desktop && studio.workspaceId && (
+        <div className="conversation-search-box">
+          <Search size={14} aria-hidden="true" className="conversation-search-icon" />
+          <input
+            type="search"
+            aria-label="搜索历史对话"
+            placeholder="搜索历史对话…"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="icon-button conversation-search-clear"
+              aria-label="清空对话搜索"
+              onClick={() => setSearchQuery("")}
+            >
+              <X size={13} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      )}
       <button
         className="button secondary new-conversation"
         disabled={
@@ -119,23 +182,75 @@ export function ConversationList({
         <Plus size={16} aria-hidden="true" />
         {studio.creatingConversation ? "正在创建…" : "新建对话"}
       </button>
-      {activeConversations.length ? (
-        <ul className="conversation-list">
-          {activeConversations.map(renderItem)}
-        </ul>
-      ) : (
-        <div className="sidebar-empty">
-          <MessageSquare size={22} aria-hidden="true" />
-          <p>{archivedConversations.length ? "当前无进行中会话" : "还没有会话"}</p>
+      {searchQuery.trim() ? (
+        <div className="conversation-search-results" role="region" aria-label="对话搜索结果">
+          {searching && <p className="conversation-search-state" role="status">正在搜索…</p>}
+          {searchError && (
+            <p className="form-error" role="alert">
+              {searchError}
+            </p>
+          )}
+          {!searching && !searchError && searchHits && searchHits.length === 0 && (
+            <p className="conversation-search-state">未找到匹配的聊天记录</p>
+          )}
+          {searchHits && searchHits.length > 0 && (
+            <ul className="conversation-list">
+              {searchHits.map((hit) => (
+                <li key={`${hit.conversationId}:${hit.messageId}`}>
+                  <button
+                    type="button"
+                    className="conversation-item conversation-search-hit"
+                    onClick={() => {
+                      const workspaceId = studio.workspaceId;
+                      if (!workspaceId) return;
+                      void studio
+                        .openConversation(workspaceId, hit.conversationId)
+                        .then(() => {
+                          navigate("chat", {
+                            workspace: workspaceId,
+                            conversation: hit.conversationId,
+                            message: hit.messageId,
+                          });
+                          onSelect?.();
+                        })
+                        .catch(studio.reportError);
+                    }}
+                  >
+                    <div className="conversation-search-meta">
+                      <strong>{hit.conversationTitle}</strong>
+                      <span>
+                        {hit.role === "user" ? "你" : "助手"}
+                        {hit.archived ? " · 已归档" : ""}
+                      </span>
+                    </div>
+                    <span className="conversation-search-snippet">{hit.snippet}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      )}
-      {archivedConversations.length > 0 && (
-        <details className="archived-conversations">
-          <summary>已归档（{archivedConversations.length}）</summary>
-          <ul className="conversation-list">
-            {archivedConversations.map(renderItem)}
-          </ul>
-        </details>
+      ) : (
+        <>
+          {activeConversations.length ? (
+            <ul className="conversation-list">
+              {activeConversations.map(renderItem)}
+            </ul>
+          ) : (
+            <div className="sidebar-empty">
+              <MessageSquare size={22} aria-hidden="true" />
+              <p>{archivedConversations.length ? "当前无进行中会话" : "还没有会话"}</p>
+            </div>
+          )}
+          {archivedConversations.length > 0 && (
+            <details className="archived-conversations">
+              <summary>已归档（{archivedConversations.length}）</summary>
+              <ul className="conversation-list">
+                {archivedConversations.map(renderItem)}
+              </ul>
+            </details>
+          )}
+        </>
       )}
       <p className="sidebar-footer">
         <HardDrive size={14} aria-hidden="true" />

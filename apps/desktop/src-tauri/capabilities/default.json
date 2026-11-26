@@ -208,6 +208,7 @@
     "allow-rename-conversation",
     "allow-archive-conversation",
     "allow-delete-conversation",
+    "allow-search-chat-messages",
     "allow-load-messages",
     "allow-check-ollama",
     "allow-save-settings",

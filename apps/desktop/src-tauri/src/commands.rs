@@ -129,6 +129,19 @@ pub async fn list_conversations(
 }
 
 #[tauri::command]
+pub async fn search_chat_messages(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    query: String,
+    limit: Option<usize>,
+) -> AppResult<Vec<ChatSearchHit>> {
+    blocking(state.database.clone()?, move |db| {
+        db.search_chat_messages(&workspace_id, &query, limit)
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn create_conversation(
     state: State<'_, AppState>,
     workspace_id: String,

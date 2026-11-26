@@ -306,6 +306,7 @@ pub fn run() {
             commands::bootstrap,
             commands::create_workspace,
             commands::list_conversations,
+            commands::search_chat_messages,
             commands::create_conversation,
             commands::rename_conversation,
             commands::archive_conversation,

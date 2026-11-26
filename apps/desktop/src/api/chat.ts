@@ -40,6 +40,15 @@ export type ContextOption = ContextCursor & {
 };
 type ContextOptionsPage = { items: ContextOption[]; hasMore: boolean };
 type RunPreparing = Pick<RunSummary, "id" | "workspaceId" | "conversationId">;
+export type ChatSearchHit = {
+  conversationId: string;
+  conversationTitle: string;
+  archived: boolean;
+  messageId: string;
+  role: "user" | "assistant";
+  snippet: string;
+  createdAt: string;
+};
 
 export const chat = createClient<{
   bootstrap: Command<undefined, Bootstrap>;
@@ -50,6 +59,10 @@ export const chat = createClient<{
   rename_conversation: Command<ConversationArgs & { title: string }, void>;
   archive_conversation: Command<ConversationArgs & { archived: boolean }, void>;
   delete_conversation: Command<ConversationArgs, void>;
+  search_chat_messages: Command<
+    WorkspaceArgs & { query: string; limit?: number },
+    ChatSearchHit[]
+  >;
   load_messages: Command<ConversationArgs, Message[]>;
   save_settings: Command<{ settings: ModelSettings }, ModelSettings>;
   set_conversation_retrieval: Command<

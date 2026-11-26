@@ -333,6 +333,14 @@ pub(crate) fn query_terms(query: &str) -> (Vec<String>, bool) {
     (tokens.into_iter().take(64).collect(), truncated)
 }
 
+pub(crate) fn match_expression(tokens: &[String], operator: &str) -> String {
+    tokens
+        .iter()
+        .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(operator)
+}
+
 pub(crate) fn report(
     algorithm: &str,
     tokens: Vec<String>,
@@ -373,11 +381,7 @@ pub(crate) fn search_with_privacy(
     let started = now();
     let clock = std::time::Instant::now();
     let (tokens, truncated) = query_terms(query);
-    let expression = tokens
-        .iter()
-        .map(|t| format!("\"{t}\""))
-        .collect::<Vec<_>>()
-        .join(" OR ");
+    let expression = match_expression(&tokens, " OR ");
     let mut candidates = Vec::new();
     if !expression.is_empty() {
         let mut statement = connection.prepare(

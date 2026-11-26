@@ -3185,3 +3185,27 @@ Markdown用原文存储，不改变请求或证据；不支持数学公式/代�
 - 已查看原生 WebView2 实拍截图：`artifacts/web-url-import-native/web-url-import-native-one--2cfed-d-mounts-it-to-chat-context-desktop/{web-import-popover,web-import-mounted}.png`，确认弹窗布局、成功 Toast 与「手动选择: 1 项知识」状态更新清晰无溢出。
 
 未验证：真实公网复杂网页兼容性与本地/云端模型基于抓取网页的实测回答。
+
+### 2026-11-26 路线 A · 切片 A3：跨会话聊天全文检索与定位跳转
+
+在对话侧栏新增基于 SQLite FTS5 的跨会话全文搜索与点击跳转定位，严格只索引 `purpose = 'chat'` 会话中的正文（`messages.content`），绝不索引思考过程、执行追踪或评测数据：
+
+- **Rust 后端（由 Codex CLI GPT 执行 `src-tauri/` 改造，并补齐 Tauri 2 命令权限）**：
+  - 数据库迁移 [0040_chat_messages_fts.sql](apps/desktop/src-tauri/migrations/0040_chat_messages_fts.sql)：建立 `chat_messages_fts` 虚表；[db.rs](apps/desktop/src-tauri/src/db.rs) 复用 `retrieval::terms`（CJK 双字 + 英文分词）实现用户发送、回答落库同步、删除会话清理及历史会话惰性回填（`search_chat_messages` 查询前自动补建缺失索引），支持 BM25 排序与单字/符号子串回退匹配，生成居中摘要片段。
+  - [models.rs](apps/desktop/src-tauri/src/models.rs)、[commands.rs](apps/desktop/src-tauri/src/commands.rs)、[lib.rs](apps/desktop/src-tauri/src/lib.rs)、[build.rs](apps/desktop/src-tauri/build.rs)、[capabilities/default.json](apps/desktop/src-tauri/capabilities/default.json)、[portability/scope.rs](apps/desktop/src-tauri/src/portability/scope.rs)：新增 `ChatSearchHit` 与 `search_chat_messages` 命令并注册权限与备份校验；新增测试模块 [chat_search_tests.rs](apps/desktop/src-tauri/src/db/chat_search_tests.rs)。
+- **前端检索栏与跳转定位**：
+  - 扩展 [chat.ts](apps/desktop/src/api/chat.ts)（`ChatSearchHit`、`search_chat_messages`）。
+  - 更新 [ConversationList.tsx](apps/desktop/src/components/ConversationList.tsx) 与 [features.css](apps/desktop/src/styles/features.css)：在侧栏新增带防抖（180ms）与一键清空的「搜索历史对话」输入框，展示所属会话标题、发言角色（你/助手）、归档标记与命中摘要；点击后打开目标会话并经 `navigate("chat", { workspace, conversation, message })` 滚动定位高亮原消息。
+  - 新增原生测试 [chat-search-native.spec.ts](apps/desktop/tests/chat-search-native.spec.ts) 并注册到 [playwright.config.ts](apps/desktop/playwright.config.ts)。
+
+实际验证（仅使用单测与本机 `127.0.0.1` 假 Ollama 服务，未调用真实模型）：
+
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run build`：`tsc --noEmit` 与 `vite build` 通过（Vite 600ms）。
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run test:unit`：5/5 通过。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked chat_search`：2 passed, 0 failed（覆盖中英文/归档会话命中、排除 `thinking`、工作区隔离、旧消息回填与删除清理）。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked thinking_stream`：6 passed, 0 failed。
+- `cargo build --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`：通过（37.46s）。
+- `$env:CORTEXOS_NATIVE_ONLY="1"; npx.cmd playwright test tests/chat-search-native.spec.ts --project=desktop --output=../../artifacts/chat-search-native`（目录 `apps/desktop`）：1 passed（4.5s）。
+- 已查看原生 WebView2 实拍截图：`artifacts/chat-search-native/chat-search-native-cross-c-1b47e-nd-jumps-to-located-message-desktop/{chat-search-results,chat-search-located}.png`，确认侧栏命中结果列表、角色标记及点击后跨会话跳转并高亮目标消息（`data-located="true"`）表现正常。
+
+未验证：大规模多轮长历史下的检索延迟压测与真实模型生成内容搜索尚未开展。

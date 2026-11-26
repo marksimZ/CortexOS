@@ -91,6 +91,7 @@ export default defineConfig({
         "generation-style-native.spec.ts",
         "thinking-stream-native.spec.ts",
         "web-url-import-native.spec.ts",
+        "chat-search-native.spec.ts",
         "web-search-native.spec.ts",
         "chat.spec.ts",
         "markdown-camera.spec.ts",

@@ -65,22 +65,24 @@ pub(super) fn verify(c: &Connection, id: &str) -> AppResult<()> {
             return Err("工作区备份包含范围之外的数据。".into());
         }
     }
-    let has_fts: bool = c
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='knowledge_fts')",
-            [],
-            |r| r.get(0),
-        )
-        .map_err(error)?;
-    if has_fts
-        && c.query_row(
-            "SELECT EXISTS(SELECT 1 FROM knowledge_fts WHERE workspace_id IS NOT ?1)",
-            [id],
-            |r| r.get::<_, bool>(0),
-        )
-        .map_err(error)?
-    {
-        return Err("工作区备份的全文索引包含范围之外的数据。".into());
+    for table in ["knowledge_fts", "chat_messages_fts"] {
+        let has_fts: bool = c
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name=?1)",
+                [table],
+                |r| r.get(0),
+            )
+            .map_err(error)?;
+        if has_fts
+            && c.query_row(
+                &format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE workspace_id IS NOT ?1)"),
+                [id],
+                |r| r.get::<_, bool>(0),
+            )
+            .map_err(error)?
+        {
+            return Err("工作区备份的全文索引包含范围之外的数据。".into());
+        }
     }
     Ok(())
 }

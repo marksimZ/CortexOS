@@ -52,6 +52,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0037_message_images.sql"),
     include_str!("../migrations/0038_assistant_name.sql"),
     include_str!("../migrations/0039_message_thinking.sql"),
+    include_str!("../migrations/0040_chat_messages_fts.sql"),
 ];
 const MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const RUN_COLUMNS: &str = "id,workspace_id,conversation_id,assistant_message_id,model_id,status,started_at,finished_at,error_message";
@@ -327,6 +328,114 @@ pub struct Database {
     _lock: Option<File>,
 }
 
+fn insert_chat_message_terms(
+    connection: &Connection,
+    message_id: &str,
+    workspace_id: &str,
+    conversation_id: &str,
+    content: &str,
+) -> AppResult<()> {
+    if !content.trim().is_empty() {
+        let terms = crate::retrieval::terms(content).join(" ");
+        if !terms.is_empty() {
+            connection
+                .execute(
+                    "INSERT INTO chat_messages_fts(message_id,workspace_id,conversation_id,content_terms)
+                     SELECT m.id,m.workspace_id,m.conversation_id,?4 FROM messages m
+                     JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
+                     WHERE m.id=?1 AND m.workspace_id=?2 AND m.conversation_id=?3
+                       AND m.role IN ('user','assistant') AND c.purpose='chat' AND c.deleted_at IS NULL",
+                    params![message_id, workspace_id, conversation_id, terms],
+                )
+                .map_err(error)?;
+        }
+    }
+    Ok(())
+}
+
+fn sync_chat_message_fts(
+    connection: &Connection,
+    message_id: &str,
+    workspace_id: &str,
+    conversation_id: &str,
+    content: &str,
+) -> AppResult<()> {
+    connection
+        .execute("DELETE FROM chat_messages_fts WHERE message_id=?1", [message_id])
+        .map_err(error)?;
+    insert_chat_message_terms(connection, message_id, workspace_id, conversation_id, content)
+}
+
+fn backfill_chat_messages_fts(connection: &Connection, workspace_id: &str) -> AppResult<()> {
+    let mut statement = connection
+        .prepare(
+            "WITH indexed AS MATERIALIZED (
+                 SELECT message_id FROM chat_messages_fts WHERE workspace_id=?1
+             )
+             SELECT m.id,m.conversation_id,m.content FROM messages m
+             JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
+             WHERE m.workspace_id=?1 AND c.purpose='chat' AND c.deleted_at IS NULL
+               AND m.role IN ('user','assistant') AND trim(m.content)!=''
+               AND NOT EXISTS (SELECT 1 FROM indexed f WHERE f.message_id=m.id)",
+        )
+        .map_err(error)?;
+    let missing_rows = statement
+        .query_map([workspace_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(error)?;
+    for row in missing_rows {
+        let (message_id, conversation_id, content) = row.map_err(error)?;
+        insert_chat_message_terms(connection, &message_id, workspace_id, &conversation_id, &content)?;
+    }
+    Ok(())
+}
+
+fn chat_search_snippet(content: &str, query: &str, tokens: &[String]) -> String {
+    const WIDTH: usize = 120;
+    let clean = content.split_whitespace().collect::<Vec<_>>().join(" ");
+    let length = clean.chars().count();
+    if length <= WIDTH {
+        return clean;
+    }
+
+    let folded: String = clean.chars().flat_map(char::to_lowercase).collect();
+    let phrase: String = query
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .flat_map(char::to_lowercase)
+        .collect();
+    let find = |needle: &str| {
+        folded
+            .find(needle)
+            .map(|offset| (offset, needle.chars().count()))
+    };
+    let center = find(&phrase)
+        .or_else(|| tokens.iter().filter_map(|token| find(token)).min())
+        .map_or(0, |(offset, width)| {
+            let mut bytes = 0;
+            let start = clean
+                .chars()
+                .take_while(|ch| {
+                    bytes += ch.to_lowercase().map(char::len_utf8).sum::<usize>();
+                    bytes <= offset
+                })
+                .count();
+            start + width / 2
+        });
+    let start = center.saturating_sub(WIDTH / 2).min(length - WIDTH);
+    let excerpt: String = clean.chars().skip(start).take(WIDTH).collect();
+    let prefix = if start > 0 { "…" } else { "" };
+    let suffix = if start + WIDTH < length { "…" } else { "" };
+    format!("{prefix}{}{suffix}", excerpt.trim())
+}
+
 pub(crate) fn insert_execution(
     c: &Connection,
     run: &RunSummary,
@@ -395,6 +504,13 @@ fn insert_execution_with_images(
     images: &[MessageImage],
 ) -> AppResult<()> {
     insert_execution(c, run, settings, request, manifest, user_id, content)?;
+    sync_chat_message_fts(
+        c,
+        user_id,
+        &run.workspace_id,
+        &run.conversation_id,
+        content,
+    )?;
     for (ordinal, image) in images.iter().enumerate() {
         c.execute(
             "INSERT INTO message_images (message_id, ordinal, mime_type, data_base64) VALUES (?1, ?2, ?3, ?4)",
@@ -691,6 +807,11 @@ impl Database {
         if affected == 0 {
             return Err(missing());
         }
+        tx.execute(
+            "DELETE FROM chat_messages_fts WHERE workspace_id=?1 AND conversation_id=?2",
+            params![workspace_id, conversation_id],
+        )
+        .map_err(error)?;
         let _ = tx.execute(
             "DELETE FROM conversation_summaries WHERE workspace_id=?1 AND conversation_id=?2",
             params![workspace_id, conversation_id],
@@ -737,6 +858,72 @@ impl Database {
 
     pub fn messages(&self, workspace_id: &str, conversation_id: &str) -> AppResult<Vec<Message>> {
         self.chat_messages(workspace_id, conversation_id, true)
+    }
+
+    pub fn search_chat_messages(
+        &self,
+        workspace_id: &str,
+        query: &str,
+        limit: Option<usize>,
+    ) -> AppResult<Vec<ChatSearchHit>> {
+        let mut connection = self.connection()?;
+        crate::benchmark::dataset::require_workspace(&connection, workspace_id)?;
+        let query: String = query.trim().chars().take(120).collect();
+        let query = query.trim_end();
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
+        let limit = limit.unwrap_or(20).clamp(1, 30) as i64;
+        let tx = connection.transaction().map_err(error)?;
+        backfill_chat_messages_fts(&tx, workspace_id)?;
+
+        let (tokens, _) = crate::retrieval::query_terms(query);
+        let expression = crate::retrieval::match_expression(&tokens, " AND ");
+        let read_hit = |row: &Row<'_>| {
+            let content: String = row.get(5)?;
+            Ok(ChatSearchHit {
+                conversation_id: row.get(0)?,
+                conversation_title: row.get(1)?,
+                archived: row.get(2)?,
+                message_id: row.get(3)?,
+                role: row.get(4)?,
+                snippet: chat_search_snippet(&content, query, &tokens),
+                created_at: row.get(6)?,
+            })
+        };
+        let mut hits = Vec::new();
+        if !expression.is_empty() {
+            hits = tx.prepare(
+                "SELECT c.id,c.title,c.archived_at IS NOT NULL,m.id,m.role,m.content,m.created_at
+                 FROM chat_messages_fts f
+                 JOIN messages m ON m.id=f.message_id AND m.conversation_id=f.conversation_id
+                 JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
+                 WHERE f.workspace_id=?1 AND c.workspace_id=?1 AND c.purpose='chat'
+                   AND c.deleted_at IS NULL AND m.role IN ('user','assistant')
+                   AND f.content_terms MATCH ?2
+                 ORDER BY bm25(chat_messages_fts),m.created_at DESC,m.id LIMIT ?3",
+            ).map_err(error)?
+                .query_map(params![workspace_id, expression, limit], read_hit)
+                .map_err(error)?
+                .collect::<rusqlite::Result<_>>()
+                .map_err(error)?;
+        }
+        if hits.is_empty() {
+            hits = tx.prepare(
+                "SELECT c.id,c.title,c.archived_at IS NOT NULL,m.id,m.role,m.content,m.created_at
+                 FROM messages m
+                 JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
+                 WHERE m.workspace_id=?1 AND c.purpose='chat' AND c.deleted_at IS NULL
+                   AND m.role IN ('user','assistant') AND instr(lower(m.content),lower(?2))>0
+                 ORDER BY m.created_at DESC,m.id LIMIT ?3",
+            ).map_err(error)?
+                .query_map(params![workspace_id, query, limit], read_hit)
+                .map_err(error)?
+                .collect::<rusqlite::Result<_>>()
+                .map_err(error)?;
+        }
+        tx.commit().map_err(error)?;
+        Ok(hits)
     }
 
     fn chat_messages(
@@ -1540,13 +1727,23 @@ impl Database {
         content: &str,
         thinking: Option<&str>,
     ) -> AppResult<()> {
-        let c = self.connection()?;
+        let mut c = self.connection()?;
         if execution_is_running(&c, run, purpose)? {
-            c.execute(
+            let tx = c.transaction().map_err(error)?;
+            let updated = tx.execute(
                 "UPDATE messages SET content=?1,thinking=?2,updated_at=?3 WHERE id=?4 AND workspace_id=?5",
                 params![content, thinking.filter(|s| !s.is_empty()), now(), run.assistant_message_id, run.workspace_id],
             )
             .map_err(error)?;
+            if updated == 1 && matches!(purpose, ExecutionPurpose::Chat) {
+                // A search can backfill a streaming message before its next checkpoint.
+                tx.execute(
+                    "DELETE FROM chat_messages_fts WHERE message_id=?1",
+                    [&run.assistant_message_id],
+                )
+                .map_err(error)?;
+            }
+            tx.commit().map_err(error)?;
         }
         Ok(())
     }
@@ -1622,13 +1819,12 @@ impl Database {
         };
         let mut connection = self.connection()?;
         let mut transaction = connection.transaction().map_err(error)?;
-        let matching_run: bool = transaction.query_row(
-            "SELECT EXISTS(SELECT 1 FROM execution_runs WHERE id=?1 AND workspace_id=?2 AND conversation_id=?3 AND assistant_message_id=?4)",
+        let is_chat: bool = transaction.query_row(
+            "SELECT c.purpose='chat' FROM execution_runs r
+             JOIN conversations c ON c.id=r.conversation_id AND c.workspace_id=r.workspace_id
+             WHERE r.id=?1 AND r.workspace_id=?2 AND r.conversation_id=?3 AND r.assistant_message_id=?4",
             params![run.id,run.workspace_id,run.conversation_id,run.assistant_message_id], |r| r.get(0),
-        ).map_err(error)?;
-        if !matching_run {
-            return Err(missing());
-        }
+        ).optional().map_err(error)?.ok_or_else(missing)?;
         let time = now();
         let updated = transaction.execute("UPDATE execution_runs SET status=?1,error_message=?2,finished_at=?3 WHERE id=?4 AND workspace_id=?5 AND status='running'",params![status,message,time,run.id,run.workspace_id]).map_err(error)?;
         if updated == 1 {
@@ -1648,6 +1844,15 @@ impl Database {
                 event(&transaction, &run.id, "citations_checked", report)?;
             }
             transaction.execute("UPDATE messages SET content=?1,thinking=?2,status=?3,updated_at=?4 WHERE id=?5 AND workspace_id=?6",params![content,thinking.filter(|s| !s.is_empty()),status,time,run.assistant_message_id,run.workspace_id]).map_err(error)?;
+            if is_chat {
+                sync_chat_message_fts(
+                    &transaction,
+                    &run.assistant_message_id,
+                    &run.workspace_id,
+                    &run.conversation_id,
+                    content,
+                )?;
+            }
             transaction
                 .execute(
                     "UPDATE conversations SET updated_at=?1 WHERE workspace_id=?2 AND id=?3",
@@ -1863,6 +2068,8 @@ impl Database {
 #[cfg(test)]
 mod benchmark_foundation_tests;
 #[cfg(test)]
+mod chat_search_tests;
+#[cfg(test)]
 #[path = "db/profile_tests.rs"]
 mod profile_tests;
 
@@ -1875,7 +2082,7 @@ mod tests {
         let db = Database::rag_evaluation_database().unwrap();
         assert_eq!(
             backup_schema_version(&db.connection().unwrap()).unwrap(),
-            39
+            40
         );
         let workspace = db.create_workspace("Fixture").unwrap().id;
         let chat = db.create_conversation(&workspace).unwrap().id;
