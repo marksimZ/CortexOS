@@ -65,6 +65,7 @@ export interface DailyFocus {
   workspaceId: string;
   workspaceName: string;
   assistantName?: string;
+  activeAssistantName?: string | null;
   displayName: string;
   hasActivity: boolean;
   knowledgeCount: number;

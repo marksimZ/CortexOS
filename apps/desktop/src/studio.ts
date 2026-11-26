@@ -429,8 +429,11 @@ export function useStudio() {
     return () => { current = false; window.clearTimeout(timer); };
   }, [activeRun, refreshMessages, refreshConversations, reportError, view]);
 
-  const createWorkspace = async (name: string) => {
-    const workspace = await chat("create_workspace", { name });
+  const createWorkspace = async (name: string, template?: string) => {
+    const workspace = await chat("create_workspace", {
+      name,
+      ...(template && template !== "blank" ? { template } : {}),
+    });
     setData((current) =>
       current
         ? { ...current, workspaces: [...current.workspaces, workspace] }

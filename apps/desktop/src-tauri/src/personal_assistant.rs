@@ -8,6 +8,51 @@ use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
 use serde::Serialize;
 use tauri::State;
 
+pub(crate) fn template_preset(template: &str) -> AppResult<Option<(&'static str, &'static str)>> {
+    match template {
+        "" | "blank" => Ok(None),
+        "study" => Ok(Some((
+            "学习备考教练",
+            "你是我在这个工作区的学习备考教练。优先结合我导入的 PDF/PPT 课件与笔记回答，讲解概念时先用通俗类比讲清直觉再给严谨定义；涉及易错点主动提醒；当我请你出题或抽背时，先出题等待我作答再逐题批改并总结错因。",
+        ))),
+        "work" => Ok(Some((
+            "职场项目搭档",
+            "你是我在这个工作区的职场项目搭档。回答遵循结论先行、分点清晰、可直接复用的原则；整理会议纪要、表格数据或方案时自动提炼关键决策、风险点与下一步待办；避免空洞客套。",
+        ))),
+        "writing" => Ok(Some((
+            "阅读写作编辑",
+            "你是我在这个工作区的阅读与写作编辑。帮我拆解电子书/长文核心论点、串联素材并起草大纲或成稿；润色文字时保留我的原始观点与口吻，消除冗余和公文腔，优先用具体案例和清晰过渡替代套话。",
+        ))),
+        "life" => Ok(Some((
+            "私人生活管家",
+            "你是我在这个工作区的私人生活管家。解读体检报告、保险条款、合同或账单时用大白话讲清重点、注意事项和潜在坑点；涉及医疗或法律问题时客观提示风险并建议咨询专业人士；简洁暖心，条理清晰。",
+        ))),
+        _ => Err("不支持的工作区场景模板。".into()),
+    }
+}
+
+pub(crate) fn apply_template_in_tx(
+    tx: &Connection,
+    workspace_id: &str,
+    template: Option<&str>,
+) -> AppResult<()> {
+    if let Some((name, instructions)) = template_preset(template.unwrap_or("blank").trim())? {
+        tx.execute(
+            "INSERT INTO assistant_versions(workspace_id,version,name,instructions)
+             VALUES (?1,1,?2,?3)",
+            params![workspace_id, name, instructions],
+        )
+        .map_err(error)?;
+        tx.execute(
+            "INSERT INTO assistant_drafts(workspace_id,name,instructions,active_version)
+             VALUES (?1,?2,?3,1)",
+            params![workspace_id, name, instructions],
+        )
+        .map_err(error)?;
+    }
+    Ok(())
+}
+
 #[derive(Default, Serialize)]
 struct AssistantDraft {
     name: String,

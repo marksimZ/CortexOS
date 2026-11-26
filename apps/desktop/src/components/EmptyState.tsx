@@ -389,7 +389,9 @@ export function EmptyState({
         <BrandMark className="cognitive-mark" size={80} />
         <h2>{hasCustomBotName ? `你好，我是 ${botName}` : "欢迎使用 CortexOS"}</h2>
         <p className="welcome-tagline">
-          定制你的专属个人 AI{hasCustomBotName ? `「${botName}」` : ""}：记住你的偏好、本地资料与长期规则，越用越懂你。
+          {focus?.activeAssistantName
+            ? `当前已启用「${focus.activeAssistantName}」场景模式 · 支持直接拖入 PDF / PPT / Word / Excel / EPUB 或图片开始。`
+            : `定制你的专属个人 AI${hasCustomBotName ? `「${botName}」` : ""}：记住你的偏好、本地资料与长期规则，支持直接拖入课件/文档开聊。`}
         </p>
       </div>
       <div className="welcome-next">

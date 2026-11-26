@@ -1,5 +1,11 @@
 # 里程碑记录
 
+## 2026-11-26 Phase 12：新建工作区「人群场景模板」与场景化首屏引导
+
+- **后端场景预设原子创建与首屏推荐定制（独立 Codex/GPT 新会话 `01a215e2-3194-7410-ae9e-b713851eb718` 交付）**：在 `personal_assistant.rs` 新增 4 套人群场景分身预设（`study` 学习备考教练、`work` 职场项目搭档、`writing` 阅读写作编辑、`life` 私人生活管家，及 `blank` 空白无预设），并在 `db.rs` / `commands.rs` 扩展 `create_workspace(name, template)` 于同一 SQLite 事务内原子创建工作区并发布启用版本 1（未知模板在写入前拒绝不残留孤立工作区）。升级 `memory.rs` 的 `DailyFocus` 返回 `activeAssistantName` 并按启用场景定制 3 条空态推荐开场白。
+- **前端新建工作区模板选择与空态引导（`workspace-templates.ts` + `App.tsx` + `EmptyState.tsx`）**：升级「创建工作区」对话框为 5 张可选场景卡片，选中后动态切换工作区名称示例并在创建完成时提示对应场景分身已启用；空新对话首屏展示当前启用场景模式与拖拽文档提示，并提供场景化一键追问按钮。
+- **实测与未验证范围**：执行 `npm.cmd --prefix apps/desktop run build`、`node --experimental-strip-types --test apps/desktop/tests/unit/navigation.test.ts`（2/2 通过）、`cargo test --offline --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --lib memory::tests`（6/6 通过，含 `workspace_scenario_template_activates_assistant_and_tailors_daily_focus`）及 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`（通过）。未运行真实模型推理及原生 WebView2 自动化截图回归。
+
 ## 2026-11-26 Phase 11：全窗口「拖拽文件即入库 / 即提问」
 
 - **后端安全批量拖放导入（独立 Codex/GPT 新会话 `01a215d6-bb66-76d3-8b6c-58508a69404e` 交付）**：在 `sources.rs` / `commands.rs` 新增 `import_dropped_files` 命令（同步注册至 `lib.rs`、`build.rs`、`capabilities/default.json`），支持单次最多 20 个路径混合导入文档（PDF/PPTX/DOCX/XLSX/EPUB/TXT/MD/代码，返回生效 `nodeId`/`version`/`title`）与图片（PNG/JPEG/WebP/GIF 最多 4 张，纯 Rust Base64 编码校验）。图片与文档共用严格的本地磁盘路径校验、符号链接拒绝、`GetFinalPathNameByHandleW` 句柄防替换与敏感文件名过滤；单个非法文件/目录独立报错不阻断同批有效文件。同时优化文档标题推导自动去除 `.pdf`/`.pptx`/`.docx`/`.xlsx`/`.epub`/`.csv` 后缀。

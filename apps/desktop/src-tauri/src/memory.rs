@@ -1060,6 +1060,7 @@ pub(crate) struct DailyFocus {
     pub workspace_name: String,
     pub display_name: String,
     pub assistant_name: String,
+    pub active_assistant_name: Option<String>,
     pub has_activity: bool,
     pub knowledge_count: usize,
     pub pending_memory_count: usize,
@@ -1080,6 +1081,8 @@ pub(crate) fn query_daily_focus(c: &Connection, workspace_id: &str) -> AppResult
         )
         .map_err(error)?;
     let persona = read_persona(c)?;
+    let active_assistant_name =
+        crate::personal_assistant::active_version(c, workspace_id)?.map(|v| v.name);
     let knowledge_count: i64 = c
         .query_row(
             &format!(
@@ -1249,15 +1252,38 @@ pub(crate) fn query_daily_focus(c: &Connection, workspace_id: &str) -> AppResult
         suggested_prompts.push("串联当前工作区的知识卡片，总结关键决策与潜在盲点".into());
     }
     suggested_prompts.truncate(3);
-    suggested_prompts.extend(
-        [
+    let fallback_prompts = match active_assistant_name.as_deref() {
+        Some("学习备考教练") => [
+            "把一份 PDF 或 PPT 课件拖进窗口，帮我提炼本章高频考点",
+            "针对我已导入的课程资料，出 3 道自测题考考我",
+            "把容易混淆的概念整理成一张对比表",
+        ],
+        Some("职场项目搭档") => [
+            "把项目表格或文档拖进窗口，帮我提炼核心结论与风险点",
+            "整理当前工作区资料，生成一份本周项目进展周报",
+            "帮我梳理下周最关键的 3 项待办与优先级",
+        ],
+        Some("阅读写作编辑") => [
+            "把电子书 EPUB 或长文拖进窗口，帮我拆解核心论点",
+            "结合当前工作区素材，起草一篇文章大纲并保留我的表达风格",
+            "帮我润色一段草稿，去掉冗余和公文腔",
+        ],
+        Some("私人生活管家") => [
+            "把体检报告或保单 PDF 拖进窗口，用大白话讲清重点和注意事项",
+            "每个工作日早上 9 点给我整理一份科技与生活简报",
+            "提醒我下周一早上 9 点处理本月账单",
+        ],
+        _ => [
             "记住我的工作偏好：回答尽量简洁，先给结论再展开细节",
             "总结当前工作区里已有的项目资料和关键决策",
             "每个工作日早上 9 点给我整理一份 AI 行业简报",
-        ]
-        .into_iter()
-        .take(3 - suggested_prompts.len())
-        .map(str::to_owned),
+        ],
+    };
+    suggested_prompts.extend(
+        fallback_prompts
+            .into_iter()
+            .take(3 - suggested_prompts.len())
+            .map(str::to_owned),
     );
 
     Ok(DailyFocus {
@@ -1265,6 +1291,7 @@ pub(crate) fn query_daily_focus(c: &Connection, workspace_id: &str) -> AppResult
         workspace_name,
         display_name: persona.display_name,
         assistant_name: persona.assistant_name,
+        active_assistant_name,
         has_activity,
         knowledge_count: usize::try_from(knowledge_count).map_err(|err| err.to_string())?,
         pending_memory_count: usize::try_from(pending_memory_count)
@@ -1316,7 +1343,49 @@ pub(crate) async fn promote_rule_from_chat(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::Database;
+    use crate::{db::Database, personal_assistant::active_version};
+
+    #[test]
+    fn workspace_scenario_template_activates_assistant_and_tailors_daily_focus() {
+        let db = Database::rag_evaluation_database().unwrap();
+        let study = db
+            .create_workspace_with_template("考研英语", Some("study"))
+            .unwrap();
+        assert_eq!(study.name, "考研英语");
+        let blank = db
+            .create_workspace_with_template("空白", Some("blank"))
+            .unwrap();
+        assert_eq!(
+            db.create_workspace_with_template("非法", Some("unknown"))
+                .unwrap_err(),
+            "不支持的工作区场景模板。"
+        );
+
+        let c = db.connection().unwrap();
+        let assistant = active_version(&c, &study.id).unwrap().unwrap();
+        assert_eq!(assistant.version, 1);
+        assert_eq!(assistant.name, "学习备考教练");
+        let focus = query_daily_focus(&c, &study.id).unwrap();
+        assert_eq!(focus.active_assistant_name.as_deref(), Some("学习备考教练"));
+        assert!(!focus.has_activity);
+        assert_eq!(
+            focus.suggested_prompts,
+            [
+                "把一份 PDF 或 PPT 课件拖进窗口，帮我提炼本章高频考点",
+                "针对我已导入的课程资料，出 3 道自测题考考我",
+                "把容易混淆的概念整理成一张对比表",
+            ]
+        );
+        assert!(active_version(&c, &blank.id).unwrap().is_none());
+        let invalid_exists: bool = c
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM workspaces WHERE name=?1)",
+                ["非法"],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(!invalid_exists);
+    }
 
     #[test]
     fn assistant_name_persists_and_appears_in_prompt_and_daily_focus() {

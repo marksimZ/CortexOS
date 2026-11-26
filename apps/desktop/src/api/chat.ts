@@ -44,7 +44,7 @@ type RunPreparing = Pick<RunSummary, "id" | "workspaceId" | "conversationId">;
 export const chat = createClient<{
   bootstrap: Command<undefined, Bootstrap>;
   check_ollama: Command<undefined, ModelHealth>;
-  create_workspace: Command<{ name: string }, Workspace>;
+  create_workspace: Command<{ name: string; template?: string | null }, Workspace>;
   list_conversations: Command<WorkspaceArgs, Conversation[]>;
   create_conversation: Command<WorkspaceArgs, Conversation>;
   rename_conversation: Command<ConversationArgs & { title: string }, void>;

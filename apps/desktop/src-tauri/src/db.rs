@@ -543,17 +543,30 @@ impl Database {
     }
 
     pub fn create_workspace(&self, name: &str) -> AppResult<Workspace> {
+        self.create_workspace_with_template(name, None)
+    }
+
+    pub fn create_workspace_with_template(
+        &self,
+        name: &str,
+        template: Option<&str>,
+    ) -> AppResult<Workspace> {
+        let name = validate_name(name)?;
+        crate::personal_assistant::template_preset(template.unwrap_or("blank").trim())?;
         let workspace = Workspace {
             id: new_id(),
-            name: validate_name(name)?,
+            name,
             created_at: now(),
         };
-        self.connection()?
-            .execute(
-                "INSERT INTO workspaces VALUES(?1,?2,?3,?3)",
-                params![workspace.id, workspace.name, workspace.created_at],
-            )
-            .map_err(error)?;
+        let mut connection = self.connection()?;
+        let tx = connection.transaction().map_err(error)?;
+        tx.execute(
+            "INSERT INTO workspaces VALUES(?1,?2,?3,?3)",
+            params![workspace.id, workspace.name, workspace.created_at],
+        )
+        .map_err(error)?;
+        crate::personal_assistant::apply_template_in_tx(&tx, &workspace.id, template)?;
+        tx.commit().map_err(error)?;
         Ok(workspace)
     }
 

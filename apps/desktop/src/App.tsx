@@ -13,6 +13,7 @@ import type { EditKnowledge } from "./knowledge-types";
 import { ChatPage } from "./Chat";
 import type { EditEdge } from "./RelationshipEditor";
 import { errorText, preference, remember, useStudio, type Message } from "./studio";
+import { WORKSPACE_TEMPLATES, type WorkspaceTemplateId } from "./workspace-templates";
 import { notify } from "./components/Toast";
 import "./styles/tokens.css";
 import "./styles/layout.css";
@@ -174,11 +175,13 @@ export default function App() {
   }, [studio.desktop, studio.loading, studio.personaLoaded, studio.assistantName]);
   useDraftWindow(() => openDialog(volatileDialog.current), reportError);
   const [workspaceName, setWorkspaceName] = useState("");
+  const [workspaceTemplate, setWorkspaceTemplate] = useState<WorkspaceTemplateId>("blank");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const openCreateWorkspace = (next?: "chat" | "cloud") => {
     afterWorkspace.current = next ?? null;
     setWorkspaceName("");
+    setWorkspaceTemplate("blank");
     setWorkspaceError(null);
     openDialog(workspaceDialog.current);
   };
@@ -433,9 +436,14 @@ export default function App() {
             setCreating(true);
             setWorkspaceError(null);
             void studio
-              .createWorkspace(workspaceName)
+              .createWorkspace(workspaceName, workspaceTemplate)
               .then((workspace) => {
-                notify("工作区已创建");
+                const chosen = WORKSPACE_TEMPLATES.find((t) => t.id === workspaceTemplate);
+                notify(
+                  chosen?.assistantLabel
+                    ? `工作区已创建，并自动启用「${chosen.assistantLabel}」`
+                    : "工作区已创建",
+                );
                 if (afterWorkspace.current === "cloud") {
                   navigate("settings", { section: "cloud", workspace: workspace.id });
                 } else if (afterWorkspace.current === "chat") {
@@ -452,7 +460,55 @@ export default function App() {
           }}
         >
           <h2 id="workspace-title">创建工作区</h2>
-          <p>为一个项目或一类工作保留独立的会话。</p>
+          <p>为一个项目、一门课程或一类生活事务保留独立的资料、记忆与会话。</p>
+          <div className="field">
+            <label>选择使用场景（可选）</label>
+            <div
+              role="radiogroup"
+              aria-label="工作区场景模板"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                gap: "8px",
+              }}
+            >
+              {WORKSPACE_TEMPLATES.map((tpl) => {
+                const selected = workspaceTemplate === tpl.id;
+                return (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={creating}
+                    onClick={() => setWorkspaceTemplate(tpl.id)}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      gap: "3px",
+                      padding: "8px 10px",
+                      borderRadius: "var(--radius-control)",
+                      border: selected
+                        ? "1.5px solid var(--accent, #2563eb)"
+                        : "1px solid var(--line)",
+                      background: selected
+                        ? "var(--accent-soft, rgba(37, 99, 235, 0.08))"
+                        : "var(--surface)",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      color: "inherit",
+                    }}
+                  >
+                    <strong style={{ fontSize: "0.85rem" }}>{tpl.label}</strong>
+                    <small style={{ color: "var(--muted)", fontSize: "0.75rem", lineHeight: 1.35 }}>
+                      {tpl.tagline}
+                    </small>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="field">
             <label htmlFor="workspace-name">工作区名称</label>
             <input
@@ -461,7 +517,10 @@ export default function App() {
               onChange={(event) => setWorkspaceName(event.target.value)}
               required
               maxLength={80}
-              placeholder="例如：产品设计"
+              placeholder={
+                WORKSPACE_TEMPLATES.find((t) => t.id === workspaceTemplate)?.placeholder ??
+                "例如：产品设计"
+              }
               readOnly={creating}
               aria-describedby={workspaceError ? "workspace-error" : undefined}
             />

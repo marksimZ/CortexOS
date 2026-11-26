@@ -106,9 +106,13 @@ pub async fn bootstrap(state: State<'_, AppState>) -> AppResult<Bootstrap> {
 }
 
 #[tauri::command]
-pub async fn create_workspace(state: State<'_, AppState>, name: String) -> AppResult<Workspace> {
+pub async fn create_workspace(
+    state: State<'_, AppState>,
+    name: String,
+    template: Option<String>,
+) -> AppResult<Workspace> {
     blocking(state.database.clone()?, move |db| {
-        db.create_workspace(&name)
+        db.create_workspace_with_template(&name, template.as_deref())
     })
     .await
 }
