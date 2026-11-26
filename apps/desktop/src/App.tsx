@@ -1,6 +1,7 @@
 import { closeDraftWindow, useDraftWindow } from "./draft-store";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppDialog, openDialog } from "./components/AppDialog";
+import { DropImportOverlay } from "./components/DropImportOverlay";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
@@ -312,6 +313,17 @@ export default function App() {
           }}
         />
       )}
+      <DropImportOverlay
+        studio={studio}
+        page={page}
+        onDocumentsImported={(ws, docs) => {
+          setKnowledgeRevision((n) => n + 1);
+          if (page === "knowledge" && docs[0]) {
+            setKnowledgeSelection({ workspace: ws, id: docs[0].nodeId });
+            navigate("knowledge", { workspace: ws, node: docs[0].nodeId });
+          }
+        }}
+      />
       <AppDialog
         ref={namingDialog}
         className="form-dialog"

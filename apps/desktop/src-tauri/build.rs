@@ -187,6 +187,7 @@ fn main() {
             "inspect_benchmark_model",
             "discard_source",
             "choose_source",
+            "import_dropped_files",
             "import_source_folder",
             "list_watched_folders",
             "sync_watched_folder",

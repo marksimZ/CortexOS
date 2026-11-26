@@ -7,7 +7,7 @@ import type {
   SourceDocument,
   SourceRef,
 } from "../SourceBrowser";
-import type { RunSummary } from "../studio";
+import type { MessageImage, RunSummary } from "../studio";
 import { createClient, type Command, type WorkspaceArgs } from "./request";
 
 type NodeArgs = WorkspaceArgs & { nodeId: string };
@@ -51,6 +51,26 @@ export type SuggestedKnowledgeLink = {
   score: number;
 };
 
+export type DroppedKnowledgeItem = {
+  sourceId: string;
+  nodeId: string;
+  version: number;
+  title: string;
+  fileName: string;
+  status: "imported" | "updated" | "unchanged";
+};
+
+export type DroppedFileError = {
+  fileName: string;
+  reason: string;
+};
+
+export type DroppedFilesReport = {
+  documents: DroppedKnowledgeItem[];
+  images: MessageImage[];
+  errors: DroppedFileError[];
+};
+
 export const knowledge = createClient<{
   list_knowledge: Command<WorkspaceArgs, KnowledgeNode[]>;
   get_knowledge: Command<NodeArgs, KnowledgeDetail>;
@@ -61,6 +81,7 @@ export const knowledge = createClient<{
   list_sources: Command<WorkspaceArgs, SourceDocument[]>;
   get_source: Command<SourceArgs & { version: number }, Snapshot>;
   choose_source: Command<WorkspaceArgs, Preview | null>;
+  import_dropped_files: Command<WorkspaceArgs & { paths: string[] }, DroppedFilesReport>;
   import_source_folder: Command<
     WorkspaceArgs,
     FolderSyncReport | null

@@ -1,5 +1,11 @@
 # 里程碑记录
 
+## 2026-11-26 Phase 11：全窗口「拖拽文件即入库 / 即提问」
+
+- **后端安全批量拖放导入（独立 Codex/GPT 新会话 `01a215d6-bb66-76d3-8b6c-58508a69404e` 交付）**：在 `sources.rs` / `commands.rs` 新增 `import_dropped_files` 命令（同步注册至 `lib.rs`、`build.rs`、`capabilities/default.json`），支持单次最多 20 个路径混合导入文档（PDF/PPTX/DOCX/XLSX/EPUB/TXT/MD/代码，返回生效 `nodeId`/`version`/`title`）与图片（PNG/JPEG/WebP/GIF 最多 4 张，纯 Rust Base64 编码校验）。图片与文档共用严格的本地磁盘路径校验、符号链接拒绝、`GetFinalPathNameByHandleW` 句柄防替换与敏感文件名过滤；单个非法文件/目录独立报错不阻断同批有效文件。同时优化文档标题推导自动去除 `.pdf`/`.pptx`/`.docx`/`.xlsx`/`.epub`/`.csv` 后缀。
+- **前端全窗口拖放联动（`DropImportOverlay.tsx` + `App.tsx`）**：接入 Tauri v2 原生 `getCurrentWebview().onDragDropEvent`，拖入文件时浮出全屏半透明虚线提示层；在**对话页**松手自动将导入文档挂载为当前对话锁定上下文并把拖入图片贴入输入框，在**知识/图谱页**松手直接入库并刷新列表与导图（拖入图片自动跳回对话页贴入）。
+- **实测与未验证范围**：执行 `npm.cmd --prefix apps/desktop run build`、`node --experimental-strip-types --test apps/desktop/tests/unit/navigation.test.ts`（2/2 通过）、`cargo test --offline --locked --manifest-path apps/desktop/src-tauri/Cargo.toml --lib sources::tests`（4/4 通过，覆盖文档与 PNG 批量导入、敏感文件与目录拦截、去重与重复导入幂等）及 `cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`（通过）。未运行真实模型推理，Windows 资源管理器物理拖拽入 WebView2 窗口待实机复核。
+
 ## 2026-11-26 Phase 10：全人群多格式文档零依赖解析（PDF / PPTX / XLSX / EPUB）
 
 - **后端多格式提取引擎（独立 Codex/GPT 新会话 `01a215ba-d3c7-7fe2-95f3-da110c40140b` 交付）**：新增 `src-tauri/src/doc_extract.rs`，零新增 Rust crate 依赖，实现：

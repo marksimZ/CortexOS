@@ -292,6 +292,7 @@ pub fn run() {
             commands::inspect_benchmark_model,
             commands::discard_source,
             commands::choose_source,
+            commands::import_dropped_files,
             commands::import_source_folder,
             commands::commit_source,
             commands::list_sources,

@@ -190,6 +190,7 @@
     "allow-inspect-benchmark-model",
     "allow-discard-source",
     "allow-choose-source",
+    "allow-import-dropped-files",
     "allow-import-source-folder",
     "allow-commit-source",
     "allow-list-sources",

@@ -1024,6 +1024,18 @@ pub async fn choose_source(
     Ok(preview)
 }
 #[tauri::command]
+pub async fn import_dropped_files(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    paths: Vec<String>,
+) -> AppResult<crate::sources::DroppedFilesReport> {
+    blocking(state.database.clone()?, move |db| {
+        crate::sources::import_dropped_paths(db, &workspace_id, &paths)
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn import_source_folder(
     app: tauri::AppHandle,
     state: State<'_, AppState>,

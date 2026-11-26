@@ -1,7 +1,7 @@
 use crate::{
     db::Database,
     doc_extract,
-    models::{AppResult, new_id, now},
+    models::{AppResult, MessageImage, new_id, now, validate_message_images},
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -83,6 +83,174 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "txt", "md", "docx", "pptx", "xlsx", "epub", "pdf", "csv", "json", "toml", "yaml", "yml",
     "rs", "ts", "tsx", "js", "jsx", "py", "go", "java", "c", "cpp", "h", "html", "css", "sql",
 ];
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DroppedKnowledgeItem {
+    pub source_id: String,
+    pub node_id: String,
+    pub version: i64,
+    pub title: String,
+    pub file_name: String,
+    pub status: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DroppedFileError {
+    pub file_name: String,
+    pub reason: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DroppedFilesReport {
+    pub documents: Vec<DroppedKnowledgeItem>,
+    pub images: Vec<MessageImage>,
+    pub errors: Vec<DroppedFileError>,
+}
+
+pub fn import_dropped_paths(
+    db: &Database,
+    workspace_id: &str,
+    paths: &[String],
+) -> AppResult<DroppedFilesReport> {
+    db.source_previous(workspace_id, "")?;
+    if paths.is_empty() {
+        return Err("请至少拖入 1 个文件。".into());
+    }
+    if paths.len() > 20 {
+        return Err("单次最多拖入 20 个文件。".into());
+    }
+
+    let mut report = DroppedFilesReport {
+        documents: Vec::new(),
+        images: Vec::new(),
+        errors: Vec::new(),
+    };
+    let mut seen = BTreeSet::new();
+    for p in paths.iter().filter(|p| seen.insert(*p)) {
+        let path = Path::new(p);
+        let file_name = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(p)
+            .to_string();
+        let ext = extension(path);
+        let image_mime = match ext.as_str() {
+            "jpg" | "jpeg" => Some("image/jpeg"),
+            "png" => Some("image/png"),
+            "webp" => Some("image/webp"),
+            "gif" => Some("image/gif"),
+            _ => None,
+        };
+        let result = if selected_metadata(path).is_ok_and(|meta| meta.is_dir()) {
+            Err("暂不支持直接拖入文件夹，请点击「资料文件 → 同步文件夹」绑定目录。".into())
+        } else if let Some(mime_type) = image_mime {
+            if report.images.len() >= 4 {
+                Err("单次最多附带 4 张图片。".into())
+            } else {
+                read_dropped_image(path, mime_type).map(|image| report.images.push(image))
+            }
+        } else if SUPPORTED_EXTENSIONS.contains(&ext.as_str()) {
+            import_dropped_document(db, workspace_id, path).map(|item| {
+                if let Some(item) = item {
+                    report.documents.push(item);
+                }
+            })
+        } else {
+            Err("不支持的文件格式（支持 PDF、PPTX、DOCX、XLSX、EPUB、TXT、MD、代码及常见图片）。".into())
+        };
+        if let Err(reason) = result {
+            report.errors.push(DroppedFileError { file_name, reason });
+        }
+    }
+    Ok(report)
+}
+
+fn import_dropped_document(
+    db: &Database,
+    workspace: &str,
+    path: &Path,
+) -> AppResult<Option<DroppedKnowledgeItem>> {
+    let pending = read_selected(path, workspace, db)?;
+    let previous = pending.preview.previous_version;
+    let source = db.import_source(pending)?;
+    let status = match previous {
+        None => "imported",
+        Some(version) if source.latest_version > version => "updated",
+        _ => "unchanged",
+    };
+    db.connection()?
+        .query_row(
+            "SELECT n.id, v.version, v.title, 0 AS priority, n.updated_at
+             FROM source_managed_knowledge m
+             JOIN knowledge_nodes n ON n.id=m.node_id
+             JOIN knowledge_versions v ON v.node_id=n.id AND v.version=n.effective_version
+             WHERE m.source_id=?1 AND n.workspace_id=?2
+             UNION ALL
+             SELECT n.id, v.version, v.title, 1 AS priority, n.updated_at
+             FROM knowledge_source_links l
+             JOIN knowledge_nodes n ON n.id=l.node_id
+             JOIN knowledge_versions v ON v.node_id=n.id AND v.version=n.effective_version
+             WHERE l.source_id=?1 AND n.workspace_id=?2
+             ORDER BY priority, updated_at DESC, id
+             LIMIT 1",
+            params![source.id, workspace],
+            |row| {
+                Ok(DroppedKnowledgeItem {
+                    source_id: source.id.clone(),
+                    node_id: row.get(0)?,
+                    version: row.get(1)?,
+                    title: row.get(2)?,
+                    file_name: source.name.clone(),
+                    status: status.into(),
+                })
+            },
+        )
+        .optional()
+        .map_err(error)
+}
+
+fn read_dropped_image(path: &Path, mime_type: &str) -> AppResult<MessageImage> {
+    let (file, _, _) = open_selected(path)?;
+    let bytes = read_bounded(
+        file,
+        2 * 1024 * 1024,
+        "图片文件超过 2 MiB，请压缩后重试或使用 Ctrl+V 粘贴截图。",
+    )?;
+    let image = MessageImage {
+        mime_type: mime_type.into(),
+        data_base64: encode_base64(&bytes),
+    };
+    validate_message_images(std::slice::from_ref(&image))?;
+    Ok(image)
+}
+
+fn encode_base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+
+    for chunk in bytes.chunks(3) {
+        let first = chunk[0];
+        let second = chunk.get(1).copied().unwrap_or_default();
+        let third = chunk.get(2).copied().unwrap_or_default();
+        encoded.push(ALPHABET[usize::from(first >> 2)] as char);
+        encoded.push(ALPHABET[usize::from(((first & 3) << 4) | (second >> 4))] as char);
+        encoded.push(if chunk.len() > 1 {
+            ALPHABET[usize::from(((second & 15) << 2) | (third >> 6))] as char
+        } else {
+            '='
+        });
+        encoded.push(if chunk.len() > 2 {
+            ALPHABET[usize::from(third & 63)] as char
+        } else {
+            '='
+        });
+    }
+
+    encoded
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -259,38 +427,67 @@ fn validate_local_path(path: &Path) -> AppResult<()> {
     Ok(())
 }
 
-pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<PendingSource> {
+fn selected_metadata(path: &Path) -> AppResult<std::fs::Metadata> {
     validate_local_path(path)?;
-    for parent in path.ancestors() {
+    if path.components().any(|component| match component {
+        std::path::Component::ParentDir => true,
+        #[cfg(windows)]
+        std::path::Component::Normal(name) => name.to_string_lossy().contains(':'),
+        _ => false,
+    }) {
+        return Err("请选择文件的实际位置。".into());
+    }
+    // Check from the root down so metadata lookup doesn't traverse a known link.
+    let ancestors: Vec<_> = path.ancestors().collect();
+    for parent in ancestors.into_iter().rev() {
         let meta = std::fs::symlink_metadata(parent)
             .map_err(|_| "无法读取所选文件，请检查权限。".to_string())?;
         if linked(&meta) {
             return Err("文件或所在文件夹有链接跳转，请从实际位置选择原文件。".into());
         }
+        if parent == path {
+            return Ok(meta);
+        }
     }
+    Err("无法读取所选文件，请检查权限。".into())
+}
+
+fn extension(path: &Path) -> String {
+    path.extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_lowercase()
+}
+
+const UNSAFE_SELECTION: &str = "支持 .pdf / .pptx / .docx / .xlsx / .epub / .md / .txt 及常见代码与配置文件；名称涉及密码、访问密钥等敏感信息的文件不能导入。";
+
+fn checked_file_name(path: &Path) -> AppResult<&str> {
     let name = path
         .file_name()
         .and_then(|s| s.to_str())
-        .ok_or("文件名无效。")?
-        .to_string();
+        .ok_or("文件名无效。")?;
     let lower = name.to_lowercase();
-    let extension = path
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    if !SUPPORTED_EXTENSIONS.contains(&extension.as_str())
-        || lower.starts_with('.')
+    if lower.starts_with('.')
         || ["token", "credential", "secret", "password", "id_rsa"]
             .iter()
             .any(|term| lower.contains(term))
     {
-        return Err(
-            "支持 .pdf / .pptx / .docx / .xlsx / .epub / .md / .txt 及常见代码与配置文件；名称涉及密码、访问密钥等敏感信息的文件不能导入。".into(),
-        );
+        return Err(UNSAFE_SELECTION.into());
     }
+    Ok(name)
+}
+
+fn open_selected(path: &Path) -> AppResult<(std::fs::File, PathBuf, &str)> {
+    let name = checked_file_name(path)?;
+    if !selected_metadata(path)?.is_file() {
+        return Err("请选择本地磁盘上的普通文件。".into());
+    }
+
     let canonical =
         std::fs::canonicalize(path).map_err(|_| "无法找到所选文件的实际位置。".to_string())?;
+    validate_local_path(&canonical)?;
+    checked_file_name(&canonical)?;
+
     let mut options = std::fs::OpenOptions::new();
     options.read(true);
     #[cfg(windows)]
@@ -301,18 +498,6 @@ pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<P
     let file = options
         .open(path)
         .map_err(|_| "文件被占用或不可读，请关闭写入程序后重试。".to_string())?;
-    let metadata = file
-        .metadata()
-        .map_err(|_| "无法读取文件属性。".to_string())?;
-    let max_mib = if matches!(extension.as_str(), "docx" | "pptx" | "xlsx" | "epub" | "pdf") {
-        32
-    } else {
-        2
-    };
-    let max_bytes = max_mib * 1024 * 1024;
-    if !metadata.is_file() || metadata.len() > max_bytes {
-        return Err(format!("请选择不超过 {max_mib} MiB 的普通文件。"));
-    }
     // Validate the opened handle, so a changed parent path cannot redirect the read.
     #[cfg(windows)]
     {
@@ -345,13 +530,45 @@ pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<P
             return Err("文件路径在读取前发生变化，请重新选择。".into());
         }
     }
+    Ok((file, canonical, name))
+}
+
+fn read_bounded(file: std::fs::File, max_bytes: u64, oversized: &str) -> AppResult<Vec<u8>> {
+    let metadata = file
+        .metadata()
+        .map_err(|_| "无法读取文件属性。".to_string())?;
+    if !metadata.is_file() || linked(&metadata) {
+        return Err("请选择本地磁盘上的普通文件。".into());
+    }
+    if metadata.len() > max_bytes {
+        return Err(oversized.into());
+    }
     let mut bytes = Vec::new();
     file.take(max_bytes + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "文件读取失败。".to_string())?;
     if bytes.len() as u64 > max_bytes {
-        return Err(format!("文件超过 {max_mib} MiB，请缩小后重试。"));
+        return Err(oversized.into());
     }
+    Ok(bytes)
+}
+
+pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<PendingSource> {
+    let extension = extension(path);
+    if !SUPPORTED_EXTENSIONS.contains(&extension.as_str()) {
+        return Err(UNSAFE_SELECTION.into());
+    }
+    let (file, canonical, name) = open_selected(path)?;
+    let max_mib = if matches!(extension.as_str(), "docx" | "pptx" | "xlsx" | "epub" | "pdf") {
+        32
+    } else {
+        2
+    };
+    let bytes = read_bounded(
+        file,
+        max_mib * 1024 * 1024,
+        &format!("请选择不超过 {max_mib} MiB 的普通文件。"),
+    )?;
     let raw_hash = hash(&bytes);
     let content = match extension.as_str() {
         "docx" => doc_extract::extract_docx(&bytes)?,
@@ -377,7 +594,7 @@ pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<P
         created: Instant::now(),
         preview: SourcePreview {
             ticket: new_id(),
-            name,
+            name: name.into(),
             content_hash: hash(content.as_bytes()),
             content,
             previous_version: previous.map(|p| p.0),
@@ -548,15 +765,19 @@ impl Database {
         if kind != "reauthorized" && managed.as_ref().is_none_or(|(_, _, active)| *active) {
             let line_count = pending.preview.content.split('\n').count().max(1) as i64;
             let content_excerpt: String = pending.preview.content.chars().take(20000).collect();
-            let doc_title = pending
-                .preview
-                .name
-                .strip_suffix(".md")
-                .or_else(|| pending.preview.name.strip_suffix(".txt"))
-                .unwrap_or(&pending.preview.name)
-                .chars()
-                .take(80)
-                .collect::<String>();
+            let name = &pending.preview.name;
+            let path = Path::new(name);
+            let title = if matches!(
+                extension(path).as_str(),
+                "pdf" | "pptx" | "docx" | "xlsx" | "epub" | "md" | "txt" | "csv"
+            ) {
+                path.file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .unwrap_or(name)
+            } else {
+                name
+            };
+            let doc_title: String = title.chars().take(80).collect();
             let (node_id, node_version) = if let Some((existing_id, prev_ver, _)) = managed {
                 let next_ver = prev_ver + 1;
                 tx.execute(
@@ -736,6 +957,66 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn import_dropped_paths_handles_documents_images_and_rejects_secrets_and_dirs() {
+        let root = std::env::temp_dir().join(format!("cortexos-dropped-{}", new_id()));
+        let folder = root.join("folder");
+        std::fs::create_dir_all(&folder).unwrap();
+        let db = Database::open(&root.join("data")).unwrap();
+        let ws = db.create_workspace("拖入文件测试").unwrap().id;
+        let note = root.join("plan.MD");
+        let image = root.join("pixel.png");
+        let secret = root.join("my_secret_notes.txt");
+        std::fs::write(&note, "# 计划\n第一版").unwrap();
+        std::fs::write(
+            &image,
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x01\x00\x00\x00\x01\
+              \x08\x00\x00\x00\x00\x3a\x7e\x9b\x55\x00\x00\x00\x0aIDAT\x78\x9c\x63\
+              \x60\x00\x00\x00\x02\x00\x01\x48\xaf\xa4\x71\x00\x00\x00\x00IEND\xae\x42\x60\x82",
+        )
+        .unwrap();
+        std::fs::write(&secret, "敏感内容").unwrap();
+        let paths = [&secret, &note, &image, &note, &folder]
+            .map(|path| path.to_str().unwrap().to_owned());
+
+        let report = import_dropped_paths(&db, &ws, &paths).unwrap();
+        assert_eq!(report.documents.len(), 1);
+        let item = &report.documents[0];
+        assert_eq!(item.status, "imported");
+        assert_eq!(item.title, "plan");
+        assert_eq!(item.file_name, "plan.MD");
+        assert!(uuid::Uuid::parse_str(&item.node_id).is_ok());
+        assert_eq!(item.version, 1);
+        assert_eq!(report.images.len(), 1);
+        assert_eq!(report.images[0].mime_type, "image/png");
+        assert_eq!(
+            report.images[0].data_base64,
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg=="
+        );
+        assert_eq!(report.errors.len(), 2);
+        assert_eq!(report.errors[0].file_name, "my_secret_notes.txt");
+        assert!(report.errors[0].reason.contains("敏感信息"));
+        assert_eq!(report.errors[1].file_name, "folder");
+        assert!(report.errors[1].reason.contains("同步文件夹"));
+
+        let repeat = import_dropped_paths(&db, &ws, &paths[1..2]).unwrap();
+        assert!(repeat.errors.is_empty());
+        assert_eq!(repeat.documents.len(), 1);
+        assert_eq!(repeat.documents[0].status, "unchanged");
+        assert_eq!(repeat.documents[0].node_id, item.node_id);
+
+        std::fs::write(&note, "# 计划\n第二版").unwrap();
+        let update = import_dropped_paths(&db, &ws, &paths[1..2]).unwrap();
+        assert!(update.errors.is_empty());
+        assert_eq!(update.documents.len(), 1);
+        assert_eq!(update.documents[0].status, "updated");
+        assert_eq!(update.documents[0].node_id, item.node_id);
+        assert_eq!(update.documents[0].version, 2);
+
+        drop(db);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn watched_folders_upsert_sync_and_remove() {
