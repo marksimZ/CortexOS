@@ -3281,3 +3281,26 @@ Markdown用原文存储，不改变请求或证据；不支持数学公式/代�
 - `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked incremental_index`：1 passed, 0 failed（0 warnings）。
 - `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked chat_search`：2 passed, 0 failed（0 warnings）。
 - `cargo check --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol`：0 error, 0 warning。
+
+
+### 2026-11-26 路线 C · 切片 C2：Route A–C 原生 WebView2 全量回归与 `0.2.0` 正式版 NSIS 安装包
+
+完成路线 A–C 全部 5 项桌面原生 WebView2 E2E 回归验证与 Windows `0.2.0` Release NSIS 安装包构建：
+
+- **实际执行命令与结果（全部为本地离线/loopback 校验，零真实 Ollama / 向量 / 公网 / 云端调用）**：
+  - `cargo build --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`：调试桌面二进制构建通过（56.40s，0 warning）。
+  - `$env:CORTEXOS_NATIVE_ONLY="1"; npx.cmd playwright test tests/generation-style-native.spec.ts tests/thinking-stream-native.spec.ts tests/web-url-import-native.spec.ts tests/chat-search-native.spec.ts tests/page-citation-native.spec.ts --project=desktop --output=../../artifacts/release-0.2.0-regression`（目录 `apps/desktop`）：**5 passed (14.7s), 0 failed**，逐项覆盖：
+    - `chat-search-native.spec.ts`（3.6s）
+    - `generation-style-native.spec.ts`（3.2s）
+    - `page-citation-native.spec.ts`（2.8s）
+    - `thinking-stream-native.spec.ts`（2.5s）
+    - `web-url-import-native.spec.ts`（1.7s）
+  - `npm.cmd run tauri -- build --bundles nsis -- --offline --locked`（目录 `apps/desktop`，首次未设代理时 `tauri-bundler` 下载 `nsis-3.13.zip` 出现 `io: unexpected end of file` 中断，配置本地代理后完成 NSIS `3.13` 与 `nsis_tauri_utils v0.5.3` 哈希校验并打包成功；Vite Release 504ms 零大块告警，Release 编译 7m 05s；Release 非测试 cfg 存在 3 处既有 `unused_mut` 提示：`commands.rs:1034`、`cloud/vault.rs:42`、`lib.rs:83`）。
+- **Windows `0.2.0` NSIS 安装包产物记录**：
+  - 路径：`apps/desktop/src-tauri/target/release/bundle/nsis/CortexOS_0.2.0_x64-setup.exe`
+  - 大小：`6764514` bytes（`6.45 MiB`）
+  - SHA256：`FB149F6D321F5397876CDE828E214530191A7523956EED6AE7C966E787FE9D29`
+  - 代码签名：`NotSigned`
+- **未执行 / 手工待测项**：
+  - 所有原生 WebView2 E2E 用例均使用 `127.0.0.1` loopback HTTP 本地测试桩，真实 Ollama 推理、真实本地向量生成、公网网页抓取与真实云端 API 调用尚未在此轮回归中实测；
+  - 已核对 `.exe` 字节大小、SHA256 与签名状态，未自动安装运行 `CortexOS_0.2.0_x64-setup.exe`。
