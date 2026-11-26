@@ -31,3 +31,13 @@ test("save commits the submitted values and retains edits made while saving", ()
     timeoutSeconds: 240,
   });
 });
+
+test("external style save updates untouched settings draft fields and keeps unsaved edits", () => {
+  const draft = { ...original, numCtx: 8192 };
+  const submitted = { ...original, temperature: 0.2, topP: 0.85 };
+  const saved = { ...submitted };
+  assert.deepEqual(rebaseSettingsDraft(draft, submitted, saved, original), {
+    ...saved,
+    numCtx: 8192,
+  });
+});

@@ -49,7 +49,9 @@ export function SettingsPage({ studio }: { studio: Studio }) {
   const installed = studio.health?.models.some(
     (model) => model.name === draft.model,
   );
-  const changed = JSON.stringify(draft) !== JSON.stringify(studio.settings);
+  const changed = (
+    ["model", "numCtx", "temperature", "topP", "numPredict", "timeoutSeconds", "deepThinking"] as const
+  ).some((key) => !Object.is(draft[key], studio.settings[key]));
   const field = (
     name: "numCtx" | "numPredict" | "temperature" | "topP" | "timeoutSeconds",
     value: number | null,

@@ -3110,3 +3110,25 @@ Markdown用原文存储，不改变请求或证据；不支持数学公式/代�
 - `git -c core.safecrlf=false diff --check`：通过。
 
 未验证：真实 WebView2 窗口交互截图、真实本地 Ollama 与线上云端模型推理表现待后续人工确认或授权后实测。
+
+### 2026-11-26 分层生成参数原生 WebView2 验收与草稿同步修复
+
+补充原生 WebView2 端到端 Playwright 用例，并在实机测试与截图走查中捕获、修复了三项前后端同步细节：
+
+- **问题修复**：
+  - `apps/desktop/src/components/GenerationStylePanel.tsx`：为「开启深度思考」复选框增加本地乐观草稿 `thinkingDraft`（`catch` 失败回滚并与 `studio.settings.deepThinking` 同步），避免异步保存 IPC 未返回前点击后回弹导致点击态异常或快速操作丢失。
+  - `apps/desktop/src/settings-draft.ts`、`apps/desktop/src/studio-settings.ts`、`apps/desktop/tests/unit/settings-draft.test.ts`：扩展 `rebaseSettingsDraft(draft, previous, saved, previousSaved?)` 并传入 `current.saved`；当用户通过对话工具栏或「我的助手」面板保存预设时，「模型连接」表单未编辑的草稿字段同步更新为最新配置，同时保留用户未保存的手工修改。
+  - `apps/desktop/src/Settings.tsx`：`changed` 判定由 `JSON.stringify` 改为显式按字段值比较，消除 Rust `ModelSettings`（`deepThinking` 键序在前）与前端草稿对象键序不一致引发的误报「有未保存的更改」。
+- **新增原生测试**：
+  - [generation-style-native.spec.ts](apps/desktop/tests/generation-style-native.spec.ts)（已注册到 [playwright.config.ts](apps/desktop/playwright.config.ts)）：使用本机 `127.0.0.1` 回环假 Ollama NDJSON 服务启动 `cortexos-desktop.exe`，验证聊天工具栏弹窗切换「灵感发散」+ 开启深度思考、`Escape` 关闭、切换「严谨准确」+ 关闭深度思考两次发送的 `/api/chat` 请求体（`options.temperature`、`options.top_p`、`think`）、我的助手高级微调 `numPredict=768` 持久化（`bootstrap`），以及「模型连接」页同步数值与「保存设置」禁用状态。
+
+实际验证（仅使用本机回环假服务，未调用真实 Ollama 或线上云端模型）：
+
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run build`：`tsc --noEmit` 与 `vite build` 通过（Vite 561ms）。
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run test:unit`：5/5 通过（含新增外部预设保存草稿 rebase 用例）。
+- `npx.cmd --prefix d:\vibecoding\CortexOS\apps\desktop prettier --check d:\vibecoding\CortexOS\apps\desktop\src\settings-draft.ts d:\vibecoding\CortexOS\apps\desktop\tests\unit\settings-draft.test.ts`：通过。
+- `cargo build --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`：通过（17.93s）。
+- `$env:CORTEXOS_NATIVE_ONLY="1"; npx.cmd playwright test tests/generation-style-native.spec.ts --project=desktop --output=../../artifacts/generation-style-native`（目录 `apps/desktop`）：1 passed（5.9s）。
+- 已查看原生 WebView2 实拍截图：`artifacts/generation-style-native/generation-style-native-ge-a525d-settings-and-Ollama-payload-desktop/{composer-style-popover,settings-assistant-style,settings-model-advanced}.png`，确认弹窗与设置页排布清晰、「保存设置」已正确禁用且无溢出。
+
+未验证：真实本地 Ollama 模型推理（受本地显存调用确认门槛限制）与真实线上云端模型返回表现待后续人工或授权测试确认。

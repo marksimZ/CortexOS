@@ -60,12 +60,19 @@ export function GenerationStylePanel({
   const [tempDraft, setTempDraft] = useState(studio.settings.temperature);
   const [topPDraft, setTopPDraft] = useState(studio.settings.topP);
   const [numPredictDraft, setNumPredictDraft] = useState(studio.settings.numPredict);
+  const [thinkingDraft, setThinkingDraft] = useState(studio.settings.deepThinking);
 
   useEffect(() => {
     setTempDraft(studio.settings.temperature);
     setTopPDraft(studio.settings.topP);
     setNumPredictDraft(studio.settings.numPredict);
-  }, [studio.settings.temperature, studio.settings.topP, studio.settings.numPredict]);
+    setThinkingDraft(studio.settings.deepThinking);
+  }, [
+    studio.settings.temperature,
+    studio.settings.topP,
+    studio.settings.numPredict,
+    studio.settings.deepThinking,
+  ]);
 
   const currentPreset = GENERATION_PRESETS.find((preset) =>
     matchesPreset(studio.settings.temperature, studio.settings.topP, preset),
@@ -91,6 +98,7 @@ export function GenerationStylePanel({
       });
       notify(successMessage);
     } catch (err) {
+      setThinkingDraft(studio.settings.deepThinking);
       setError(errorText(err));
     } finally {
       setSaving(false);
@@ -144,14 +152,16 @@ export function GenerationStylePanel({
       <label className="generation-thinking-toggle">
         <input
           type="checkbox"
-          checked={studio.settings.deepThinking}
+          checked={thinkingDraft}
           disabled={!studio.desktop || saving}
-          onChange={(event) =>
+          onChange={(event) => {
+            const deepThinking = event.target.checked;
+            setThinkingDraft(deepThinking);
             void commit(
-              { deepThinking: event.target.checked },
-              event.target.checked ? "已开启深度思考" : "已关闭深度思考",
-            )
-          }
+              { deepThinking },
+              deepThinking ? "已开启深度思考" : "已关闭深度思考",
+            );
+          }}
         />
         <span>
           <strong>开启深度思考</strong>
@@ -258,6 +268,7 @@ export function GenerationStylePanel({
               setTempDraft(defaultSettings.temperature);
               setTopPDraft(defaultSettings.topP);
               setNumPredictDraft(defaultSettings.numPredict);
+              setThinkingDraft(defaultSettings.deepThinking);
               void commit(
                 {
                   temperature: defaultSettings.temperature,

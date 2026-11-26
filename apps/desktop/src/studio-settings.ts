@@ -31,7 +31,10 @@ export function useStudioSettings() {
     const saved = await chat("save_settings", { settings: next });
     if (write !== writes.current) return;
     writes.current++;
-    setState(current => ({ saved, draft: rebaseSettingsDraft(current.draft, next, saved) }));
+    setState(current => ({
+      saved,
+      draft: rebaseSettingsDraft(current.draft, next, saved, current.saved),
+    }));
   }, []);
   return { settings: state.saved, settingsDraft: state.draft, setSettingsDraft, settingsRevision, applySettings, saveSettings };
 }
