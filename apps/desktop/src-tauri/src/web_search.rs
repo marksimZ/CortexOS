@@ -31,6 +31,8 @@ const MAX_PAGE_CHARS: usize = 16_000;
 
 pub(crate) struct WebSearch {
     fixture: AppResult<Option<Url>>,
+    #[cfg(debug_assertions)]
+    page_fixture: AppResult<Option<Url>>,
 }
 
 impl WebSearch {
@@ -39,42 +41,100 @@ impl WebSearch {
         let fixture = fixture_endpoint(_default_directory);
         #[cfg(not(debug_assertions))]
         let fixture = Ok(None);
-        Self { fixture }
+        Self {
+            fixture,
+            #[cfg(debug_assertions)]
+            page_fixture: loopback_fixture_endpoint(
+                _default_directory,
+                "CORTEXOS_TEST_WEB_PAGE_URL",
+                "网页抓取替身需要独立测试数据目录及 127.0.0.1 回环地址。",
+            ),
+        }
     }
 }
 
 #[cfg(debug_assertions)]
 fn fixture_endpoint(default_directory: &Path) -> AppResult<Option<Url>> {
-    let invalid = || "Brave 搜索替身需要独立测试数据目录及 127.0.0.1 回环地址。".to_string();
-    let Some(endpoint) = std::env::var_os("CORTEXOS_TEST_BRAVE_URL") else {
+    let message = "Brave 搜索替身需要独立测试数据目录及 127.0.0.1 回环地址。";
+    let Some(mut endpoint) =
+        loopback_fixture_endpoint(default_directory, "CORTEXOS_TEST_BRAVE_URL", message)?
+    else {
         return Ok(None);
     };
-    let directory = std::env::var_os("CORTEXOS_TEST_DATA_DIR").ok_or_else(invalid)?;
+    if endpoint.port().is_none()
+        || !matches!(endpoint.path(), "/" | "/res/v1/web/search")
+        || endpoint.query().is_some()
+        || endpoint.fragment().is_some()
+    {
+        return Err(message.into());
+    }
+    endpoint.set_path("/res/v1/web/search");
+    Ok(Some(endpoint))
+}
+
+#[cfg(debug_assertions)]
+fn loopback_fixture_endpoint(
+    default_directory: &Path,
+    variable: &str,
+    message: &str,
+) -> AppResult<Option<Url>> {
+    let invalid = || message.to_string();
+    let Some(endpoint) = std::env::var_os(variable) else {
+        return Ok(None);
+    };
+    let directory = std::env::var("CORTEXOS_TEST_DATA_DIR").map_err(|_| invalid())?;
     let directory = Path::new(&directory);
     if !directory.is_absolute() {
         return Err(invalid());
     }
     let actual = directory.canonicalize().map_err(|_| invalid())?;
-    let normal = default_directory
-        .canonicalize()
-        .unwrap_or_else(|_| default_directory.to_owned());
+    // Compare canonical paths even when the default data directory has yet to be created.
+    let mut ancestor = default_directory;
+    let normal = loop {
+        match ancestor.canonicalize() {
+            Ok(path) => {
+                let suffix = default_directory
+                    .strip_prefix(ancestor)
+                    .map_err(|_| invalid())?;
+                break path.join(suffix);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                ancestor = ancestor.parent().ok_or_else(invalid)?;
+            }
+            Err(_) => return Err(invalid()),
+        }
+    };
     if actual == normal || actual.starts_with(&normal) || normal.starts_with(&actual) {
         return Err(invalid());
     }
-    let mut endpoint = Url::parse(endpoint.to_str().ok_or_else(invalid)?).map_err(|_| invalid())?;
+    let raw = endpoint.to_str().ok_or_else(invalid)?;
+    let endpoint = Url::parse(raw).map_err(|_| invalid())?;
+    // Url normalizes an explicit HTTP port 80 to the implicit default.
+    let explicit_default_port = || {
+        raw.strip_prefix("http://127.0.0.1:")
+            .and_then(|rest| rest.split(['/', '?', '#']).next())
+            .and_then(|port| port.parse::<u16>().ok())
+            == Some(80)
+    };
     if endpoint.scheme() != "http"
         || endpoint.host_str() != Some("127.0.0.1")
-        || endpoint.port().is_none()
-        || !matches!(endpoint.path(), "/" | "/res/v1/web/search")
+        || (endpoint.port().is_none() && !explicit_default_port())
         || !endpoint.username().is_empty()
         || endpoint.password().is_some()
-        || endpoint.query().is_some()
-        || endpoint.fragment().is_some()
     {
         return Err(invalid());
     }
-    endpoint.set_path("/res/v1/web/search");
     Ok(Some(endpoint))
+}
+
+#[cfg(debug_assertions)]
+fn web_page_fixture_matches(fixture: &Url, candidate: &Url) -> bool {
+    candidate.scheme() == fixture.scheme()
+        && candidate.host_str() == fixture.host_str()
+        && candidate.port_or_known_default() == fixture.port_or_known_default()
+        && candidate.username().is_empty()
+        && candidate.password().is_none()
+        && candidate.as_str().len() <= 4096
 }
 
 async fn workspace_vault(
@@ -170,6 +230,7 @@ pub(crate) struct WebPageContent {
     text: String,
     fetched_at: String,
     saved_node_id: Option<String>,
+    pub saved_version: Option<i64>,
 }
 
 #[derive(Default, Deserialize)]
@@ -568,11 +629,31 @@ fn read_news(body: &[u8]) -> AppResult<Vec<WebResult>> {
 #[tauri::command]
 pub(crate) async fn fetch_web_page(
     state: State<'_, AppState>,
+    _search: State<'_, WebSearch>,
     workspace_id: String,
     url: String,
     save_to_knowledge: Option<bool>,
 ) -> AppResult<WebPageContent> {
-    let parsed = result_url(url.trim())
+    let url = url.trim();
+    let parsed = result_url(url);
+    #[cfg(debug_assertions)]
+    let fixture_url = if parsed.is_none() && url.len() <= 4096 {
+        _search
+            .page_fixture
+            .as_ref()
+            .map_err(Clone::clone)?
+            .as_ref()
+            .and_then(|fixture| {
+                Url::parse(url)
+                    .ok()
+                    .filter(|candidate| web_page_fixture_matches(fixture, candidate))
+            })
+    } else {
+        None
+    };
+    #[cfg(debug_assertions)]
+    let parsed = parsed.or_else(|| fixture_url.clone());
+    let parsed = parsed
         .ok_or_else(|| "仅支持公开的 http/https 网页地址（已拦截内网或本机地址）。".to_string())?;
     let ws = workspace_id.clone();
     blocking(state.database.clone()?, move |db| {
@@ -580,15 +661,31 @@ pub(crate) async fn fetch_web_page(
     })
     .await?;
 
-    let client = model_client(Duration::from_secs(6))
+    let builder = model_client(Duration::from_secs(6))
         .timeout(Duration::from_secs(15))
-        .no_proxy()
-        .dns_resolver(PublicPageResolver)
-        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+        .no_proxy();
+    #[cfg(debug_assertions)]
+    let builder = if fixture_url.is_some() {
+        builder
+    } else {
+        builder.dns_resolver(PublicPageResolver)
+    };
+    #[cfg(not(debug_assertions))]
+    let builder = builder.dns_resolver(PublicPageResolver);
+    let allowed = move |candidate: &Url| {
+        #[cfg(debug_assertions)]
+        if let Some(fixture) = &fixture_url {
+            return web_page_fixture_matches(fixture, candidate);
+        }
+        result_url(candidate.as_str()).is_some()
+    };
+    let redirect_allowed = allowed.clone();
+    let client = builder
+        .redirect(reqwest::redirect::Policy::custom(move |attempt| {
             if attempt.previous().len() >= 5 {
                 return attempt.error("网页重定向次数过多。");
             }
-            if result_url(attempt.url().as_str()).is_none() {
+            if !redirect_allowed(attempt.url()) {
                 return attempt.error("重定向目标地址不受信任。");
             }
             attempt.follow()
@@ -611,7 +708,7 @@ pub(crate) async fn fetch_web_page(
         .map_err(|_| "网页连接失败或超时，请检查网络后重试。".to_string())?;
 
     let final_url = response.url().clone();
-    if result_url(final_url.as_str()).is_none() {
+    if !allowed(&final_url) {
         return Err("网页最终跳转地址不受信任，已拦截。".into());
     }
     if !response.status().is_success() {
@@ -663,41 +760,29 @@ pub(crate) async fn fetch_web_page(
 
     let fetched_at = now();
     let final_url_str = final_url.to_string();
-    let saved_node_id = if save_to_knowledge.unwrap_or(false) {
+    let (saved_node_id, saved_version) = if save_to_knowledge.unwrap_or(false) {
         let host = final_url.host_str().unwrap_or("网页").to_string();
-        let node_title: String = title
-            .chars()
-            .filter(|c| !c.is_control())
-            .take(60)
-            .collect::<String>()
-            .trim()
-            .to_string();
-        let node_title = if node_title.is_empty() {
-            format!("网页资料：{}", host)
-        } else {
-            node_title
-        };
-        let header = format!("来源网页：{final_url_str}\n抓取时间：{fetched_at}\n\n");
-        let max_body = 19_500usize.saturating_sub(header.chars().count());
-        let clipped_body: String = text.chars().take(max_body).collect();
-        let content = format!("{header}{clipped_body}");
-        let node_id = blocking(state.database.clone()?, move |db| {
-            db.save_knowledge(crate::knowledge::SaveKnowledge {
-                workspace_id,
-                node_id: None,
-                expected_revision: None,
-                title: node_title,
-                kind: "evidence".into(),
-                content,
-                change_reason: format!("抓取网页正文：{host}"),
-                source_message_id: None,
-                source_excerpt: None,
-            })
+        let (saved_url, saved_title, saved_text, saved_at) = (
+            final_url_str.clone(),
+            title.clone(),
+            text.clone(),
+            fetched_at.clone(),
+        );
+        let (node_id, version) = blocking(state.database.clone()?, move |db| {
+            save_web_page_knowledge(
+                db,
+                &workspace_id,
+                &saved_url,
+                &host,
+                &saved_title,
+                &saved_text,
+                &saved_at,
+            )
         })
         .await?;
-        Some(node_id)
+        (Some(node_id), Some(version))
     } else {
-        None
+        (None, None)
     };
 
     Ok(WebPageContent {
@@ -706,7 +791,48 @@ pub(crate) async fn fetch_web_page(
         text,
         fetched_at,
         saved_node_id,
+        saved_version,
     })
+}
+
+fn save_web_page_knowledge(
+    db: &crate::db::Database,
+    workspace_id: &str,
+    final_url_str: &str,
+    host: &str,
+    title: &str,
+    text: &str,
+    fetched_at: &str,
+) -> AppResult<(String, i64)> {
+    let node_title: String = title.chars().filter(|c| !c.is_control()).take(60).collect();
+    let node_title = match node_title.trim() {
+        "" => format!("网页资料：{host}"),
+        title => title.to_owned(),
+    };
+    let header = format!("来源网页：{final_url_str}\n抓取时间：{fetched_at}\n\n");
+    let max_body = 19_500usize.saturating_sub(header.chars().count());
+    let clipped_body: String = text.chars().take(max_body).collect();
+    let node_id = db.save_knowledge(crate::knowledge::SaveKnowledge {
+        workspace_id: workspace_id.to_owned(),
+        node_id: None,
+        expected_revision: None,
+        title: node_title,
+        kind: "evidence".into(),
+        content: format!("{header}{clipped_body}"),
+        change_reason: format!("抓取网页正文：{host}"),
+        source_message_id: None,
+        source_excerpt: None,
+    })?;
+    let version = db
+        .connection()?
+        .query_row(
+            "SELECT COALESCE(effective_version, latest_version, 1)
+             FROM knowledge_nodes WHERE workspace_id = ?1 AND id = ?2",
+            rusqlite::params![workspace_id, node_id],
+            |row| row.get(0),
+        )
+        .map_err(crate::db::error)?;
+    Ok((node_id, version))
 }
 
 fn extract_web_text(raw: &str, content_type: &str, url: &Url) -> (String, String) {
@@ -923,12 +1049,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_private_and_loopback_urls_for_web_fetch() {
-        assert!(result_url("http://127.0.0.1:8080/secret").is_none());
-        assert!(result_url("http://localhost:11434/api/tags").is_none());
-        assert!(result_url("http://192.168.1.10/admin").is_none());
-        assert!(result_url("file:///etc/passwd").is_none());
+    fn web_page_import_rejects_local_and_private_urls() {
+        for url in [
+            "http://127.0.0.1/a",
+            "http://localhost:8080/",
+            "http://192.168.1.10/",
+            "http://10.0.0.1/",
+            "file:///c:/test.html",
+        ] {
+            assert!(result_url(url).is_none(), "{url}");
+        }
         assert!(result_url("https://example.com/article").is_some());
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn web_page_import_fixture_matches_only_configured_origin() {
+        let fixture = Url::parse("http://127.0.0.1:8080/start").unwrap();
+        let matches =
+            |candidate| web_page_fixture_matches(&fixture, &Url::parse(candidate).unwrap());
+        assert!(matches("http://127.0.0.1:8080/redirected"));
+        for candidate in [
+            "https://127.0.0.1:8080/",
+            "http://127.0.0.1:8081/",
+            "http://localhost:8080/",
+            "http://user@127.0.0.1:8080/",
+            "blob:http://127.0.0.1:8080/opaque",
+        ] {
+            assert!(!matches(candidate), "{candidate}");
+        }
     }
 
     #[test]
@@ -957,7 +1106,7 @@ mod tests {
     }
 
     #[test]
-    fn extracts_clean_text_and_title_from_html() {
+    fn web_page_import_extracts_title_and_body_without_scripts() {
         let html = r#"<!doctype html>
         <html>
           <head>
@@ -969,7 +1118,7 @@ mod tests {
             <!-- comment to ignore -->
             <h1>核心设计</h1>
             <p>第一段内容 &nbsp; 包含 &lt;标签&gt;。</p>
-            <p>第二段内容。</p>
+            <p>第二段内容。 English text.</p>
           </body>
         </html>"#;
         let url = Url::parse("https://example.com/guide").unwrap();
@@ -977,8 +1126,50 @@ mod tests {
         assert_eq!(title, "CortexOS & 个人知识库");
         assert!(text.contains("核心设计"));
         assert!(text.contains("第一段内容 包含 <标签>。"));
-        assert!(text.contains("第二段内容。"));
+        assert!(text.contains("第二段内容。 English text."));
         assert!(!text.contains("ignore me"));
         assert!(!text.contains("color: red"));
+        assert!(!text.contains("comment to ignore"));
+    }
+
+    #[test]
+    fn web_page_import_persists_evidence_node_and_version() {
+        let directory =
+            std::env::temp_dir().join(format!("cortexos-web-page-{}", uuid::Uuid::new_v4()));
+        let db = crate::db::Database::open(&directory).unwrap();
+        let workspace = db.create_workspace("Web import").unwrap();
+        let url = Url::parse("https://example.com/article").unwrap();
+        let (title, text) = extract_web_text(
+            "<title>网页资料</title><p>可读正文</p><script>discardMe()</script>",
+            "text/html",
+            &url,
+        );
+        let fetched_at = "2026-11-26T00:00:00Z";
+        let (node_id, version) = save_web_page_knowledge(
+            &db,
+            &workspace.id,
+            url.as_str(),
+            url.host_str().unwrap(),
+            &title,
+            &text,
+            fetched_at,
+        )
+        .unwrap();
+        let detail = db.knowledge_detail(&workspace.id, &node_id).unwrap();
+        drop(db);
+        std::fs::remove_dir_all(directory).unwrap();
+
+        assert_eq!(version, 1);
+        assert_eq!(detail.node.effective_version, Some(1));
+        assert_eq!(detail.node.kind, "evidence");
+        assert_eq!(detail.node.title, "网页资料");
+        assert_eq!(detail.versions.len(), 1);
+        assert_eq!(detail.versions[0].version, version);
+        assert_eq!(
+            detail.versions[0].content,
+            format!("来源网页：{url}\n抓取时间：{fetched_at}\n\n{text}")
+        );
+        assert!(detail.versions[0].content.contains("可读正文"));
+        assert!(!detail.versions[0].content.contains("discardMe"));
     }
 }

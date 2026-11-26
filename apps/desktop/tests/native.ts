@@ -8,6 +8,7 @@ export async function launchNative(
   options: {
     development?: boolean;
     endpoint?: string;
+    webPageUrl?: string;
     dataDirectory?: string;
     profileDirectory?: string;
     sourcePath?: string;
@@ -49,6 +50,9 @@ export async function launchNative(
           options.profileDirectory ?? testInfo.outputPath("webview-profile"),
         ...(options.endpoint
           ? { CORTEXOS_TEST_OLLAMA_URL: options.endpoint }
+          : {}),
+        ...(options.webPageUrl
+          ? { CORTEXOS_TEST_WEB_PAGE_URL: options.webPageUrl }
           : {}),
       },
       stdio: ["ignore", "pipe", "pipe"],

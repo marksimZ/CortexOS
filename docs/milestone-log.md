@@ -3160,3 +3160,28 @@ Markdown用原文存储，不改变请求或证据；不支持数学公式/代�
 - 已查看原生 WebView2 实拍截图：`artifacts/thinking-stream-native/thinking-stream-native-str-e60a9-content-and-persist-cleanly-desktop/{thinking-collapsed,thinking-expanded}.png`，确认折叠与展开排版、诚实标签及内容隔离正常。
 
 未验证：真实本地 Ollama 模型（如 `qwen3`）与真实线上 DeepSeek / Anthropic / Gemini / OpenAI 推理输出尚未端到端实测。
+
+### 2026-11-26 路线 A · 切片 A2：网页 URL 正文一键入库并挂载对话上下文
+
+打通聊天输入框的网页链接识别与弹窗一键抓取能力，将公开网页清洗后的正文直接存入本地知识库并自动挂载到当前对话上下文：
+
+- **Rust 后端（由 Codex CLI GPT 修改 `web_search.rs`）**：
+  - `WebPageContent` 新增 `saved_version: Option<i64>`（`savedVersion`），抽取可复用的 `save_web_page_knowledge` 辅助函数并返回新建 `evidence` 节点的 ID 与版本号。
+  - 严格保持生产构建的 SSRF 校验（`result_url`、`PublicPageResolver`、重定向地址过滤），仅在 `#[cfg(debug_assertions)]` 且同时配置 `CORTEXOS_TEST_WEB_PAGE_URL` 与隔离 `CORTEXOS_TEST_DATA_DIR` 时允许抓取指定 `127.0.0.1` 测试替身。
+  - 新增 4 项 `web_page_import` 离线单测（内网/本机地址拦截、HTML 标题/正文提取与脚本剥离、`evidence` 节点与版本号落库、测试替身同源匹配）。
+- **前端与原生测试**：
+  - 扩展 [web-search.ts](apps/desktop/src/api/web-search.ts)（`savedVersion`）。
+  - 更新 [ChatComposer.tsx](apps/desktop/src/components/ChatComposer.tsx) 与 [features.css](apps/desktop/src/styles/features.css)：在 `.composer-actions` 新增「导入网页链接」弹窗（支持粘贴 URL 一键抓取存入知识库并去重挂载至 `studio.contextSelection`），并在输入内容包含 `http(s)://` 链接时于工具栏上方展示快捷「抓取正文并挂载」提示条。
+  - 更新 [native.ts](apps/desktop/tests/native.ts)（支持 `webPageUrl`）、新增 [web-url-import-native.spec.ts](apps/desktop/tests/web-url-import-native.spec.ts) 并注册到 [playwright.config.ts](apps/desktop/playwright.config.ts)。
+
+实际验证（仅使用本机 `127.0.0.1` HTTP HTML 测试替身，未访问外部公开互联网或真实模型）：
+
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run build`：`tsc --noEmit` 与 `vite build` 通过（Vite 638ms）。
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run test:unit`：5/5 通过。
+- `npx.cmd --prefix d:\vibecoding\CortexOS\apps\desktop prettier --check d:\vibecoding\CortexOS\apps\desktop\src\api\web-search.ts`：通过。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked web_page_import`：4 passed, 0 failed。
+- `cargo build --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`：通过（47.77s）。
+- `$env:CORTEXOS_NATIVE_ONLY="1"; npx.cmd playwright test tests/web-url-import-native.spec.ts --project=desktop --output=../../artifacts/web-url-import-native`（目录 `apps/desktop`）：1 passed（4.4s）。
+- 已查看原生 WebView2 实拍截图：`artifacts/web-url-import-native/web-url-import-native-one--2cfed-d-mounts-it-to-chat-context-desktop/{web-import-popover,web-import-mounted}.png`，确认弹窗布局、成功 Toast 与「手动选择: 1 项知识」状态更新清晰无溢出。
+
+未验证：真实公网复杂网页兼容性与本地/云端模型基于抓取网页的实测回答。

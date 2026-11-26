@@ -90,6 +90,7 @@ export default defineConfig({
         "personal-assistant-native.spec.ts",
         "generation-style-native.spec.ts",
         "thinking-stream-native.spec.ts",
+        "web-url-import-native.spec.ts",
         "web-search-native.spec.ts",
         "chat.spec.ts",
         "markdown-camera.spec.ts",

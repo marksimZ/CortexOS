@@ -3,6 +3,7 @@ import {
   Globe,
   HardDrive,
   ImagePlus,
+  Link2,
   Pencil,
   Send,
   SlidersHorizontal,
@@ -14,13 +15,13 @@ import { MarkdownContent } from "./MarkdownContent";
 import { GenerationStylePanel, activePresetLabel } from "./GenerationStylePanel";
 import { ContextPicker } from "../ContextPicker";
 import { navigationHash } from "../navigation";
-import { webSearchProviderLabel, type WebSearchProvider } from "../api/web-search";
+import { webSearch, webSearchProviderLabel, type WebSearchProvider } from "../api/web-search";
 import { assistant, type AssistantSettings } from "../api/assistant";
 import { AppDialog, openDialog } from "./AppDialog";
 import { notify } from "./Toast";
 import { cloudPresetForAddress } from "../cloud-presets";
 import { SelectMenu } from "./SelectMenu";
-import type { MessageImage, Studio } from "../studio";
+import { errorText, type MessageImage, type Studio } from "../studio";
 import { cloudConnectionLabel, type GenerationTarget, type RuntimeConnection } from "../runtime-profiles";
 
 const ALLOWED_IMAGE_TYPES = new Set<MessageImage["mimeType"]>([
@@ -151,7 +152,13 @@ export function ChatComposer({
   const [switchingAssistant, setSwitchingAssistant] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<MessageImage | null>(null);
   const [styleOpen, setStyleOpen] = useState(false);
+  const [webImportOpen, setWebImportOpen] = useState(false);
+  const [webUrlInput, setWebUrlInput] = useState("");
+  const [webImporting, setWebImporting] = useState(false);
+  const [webImportError, setWebImportError] = useState("");
   const styleAnchorRef = useRef<HTMLDivElement>(null);
+  const webAnchorRef = useRef<HTMLDivElement>(null);
+  const detectedUrl = studio.draft.match(/https?:\/\/[^\s<>()]+/i)?.[0];
   const attachmentDialog = useRef<HTMLDialogElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const taskPreview = taskDraft === "briefing" ? "预览新闻简报" : taskDraft === "reminder" ? "预览提醒" : undefined;
@@ -197,14 +204,21 @@ export function ChatComposer({
   const compositionEndedAt = useRef(-Infinity);
 
   useEffect(() => {
-    if (!styleOpen) return;
+    if (!styleOpen && !webImportOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
-      if (!styleAnchorRef.current?.contains(event.target as Node)) {
+      const node = event.target as Node;
+      if (styleOpen && !styleAnchorRef.current?.contains(node)) {
         setStyleOpen(false);
+      }
+      if (webImportOpen && !webAnchorRef.current?.contains(node)) {
+        setWebImportOpen(false);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setStyleOpen(false);
+      if (event.key === "Escape") {
+        setStyleOpen(false);
+        setWebImportOpen(false);
+      }
     };
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -212,7 +226,41 @@ export function ChatComposer({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [styleOpen]);
+  }, [styleOpen, webImportOpen]);
+
+  const importWebUrl = async (rawUrl: string) => {
+    const workspaceId = studio.workspaceId;
+    const targetUrl = rawUrl.trim();
+    if (!studio.desktop || !workspaceId || !targetUrl || webImporting) return;
+    setWebImporting(true);
+    setWebImportError("");
+    try {
+      const page = await webSearch("fetch_web_page", {
+        workspaceId,
+        url: targetUrl,
+        saveToKnowledge: true,
+      });
+      if (page.savedNodeId) {
+        const version = page.savedVersion ?? 1;
+        const alreadyMounted = studio.contextSelection.some(
+          (item) => item.nodeId === page.savedNodeId,
+        );
+        if (!alreadyMounted) {
+          studio.setContextSelection([
+            ...studio.contextSelection,
+            { nodeId: page.savedNodeId, version },
+          ]);
+        }
+      }
+      setWebUrlInput("");
+      setWebImportOpen(false);
+      notify(`已抓取网页《${page.title}》并挂载为本轮上下文`);
+    } catch (value) {
+      setWebImportError(errorText(value));
+    } finally {
+      setWebImporting(false);
+    }
+  };
 
   useEffect(() => {
     if (previousPreview.current !== preview) {
@@ -400,6 +448,22 @@ export function ChatComposer({
             )}
           </div>
         )}
+        {studio.desktop && studio.workspaceId && detectedUrl && !webImportOpen && (
+          <div className="composer-url-bar">
+            <span className="composer-url-bar-meta" title={detectedUrl}>
+              <Link2 size={14} aria-hidden="true" />
+              <span>检测到网页链接：{detectedUrl}</span>
+            </span>
+            <button
+              type="button"
+              className="button secondary"
+              disabled={webImporting || studio.sending || studio.loadingMessages}
+              onClick={() => void importWebUrl(detectedUrl)}
+            >
+              {webImporting ? "抓取中…" : "抓取正文并挂载"}
+            </button>
+          </div>
+        )}
         <div className="composer-toolbar">
           <div className="composer-model">
             <SelectMenu
@@ -488,6 +552,86 @@ export function ChatComposer({
             >
               <ImagePlus size={17} aria-hidden="true" />
             </button>
+            <div className="composer-web-anchor" ref={webAnchorRef}>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="导入网页链接"
+                aria-expanded={webImportOpen}
+                aria-haspopup="dialog"
+                title="粘贴网页链接，抓取正文存入知识并挂载到本轮对话"
+                disabled={!studio.desktop || !studio.workspaceId || studio.sending || studio.loadingMessages}
+                onClick={() => {
+                  setStyleOpen(false);
+                  setWebImportError("");
+                  setWebImportOpen((open) => {
+                    const next = !open;
+                    if (next && !webUrlInput.trim() && detectedUrl) {
+                      setWebUrlInput(detectedUrl);
+                    }
+                    return next;
+                  });
+                }}
+              >
+                <Link2 size={17} aria-hidden="true" />
+              </button>
+              {webImportOpen && (
+                <div
+                  className="composer-web-popover"
+                  role="dialog"
+                  aria-label="导入网页正文并挂载"
+                >
+                  <div className="composer-web-popover-header">
+                    <strong>
+                      <Link2 size={15} aria-hidden="true" />
+                      导入网页正文并挂载
+                    </strong>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label="关闭网页导入弹窗"
+                      onClick={() => setWebImportOpen(false)}
+                    >
+                      <X size={15} aria-hidden="true" />
+                    </button>
+                  </div>
+                  <form
+                    className="composer-web-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void importWebUrl(webUrlInput);
+                    }}
+                  >
+                    <input
+                      type="url"
+                      aria-label="公开网页链接"
+                      placeholder="粘贴公开网页链接（https://...）"
+                      value={webUrlInput}
+                      disabled={webImporting}
+                      onChange={(event) => {
+                        setWebUrlInput(event.target.value);
+                        if (webImportError) setWebImportError("");
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      className="button primary"
+                      disabled={webImporting || !webUrlInput.trim()}
+                    >
+                      {webImporting ? "抓取中…" : "抓取并挂载"}
+                    </button>
+                  </form>
+                  {webImportError && (
+                    <p className="form-error" role="alert">
+                      {webImportError}
+                    </p>
+                  )}
+                  <small className="inline-help">
+                    仅抓取公开网页正文并存为本地知识，自动拦截内网地址。
+                  </small>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               className="icon-button"

@@ -23,6 +23,7 @@ export type WebPageContent = {
   text: string;
   fetchedAt: string;
   savedNodeId: string | null;
+  savedVersion?: number | null;
 };
 
 export const webSearch = createClient<{
