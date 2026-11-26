@@ -3256,3 +3256,28 @@ Markdown用原文存储，不改变请求或证据；不支持数学公式/代�
 - 已查看原生 WebView2 实拍截图：`artifacts/page-citation-native/page-citation-native-page--2e9b0-irectly-to-source-page-line-desktop/knowledge-index-pill.png`，确认「检索索引已同步 · 1 篇 / 9 片段」状态胶囊显示正常。
 
 未验证：大批量文件夹同步后后台重索引吞吐与真实 Ollama 手动刷新向量流程尚未实测。
+
+
+### 2026-11-26 路线 C · 切片 C1：架构瘦身、模块拆分与零告警清理
+
+完成前后端历史包袱清理、超长文档抽取模块拆分与编译器/格式告警清零：
+
+- **Rust 后端模块化与零告警（由 Codex CLI GPT 执行）**：
+  - 将 2,084 行 [doc_extract.rs](apps/desktop/src-tauri/src/doc_extract.rs) 拆分为 [doc_extract/mod.rs](apps/desktop/src-tauri/src/doc_extract/mod.rs) 与 5 个格式子模块（`docx.rs`、`pptx.rs`、`xlsx.rs`、`epub.rs`、`pdf.rs`），完整保留原有公共接口、`MAX_BINARY_FILE_BYTES` 与 3 项单元测试。
+  - 为测试专用辅助方法添加 `#[cfg(test)]` 标注（[cloud/runtime_protocol.rs](apps/desktop/src-tauri/src/cloud/runtime_protocol.rs)、[db.rs](apps/desktop/src-tauri/src/db.rs)、[retrieval.rs](apps/desktop/src-tauri/src/retrieval.rs)），消除全部 3 项编译期 `dead_code` 告警。
+  - 更新 [retrieval.rs](apps/desktop/src-tauri/src/retrieval.rs)、[knowledge_graph_retrieval.rs](apps/desktop/src-tauri/src/knowledge_graph_retrieval.rs)、[sources.rs](apps/desktop/src-tauri/src/sources.rs) 中的 4 处旧版检索测试前置 fixture（适配 `save_knowledge` 首版自动审批及预算断言），全部检索单测 100% 恢复通过。
+- **前端工程瘦身与 Vite 分包**：
+  - 删除已废弃的 3D 画布残留组件（`GraphCamera.tsx`、`GraphInstances.tsx`、`GraphLabels.tsx`）与对应旧 Playwright 用例（`tests/graph-instances.spec.ts`、`tests/graph-preview.spec.ts`），同步清理 [playwright.config.ts](apps/desktop/playwright.config.ts) 调度清单，并离线卸载未被引用的 `three`、`@react-three/fiber`、`@react-three/drei`、`@types/three`（移除 55 个 npm 包）。
+  - 在 [vite.config.ts](apps/desktop/vite.config.ts) 中配置 Vite 8 Rolldown `codeSplitting.groups`（拆分 `react-vendor`、`markdown-vendor`、`icons-vendor`），主入口包缩减至 `239.25 kB`，消除构建大体积块告警；格式化 [chat.ts](apps/desktop/src/api/chat.ts)、[knowledge.ts](apps/desktop/src/api/knowledge.ts)、[memory.ts](apps/desktop/src/api/memory.ts) 清零 Prettier 格式警告。
+
+实际验证（零真实 Ollama / 向量 / 云端调用）：
+
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run build`：`tsc --noEmit` 与 `vite build` 通过（Vite 550ms，零大块告警）。
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run test:unit`：5/5 通过。
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run format:check`：退出码 0（全部匹配 Prettier 规范）。
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run lint`：0 error（24 项既有 hook/a11y warning）。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked doc_extract`：3 passed, 0 failed（0 warnings）。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked retrieval`：6 passed, 0 failed（0 warnings）。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked incremental_index`：1 passed, 0 failed（0 warnings）。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked chat_search`：2 passed, 0 failed（0 warnings）。
+- `cargo check --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol`：0 error, 0 warning。

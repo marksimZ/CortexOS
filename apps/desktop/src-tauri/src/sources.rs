@@ -559,24 +559,21 @@ pub fn read_selected(path: &Path, workspace: &str, db: &Database) -> AppResult<P
         return Err(UNSAFE_SELECTION.into());
     }
     let (file, canonical, name) = open_selected(path)?;
-    let max_mib = if matches!(extension.as_str(), "docx" | "pptx" | "xlsx" | "epub" | "pdf") {
-        32
+    let max_bytes = if matches!(extension.as_str(), "docx" | "pptx" | "xlsx" | "epub" | "pdf") {
+        doc_extract::MAX_BINARY_FILE_BYTES
     } else {
-        2
+        2 * 1024 * 1024
     };
+    let max_mib = max_bytes / (1024 * 1024);
     let bytes = read_bounded(
         file,
-        max_mib * 1024 * 1024,
+        max_bytes,
         &format!("请选择不超过 {max_mib} MiB 的普通文件。"),
     )?;
     let raw_hash = hash(&bytes);
-    let content = match extension.as_str() {
-        "docx" => doc_extract::extract_docx(&bytes)?,
-        "pptx" => doc_extract::extract_pptx(&bytes)?,
-        "xlsx" => doc_extract::extract_xlsx(&bytes)?,
-        "epub" => doc_extract::extract_epub(&bytes)?,
-        "pdf" => doc_extract::extract_pdf(&bytes)?,
-        _ => {
+    let content = match doc_extract::extract_document_text(&extension, &bytes) {
+        Some(text) => text?,
+        None => {
             let text = String::from_utf8(bytes)
                 .map_err(|_| "文件不是 UTF-8，请转换编码后重新选择。".to_string())?;
             text.trim_start_matches('\u{feff}').replace("\r\n", "\n")

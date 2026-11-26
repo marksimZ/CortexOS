@@ -10,7 +10,10 @@ export interface GlobalPersona {
   updatedAt: string;
 }
 
-export function assistantLabel(name?: string | null, fallback = "专属助手"): string {
+export function assistantLabel(
+  name?: string | null,
+  fallback = "专属助手",
+): string {
   const clean = name?.trim();
   return clean || fallback;
 }

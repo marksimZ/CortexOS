@@ -14,13 +14,27 @@ type NodeArgs = WorkspaceArgs & { nodeId: string };
 type SourceArgs = WorkspaceArgs & { sourceId: string };
 type TicketArgs = WorkspaceArgs & { ticket: string };
 export type FolderSyncReport = {
-  folder: string; imported: number; updated: number; unchanged: number;
-  skipped: number; remaining: number; error: string | null;
+  folder: string;
+  imported: number;
+  updated: number;
+  unchanged: number;
+  skipped: number;
+  remaining: number;
+  error: string | null;
 };
-export function formatFolderSync(report: Pick<FolderSyncReport, "imported" | "updated" | "unchanged" | "skipped" | "remaining">) {
-  return `新增 ${report.imported}、更新 ${report.updated}、未变 ${report.unchanged}` +
+export function formatFolderSync(
+  report: Pick<
+    FolderSyncReport,
+    "imported" | "updated" | "unchanged" | "skipped" | "remaining"
+  >,
+) {
+  return (
+    `新增 ${report.imported}、更新 ${report.updated}、未变 ${report.unchanged}` +
     (report.skipped ? `、跳过 ${report.skipped}` : "") +
-    (report.remaining ? `，剩余 ${report.remaining} 个文件将在下次同步时继续` : "");
+    (report.remaining
+      ? `，剩余 ${report.remaining} 个文件将在下次同步时继续`
+      : "")
+  );
 }
 type SaveKnowledge = {
   input: WorkspaceArgs & {
@@ -90,24 +104,27 @@ export const knowledge = createClient<{
   list_sources: Command<WorkspaceArgs, SourceDocument[]>;
   get_source: Command<SourceArgs & { version: number }, Snapshot>;
   choose_source: Command<WorkspaceArgs, Preview | null>;
-  import_dropped_files: Command<WorkspaceArgs & { paths: string[] }, DroppedFilesReport>;
-  import_source_folder: Command<
-    WorkspaceArgs,
-    FolderSyncReport | null
+  import_dropped_files: Command<
+    WorkspaceArgs & { paths: string[] },
+    DroppedFilesReport
   >;
+  import_source_folder: Command<WorkspaceArgs, FolderSyncReport | null>;
   list_watched_folders: Command<
     WorkspaceArgs,
-    { id: string; workspaceId: string; path: string; lastSyncedAt: string | null; createdAt: string }[]
+    {
+      id: string;
+      workspaceId: string;
+      path: string;
+      lastSyncedAt: string | null;
+      createdAt: string;
+    }[]
   >;
   sync_watched_folder: Command<
     WorkspaceArgs & { folderId: string },
     FolderSyncReport
   >;
   remove_watched_folder: Command<WorkspaceArgs & { folderId: string }, void>;
-  sync_workspace_watched_folders: Command<
-    WorkspaceArgs,
-    FolderSyncReport[]
-  >;
+  sync_workspace_watched_folders: Command<WorkspaceArgs, FolderSyncReport[]>;
   commit_source: Command<TicketArgs, SourceDocument>;
   discard_source: Command<TicketArgs, void>;
   revoke_source: Command<SourceArgs & { expectedRevision: number }, void>;

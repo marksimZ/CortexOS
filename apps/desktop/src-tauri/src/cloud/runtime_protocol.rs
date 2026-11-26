@@ -103,6 +103,7 @@ impl Endpoint {
         self.send_generation_stream(key, &url, &request, timeout, &mut |_| {}).await
     }
 
+    #[cfg(test)]
     pub(super) fn generation_wire(&self, input: &CompletionInput) -> CloudResult<(String, Value)> {
         let (mut url, mut request) =
             completion::wire(self.protocol(), input).map_err(|_| INVALID)?;
@@ -373,6 +374,7 @@ impl Endpoint {
         super::chat_stream::read(response, self.base().is_none().then(|| self.protocol()), key, start, hash, on_delta).await
     }
 
+    #[cfg(test)]
     pub(super) async fn send_generation(
         &self,
         key: &str,

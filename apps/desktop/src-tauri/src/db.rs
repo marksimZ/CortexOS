@@ -660,6 +660,7 @@ impl Database {
         })
     }
 
+    #[cfg(test)]
     pub fn create_workspace(&self, name: &str) -> AppResult<Workspace> {
         self.create_workspace_with_template(name, None)
     }

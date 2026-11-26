@@ -14,5 +14,27 @@ export default defineConfig({
     fs: { strict: true },
   },
   preview: { host: "127.0.0.1", port: 1420, strictPort: true },
-  build: { target: "chrome105" },
+  build: {
+    target: "chrome105",
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: "react-vendor",
+              test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+            },
+            {
+              name: "markdown-vendor",
+              test: /[\\/]node_modules[\\/](react-markdown|remark-|rehype-|micromark|mdast|hast|unist|vfile|property-information|comma-separated-tokens|space-separated-tokens|decode-named-character-reference|character-entities)/,
+            },
+            {
+              name: "icons-vendor",
+              test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
+            },
+          ],
+        },
+      },
+    },
+  },
 });

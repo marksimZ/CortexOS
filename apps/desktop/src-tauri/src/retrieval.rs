@@ -497,6 +497,7 @@ pub(crate) fn stage(report: &mut Value, kind: &str, elapsed_micros: u64) {
     report["stages"].as_array_mut().unwrap().push(json!({"kind":kind,"elapsedMicros":elapsed_micros}));
 }
 
+#[cfg(test)]
 pub fn search(connection: &Connection, workspace: &str, query: &str) -> AppResult<Value> {
     search_with_privacy(connection, workspace, query, false)
 }
@@ -565,10 +566,47 @@ mod tests {
         }
     }
     fn approved(db: &Database, w: &str, title: &str, content: &str) -> String {
-        let id = db.save_knowledge(draft(w, title, content)).unwrap();
-        db.approve_knowledge(w, &id, 1).unwrap();
-        id
+        db.save_knowledge(draft(w, title, content)).unwrap()
     }
+
+    // Manual saves take effect immediately. Seed pending versions for the approval tests.
+    fn stage_pending(db: &Database, workspace: &str, node: Option<&str>, title: &str, content: &str) {
+        let mut connection = db.connection().unwrap();
+        let tx = connection.transaction().unwrap();
+        let timestamp = now();
+        let (id, version) = if let Some(id) = node {
+            let version: i64 = tx
+                .query_row(
+                    "UPDATE knowledge_nodes
+                     SET latest_version=latest_version+1, revision=revision+1, updated_at=?3
+                     WHERE id=?1 AND workspace_id=?2
+                     RETURNING latest_version",
+                    params![id, workspace, timestamp],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            (id.to_owned(), version)
+        } else {
+            let id = new_id();
+            tx.execute(
+                "INSERT INTO knowledge_nodes
+                 (id,workspace_id,latest_version,effective_version,revision,created_at,updated_at)
+                 VALUES(?1,?2,1,NULL,1,?3,?3)",
+                params![id, workspace, timestamp],
+            )
+            .unwrap();
+            (id, 1)
+        };
+        tx.execute(
+            "INSERT INTO knowledge_versions
+             (node_id,version,title,kind,content,author,change_reason,created_at)
+             VALUES(?1,?2,?3,'knowledge',?4,'user','待确认草案',?5)",
+            params![id, version, title, content, timestamp],
+        )
+        .unwrap();
+        tx.commit().unwrap();
+    }
+
     fn setup() -> (std::path::PathBuf, Database, String, String) {
         let path = std::env::temp_dir().join(format!("cortex-retrieval-{}", new_id()));
         let db = Database::open(&path).unwrap();
@@ -790,12 +828,8 @@ mod tests {
         let other = db.create_workspace("隔离").unwrap().id;
         let id = approved(&db, &w, "发布计划", "周一发布。");
         approved(&db, &other, "发布计划", "跨工作区内容。");
-        db.save_knowledge(draft(&w, "发布草案", "未确认发布内容。"))
-            .unwrap();
-        let mut edit = draft(&w, "发布计划", "周二发布。");
-        edit.node_id = Some(id.clone());
-        edit.expected_revision = Some(2);
-        db.save_knowledge(edit).unwrap();
+        stage_pending(&db, &w, None, "发布草案", "未确认发布内容。");
+        stage_pending(&db, &w, Some(&id), "发布计划", "周二发布。");
         let settings = ModelSettings::default();
         let old = db
             .prepare_context_run(&new_id(), &w, &c, "发布", &settings, &[], false)
@@ -860,8 +894,13 @@ mod tests {
             "manual_selected"
         );
         let big = approved(&db, &w, "长文档", &"长文档资料".repeat(1000));
+        // A narrow context also excludes the matching child chunk.
+        let budget_settings = ModelSettings {
+            num_ctx: 2048,
+            ..settings.clone()
+        };
         let budget = db
-            .prepare_context_run(&new_id(), &w, &c, "长文档", &settings, &[], true)
+            .prepare_context_run(&new_id(), &w, &c, "长文档", &budget_settings, &[], true)
             .unwrap();
         assert_eq!(
             budget.manifest["retrieval"]["candidates"][0]["reason"],
@@ -879,7 +918,7 @@ mod tests {
                 &w,
                 &c,
                 "长文档",
-                &settings,
+                &budget_settings,
                 &[ContextSelection {
                     node_id: big,
                     version: 1
@@ -933,10 +972,7 @@ mod tests {
                 .is_err()
         );
         // Approval and FTS update are one transaction.
-        let mut edit = draft(&w, "发布计划", "周三发布。");
-        edit.node_id = Some(id.clone());
-        edit.expected_revision = Some(4);
-        db.save_knowledge(edit).unwrap();
+        stage_pending(&db, &w, Some(&id), "发布计划", "周三发布。");
         db.connection()
             .unwrap()
             .execute_batch("DROP TABLE knowledge_fts;")

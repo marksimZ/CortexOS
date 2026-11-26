@@ -545,7 +545,6 @@ mod tests {
                     }),
                 )
                 .unwrap();
-            db.approve_knowledge(workspace, &id, 1).unwrap();
             (id, source)
         };
         let (root, _) = node(
