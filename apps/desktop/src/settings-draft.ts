@@ -12,7 +12,9 @@ export function rebaseSettingsDraft(
     model: field("model"),
     numCtx: field("numCtx"),
     temperature: field("temperature"),
+    topP: field("topP"),
     numPredict: field("numPredict"),
     timeoutSeconds: field("timeoutSeconds"),
+    deepThinking: field("deepThinking"),
   };
 }

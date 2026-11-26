@@ -3085,3 +3085,28 @@ Markdown用原文存储，不改变请求或证据；不支持数学公式/代�
 - Edge 浏览器预览（`vite preview` + Playwright）：检查 `1366×768`、`1600×900`、`1920×1080` 三尺寸 × 浅/深主题 × 对话/知识/图谱/设置共 24 组组合，页面错误 0、横向溢出 0；截图保存于 `artifacts/ui-polish/`。
 
 未验证：本次未重启原生 WebView2 桌面端重跑或重新打包安装包，亦未调用任何本地或云端模型。
+
+### 2026-11-26 分层生成参数与云端/本地参数透传
+
+为用户补充面向普通用户与进阶用户的分层生成控制，并修复云端模型与本地 Ollama 的参数透传：
+
+- **Rust 后端与协议适配（由 Codex GPT 执行 `src-tauri/src/` 改动）**：
+  - `models.rs`：`ModelSettings` 新增带 `#[serde(default)]` 的 `top_p`（默认 `0.9`）与 `deep_thinking`（默认 `false`），兼容既有 5 字段 `app_settings` JSON 无需迁移数据库；补充 `top_p` 范围校验（`0.05..=1.0`），并定义共享的 `GenerationOptions`。
+  - `ollama.rs`：`chat_request` 在 `options` 中传递 `top_p`；仅在 `deep_thinking == true` 时附带 `"think": true`，关闭时省略以避免非思考模型报错。
+  - `cloud/runtime_protocol.rs`、`cloud/runtime_connections.rs`、`db.rs`、`generation.rs`：将 `GenerationOptions` 贯通至 `CloudTarget::generation_chat_wire` / `generate_stream` 与 `Endpoint::generation_chat_wire` / `send_generation_stream`；OpenAI / Compatible 传递 `temperature` 与 `top_p`（开启深度思考时按 DeepSeek / Compatible / Official OpenAI 分别设置 `thinking` / `reasoning_effort` / `reasoning`）；Anthropic 在非思考模式下传递裁剪至 `0.0..=1.0` 的 `temperature` 并省略 `top_p`，开启深度思考时按 Anthropic 规则启用 `thinking` 且确保 `max_tokens` 与无冲突采样字段；Gemini 在 `generationConfig` 中写入 `temperature`、`topP` 及可选 `thinkingConfig`。同步更新 `benchmark/` 与测试中的 `ModelSettings` 字面量。
+- **前端分层界面**：
+  - 扩展 `studio.ts`（`ModelSettings`）、`studio-settings.ts`（`defaultSettings`）、`settings-draft.ts`（`rebaseSettingsDraft`）与 `tests/unit/settings-draft.test.ts`。
+  - 新增 `src/components/GenerationStylePanel.tsx`，提供三档一键风格预设（「严谨准确」`0.2 / 0.85`、「均衡日常」`0.7 / 0.9`、「灵感发散」`1.1 / 0.95`）、`开启深度思考` 开关及可折叠「高级生成参数微调」（`temperature`、`topP` 滑块与 `numPredict` 输入框，附诚实跨端说明与恢复默认），分别接入「我的助手」设置面板（`AssistantSettingsPanel.tsx`）与对话输入框工具栏弹窗（`ChatComposer.tsx`）；同步在「模型连接」高级设置（`Settings.tsx`）补齐 `核采样（top_p）` 与 `开启深度思考`。
+
+实际验证（未运行任何本地 Ollama 推理或在线云端请求）：
+
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run build`：`tsc --noEmit` 与 `vite build` 通过（Vite 758ms）。
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run test:unit`：4/4 通过。
+- `npx.cmd --prefix d:\vibecoding\CortexOS\apps\desktop prettier --check d:\vibecoding\CortexOS\apps\desktop\src\settings-draft.ts d:\vibecoding\CortexOS\apps\desktop\tests\unit\settings-draft.test.ts`：通过（另注：`npm run format:check` 对既有未改动文件 `src/api/{chat,knowledge,memory}.ts` 有格式提示）。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked generation_options`：6 passed, 0 failed（含旧配置兼容、`top_p` 校验、Ollama 与 OpenAI/Anthropic/Gemini 协议编码）。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked multimodal`：2 passed, 0 failed。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked cloud_chat_loopback_preserves_roles_and_excludes_private_lineage`：1 passed, 0 failed。
+- `cargo build --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`：通过（1m 26s）。
+- `git -c core.safecrlf=false diff --check`：通过。
+
+未验证：真实 WebView2 窗口交互截图、真实本地 Ollama 与线上云端模型推理表现待后续人工确认或授权后实测。

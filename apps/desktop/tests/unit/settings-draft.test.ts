@@ -6,8 +6,10 @@ const original = {
   model: "original",
   numCtx: 4096,
   temperature: 0.3,
+  topP: 0.9,
   numPredict: 512,
   timeoutSeconds: 180,
+  deepThinking: false,
 };
 
 test("reload updates untouched fields and keeps edits including an empty numeric field", () => {

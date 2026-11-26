@@ -30,6 +30,7 @@ impl ModelRequest {
             num_predict: self.parameters.num_predict,
             temperature: self.parameters.temperature,
             timeout_seconds: self.parameters.timeout_seconds,
+            ..Default::default()
         }
     }
     pub(crate) fn validate(&self) -> AppResult<()> {

@@ -158,6 +158,7 @@ pub(crate) async fn forward(
             num_predict: 512,
             temperature: 0.0,
             timeout_seconds: 120,
+            ..Default::default()
         };
         on_send(&native)?;
         let mut reply = provider.chat(&settings, &native).await?;

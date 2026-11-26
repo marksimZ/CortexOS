@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     model_runtime::normalized_embeddings,
-    models::{ChatMessage, MessageImage},
+    models::{ChatMessage, GenerationOptions, MessageImage},
 };
 use reqwest::Url;
 use serde_json::{Value, json};
@@ -50,6 +50,14 @@ impl Endpoint {
         }
     }
 
+    pub(super) fn is_deepseek(&self) -> bool {
+        self.base().is_some_and(|base| {
+            base.host_str() == Some("api.deepseek.com")
+                && base.port().is_none()
+                && matches!(base.path(), "/" | "/v1/")
+        })
+    }
+
     fn protocol(&self) -> Provider {
         match self {
             Self::Official(provider) => *provider,
@@ -82,14 +90,10 @@ impl Endpoint {
             content: input.prompt.clone(),
             images: Vec::new(),
         }];
-        let (url, mut request) = self.generation_chat_wire(&input.model, &messages, input.max_output_tokens)?;
+        let (url, mut request) = self.chat_wire(&input.model, &messages, input.max_output_tokens)?;
         // Leave the production request at the model's default thinking setting.
         // The 64-token probe needs room for the visible answer on DeepSeek.
-        if self.base().is_some_and(|base| {
-            base.host_str() == Some("api.deepseek.com")
-                && base.port().is_none()
-                && matches!(base.path(), "/" | "/v1/")
-        }) && matches!(
+        if self.is_deepseek() && matches!(
             input.model.as_str(),
             "deepseek-flash" | "deepseek-v4-pro" | "deepseek-v4-flash" | "deepseek-v4-flash-vision-exp"
         )
@@ -123,6 +127,52 @@ impl Endpoint {
     }
 
     pub(super) fn generation_chat_wire(
+        &self,
+        model: &str,
+        messages: &[ChatMessage],
+        max_output_tokens: u32,
+        options: Option<GenerationOptions>,
+    ) -> CloudResult<(String, Value)> {
+        let (url, mut body) = self.chat_wire(model, messages, max_output_tokens)?;
+        let Some(options) = options else {
+            return Ok((url, body));
+        };
+        match self.protocol() {
+            Provider::Openai => {
+                body["temperature"] = json!(options.temperature);
+                body["top_p"] = json!(options.top_p);
+                if options.deep_thinking {
+                    if self.is_deepseek() {
+                        body["thinking"] = json!({"type": "enabled"});
+                    } else if self.base().is_some() {
+                        body["reasoning_effort"] = json!("medium");
+                    } else {
+                        body["reasoning"] = json!({"effort": "medium"});
+                    }
+                }
+            }
+            Provider::Anthropic => {
+                if options.deep_thinking {
+                    const THINKING_BUDGET: u32 = 1024;
+                    body["thinking"] = json!({"type": "enabled", "budget_tokens": THINKING_BUDGET});
+                    body["max_tokens"] = json!(max_output_tokens.max(THINKING_BUDGET + 1));
+                } else {
+                    body["temperature"] = json!(options.temperature.clamp(0.0, 1.0));
+                }
+            }
+            Provider::Gemini => {
+                let config = &mut body["generationConfig"];
+                config["temperature"] = json!(options.temperature);
+                config["topP"] = json!(options.top_p);
+                if options.deep_thinking {
+                    config["thinkingConfig"] = json!({"thinkingBudget": 1024});
+                }
+            }
+        }
+        Ok((url, body))
+    }
+
+    fn chat_wire(
         &self,
         model: &str,
         messages: &[ChatMessage],
@@ -540,6 +590,101 @@ mod tests {
     use super::*;
 
     #[test]
+    fn generation_options_encode_openai_and_compatible_sampling_and_reasoning() {
+        let mut options = GenerationOptions {
+            temperature: 0.7,
+            top_p: 0.8,
+            ..GenerationOptions::default()
+        };
+        let endpoints = [
+            (
+                Endpoint::compatible("https://fixture.invalid/v1", false).unwrap(),
+                "reasoning_effort",
+                json!("medium"),
+            ),
+            (
+                Endpoint::Official(Provider::Openai),
+                "reasoning",
+                json!({"effort": "medium"}),
+            ),
+            (
+                Endpoint::compatible("https://api.deepseek.com/v1", false).unwrap(),
+                "thinking",
+                json!({"type": "enabled"}),
+            ),
+        ];
+        for (endpoint, field, expected) in endpoints {
+            options.deep_thinking = false;
+            let (_, body) = endpoint
+                .generation_chat_wire("fixture", &[], 512, Some(options))
+                .unwrap();
+            assert_eq!(body["temperature"], 0.7);
+            assert_eq!(body["top_p"], 0.8);
+            assert!(body.get(field).is_none());
+
+            options.deep_thinking = true;
+            let (_, body) = endpoint
+                .generation_chat_wire("fixture", &[], 512, Some(options))
+                .unwrap();
+            assert_eq!(body[field], expected);
+        }
+    }
+
+    #[test]
+    fn generation_options_follow_anthropic_sampling_and_thinking_rules() {
+        let endpoint = Endpoint::Official(Provider::Anthropic);
+        let mut options = GenerationOptions {
+            temperature: 1.5,
+            top_p: 0.8,
+            ..GenerationOptions::default()
+        };
+        let (_, body) = endpoint
+            .generation_chat_wire("fixture", &[], 512, Some(options))
+            .unwrap();
+        assert_eq!(body["temperature"], 1.0);
+        assert_eq!(body["max_tokens"], 512);
+        assert!(body.get("top_p").is_none());
+        assert!(body.get("thinking").is_none());
+
+        options.deep_thinking = true;
+        for (requested, expected) in [(512, 1025), (4096, 4096)] {
+            let (_, body) = endpoint
+                .generation_chat_wire("fixture", &[], requested, Some(options))
+                .unwrap();
+            assert!(body.get("temperature").is_none());
+            assert!(body.get("top_p").is_none());
+            assert_eq!(body["thinking"], json!({"type": "enabled", "budget_tokens": 1024}));
+            assert_eq!(body["max_tokens"], expected);
+        }
+    }
+
+    #[test]
+    fn generation_options_encode_gemini_sampling_and_thinking_in_config() {
+        let endpoint = Endpoint::Official(Provider::Gemini);
+        let mut options = GenerationOptions {
+            temperature: 0.7,
+            top_p: 0.8,
+            ..GenerationOptions::default()
+        };
+        let (_, body) = endpoint
+            .generation_chat_wire("fixture", &[], 512, Some(options))
+            .unwrap();
+        assert_eq!(
+            body["generationConfig"],
+            json!({"maxOutputTokens": 512, "temperature": 0.7, "topP": 0.8})
+        );
+
+        options.deep_thinking = true;
+        let (_, body) = endpoint
+            .generation_chat_wire("fixture", &[], 512, Some(options))
+            .unwrap();
+        assert_eq!(
+            body["generationConfig"]["thinkingConfig"],
+            json!({"thinkingBudget": 1024})
+        );
+    }
+
+    #[test]
     fn multimodal_wire_encodes_openai_compatible_anthropic_gemini_and_ollama() {
         let messages = [
             ChatMessage {
@@ -563,7 +708,7 @@ mod tests {
 
         let compatible = Endpoint::compatible("https://fixture.invalid/v1", false).unwrap();
         let (url, body) = compatible
-            .generation_chat_wire("fixture", &messages, 512)
+            .generation_chat_wire("fixture", &messages, 512, Some(GenerationOptions::default()))
             .unwrap();
         assert_eq!(url, "https://fixture.invalid/v1/chat/completions");
         assert_eq!(body["messages"][0], text_only);
@@ -576,7 +721,7 @@ mod tests {
         );
 
         let (url, body) = Endpoint::Official(Provider::Openai)
-            .generation_chat_wire("fixture", &messages, 512)
+            .generation_chat_wire("fixture", &messages, 512, Some(GenerationOptions::default()))
             .unwrap();
         assert_eq!(url, "https://api.openai.com/v1/responses");
         assert_eq!(body["input"][0], text_only);
@@ -589,7 +734,7 @@ mod tests {
         );
 
         let (url, body) = Endpoint::Official(Provider::Anthropic)
-            .generation_chat_wire("fixture", &messages, 512)
+            .generation_chat_wire("fixture", &messages, 512, Some(GenerationOptions::default()))
             .unwrap();
         assert_eq!(url, "https://api.anthropic.com/v1/messages");
         assert_eq!(body["messages"][0], text_only);
@@ -602,7 +747,7 @@ mod tests {
         );
 
         let (url, body) = Endpoint::Official(Provider::Gemini)
-            .generation_chat_wire("fixture", &messages, 512)
+            .generation_chat_wire("fixture", &messages, 512, Some(GenerationOptions::default()))
             .unwrap();
         assert!(url.ends_with("/fixture:streamGenerateContent?alt=sse"));
         assert_eq!(

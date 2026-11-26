@@ -8,8 +8,16 @@ pub struct ModelSettings {
     pub model: String,
     pub num_ctx: u32,
     pub temperature: f64,
+    #[serde(default = "default_top_p")]
+    pub top_p: f64,
+    #[serde(default)]
+    pub deep_thinking: bool,
     pub num_predict: u32,
     pub timeout_seconds: u64,
+}
+
+fn default_top_p() -> f64 {
+    0.9
 }
 
 impl Default for ModelSettings {
@@ -18,6 +26,8 @@ impl Default for ModelSettings {
             model: "qwen3:4b-instruct".into(),
             num_ctx: 4096,
             temperature: 0.3,
+            top_p: default_top_p(),
+            deep_thinking: false,
             num_predict: 512,
             timeout_seconds: 180,
         }
@@ -41,7 +51,71 @@ impl ModelSettings {
         {
             return Err("请检查回答设置：输入与回答总容量 1024–16384 Token，回答上限 32–2048 Token，回答变化程度（温度）0–2，超时 30–600 秒；总容量必须大于回答上限加 512 Token。".into());
         }
+        if !(0.05..=1.0).contains(&self.top_p) {
+            return Err("请将回答设置中的采样范围（Top P）设为 0.05–1.0。".into());
+        }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GenerationOptions {
+    pub temperature: f64,
+    pub top_p: f64,
+    pub num_predict: u32,
+    pub deep_thinking: bool,
+}
+
+impl From<&ModelSettings> for GenerationOptions {
+    fn from(settings: &ModelSettings) -> Self {
+        Self {
+            temperature: settings.temperature,
+            top_p: settings.top_p,
+            num_predict: settings.num_predict,
+            deep_thinking: settings.deep_thinking,
+        }
+    }
+}
+
+impl Default for GenerationOptions {
+    fn default() -> Self {
+        Self::from(&ModelSettings::default())
+    }
+}
+
+#[cfg(test)]
+mod generation_options {
+    use super::*;
+
+    #[test]
+    fn legacy_model_settings_use_generation_defaults() {
+        let settings: ModelSettings = serde_json::from_str(
+            r#"{"model":"legacy","numCtx":4096,"temperature":0.6,"numPredict":256,"timeoutSeconds":180}"#,
+        )
+        .unwrap();
+        assert_eq!(settings.top_p, 0.9);
+        assert!(!settings.deep_thinking);
+        assert_eq!(
+            GenerationOptions::from(&settings),
+            GenerationOptions {
+                temperature: 0.6,
+                num_predict: 256,
+                ..GenerationOptions::default()
+            }
+        );
+    }
+
+    #[test]
+    fn validate_top_p_requires_a_finite_value_in_range() {
+        let mut settings = ModelSettings::default();
+        for top_p in [0.0, 1.2, f64::NAN, f64::INFINITY] {
+            settings.top_p = top_p;
+            assert!(settings.validate().unwrap_err().contains("Top P"));
+        }
+        for top_p in [0.05, 0.1, 0.5, 1.0] {
+            settings.top_p = top_p;
+            assert!(settings.validate().is_ok());
+        }
     }
 }
 

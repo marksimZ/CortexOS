@@ -679,7 +679,13 @@ mod tests {
         let profile: Profile = serde_json::from_value(json!({"id":new_id(),"updatedAt":now(),
             "name":"Fixture","mode":"cloud","generation":{"kind":"cloud","model":"remote","connectionId":target.connection.id},
             "embedding":{"kind":"off"},"reranking":{"kind":"off"}})).unwrap();
-        let settings = ModelSettings { model: "remote".into(), ..ModelSettings::default() };
+        let settings = ModelSettings {
+            model: "remote".into(),
+            temperature: 0.7,
+            top_p: 0.8,
+            deep_thinking: true,
+            ..ModelSettings::default()
+        };
         let prepare = |chat: &str, selected: &[ContextSelection], preview: bool| {
             db.prepare_chat_runtime(&new_id(), &workspace, chat, "launch dependency", &settings, selected,
                 preview, None, None, true, Some(&ChatRuntime {
@@ -702,6 +708,9 @@ mod tests {
         server.join().unwrap();
         let body = captured.lock().unwrap().take().unwrap();
         assert_eq!(body, expected);
+        assert_eq!(body["temperature"], 0.7);
+        assert_eq!(body["top_p"], 0.8);
+        assert_eq!(body["reasoning_effort"], "medium");
         let raw = body.to_string();
         for expected in ["APPROVED-GLOBAL-RULE", "WORKSPACE-INSTRUCTIONS", "PUBLIC-MEMORY-BODY", "PUBLIC-RELATED-BODY", "PUBLIC-HISTORY-ANSWER"] {
             assert!(raw.contains(expected), "missing {expected}");

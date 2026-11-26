@@ -13,6 +13,7 @@ pub(super) fn settings(model: &str) -> ModelSettings {
         num_predict: 512,
         temperature: 0.0,
         timeout_seconds: 120,
+        ..Default::default()
     }
 }
 pub(super) fn policy() -> Value {

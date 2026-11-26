@@ -51,7 +51,7 @@ export function SettingsPage({ studio }: { studio: Studio }) {
   );
   const changed = JSON.stringify(draft) !== JSON.stringify(studio.settings);
   const field = (
-    name: "numCtx" | "numPredict" | "temperature" | "timeoutSeconds",
+    name: "numCtx" | "numPredict" | "temperature" | "topP" | "timeoutSeconds",
     value: number | null,
   ) => {
     setCapacityInvalid(false);
@@ -76,7 +76,7 @@ export function SettingsPage({ studio }: { studio: Studio }) {
         </nav>
         <section id="assistant-section" hidden={section !== "assistant"} className="settings-section" aria-labelledby="assistant-settings-title">
           {section === "assistant" && (studio.desktop && studio.workspaceId
-            ? <AssistantSettingsPanel key={studio.workspaceId} workspaceId={studio.workspaceId} focusSearch={route.params.get("focus") === "web-search"} />
+            ? <AssistantSettingsPanel key={studio.workspaceId} studio={studio} workspaceId={studio.workspaceId} focusSearch={route.params.get("focus") === "web-search"} />
             : <div className="section-description"><h2 id="assistant-settings-title">我的助手</h2>
               <p>{studio.desktop ? "请先选择工作区。" : "请在桌面版中管理个人助手。"}</p></div>)}
         </section>
@@ -137,19 +137,21 @@ export function SettingsPage({ studio }: { studio: Studio }) {
             </div>
             <div className="field">
               <label htmlFor="endpoint">服务地址（固定本机回环）</label>
-              <input id="endpoint" value="http://127.0.0.1:11434" disabled />
+              <div className="field-inline-action">
+                <input id="endpoint" value="http://127.0.0.1:11434" disabled />
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={!studio.desktop || studio.checking}
+                  aria-busy={studio.checking}
+                  onClick={() => {
+                    void studio.checkConnection();
+                  }}
+                >
+                  {studio.checking ? "正在检测…" : "检测连接"}
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              className="button secondary"
-              disabled={!studio.desktop || studio.checking}
-              aria-busy={studio.checking}
-              onClick={() => {
-                void studio.checkConnection();
-              }}
-            >
-              {studio.checking ? "正在检测…" : "检测连接"}
-            </button>
             {studio.connectionError && (
               <p className="form-error" role="alert">
                 {studio.connectionError}
@@ -203,8 +205,24 @@ export function SettingsPage({ studio }: { studio: Studio }) {
                 <NumberField label="输入与回答总容量（Token）" min={1024} max={16384} value={draft.numCtx} readOnly={!studio.desktop} disabled={!studio.desktop} error={capacityInvalid ? capacityError : undefined} onChange={value => field("numCtx", value)} />
                 <NumberField label="回答长度上限（Token）" min={32} max={2048} value={draft.numPredict} readOnly={!studio.desktop} disabled={!studio.desktop} onChange={value => field("numPredict", value)} />
                 <NumberField label="回答变化程度（温度）" min={0} max={2} step="any" value={draft.temperature} readOnly={!studio.desktop} disabled={!studio.desktop} onChange={value => field("temperature", value)} />
+                <NumberField label="核采样（top_p）" min={0.1} max={1} step={0.05} value={draft.topP} readOnly={!studio.desktop} disabled={!studio.desktop} onChange={value => field("topP", value)} />
                 <NumberField label="生成超时（秒）" min={30} max={600} value={draft.timeoutSeconds} readOnly={!studio.desktop} disabled={!studio.desktop} onChange={value => field("timeoutSeconds", value)} />
               </div>
+              <label className="generation-thinking-toggle">
+                <input
+                  type="checkbox"
+                  checked={draft.deepThinking}
+                  disabled={!studio.desktop}
+                  onChange={event => {
+                    const deepThinking = event.target.checked;
+                    setDraft(current => ({ ...current, deepThinking }));
+                  }}
+                />
+                <span>
+                  <strong>开启深度思考</strong>
+                  <small>向支持的推理模型发送思考开关指令（云端与本地 Ollama 均生效）。</small>
+                </span>
+              </label>
               <p>
                 一次只生成一个回答。Token
                 是模型计算文字长度的单位，不等于字数。总容量包含说明、资料、对话与回答，需为回答留出空间；容量越大，通常越占显卡内存。“温度”越高，回答的措辞和选取通常越多变，不代表更正确。
@@ -228,10 +246,10 @@ export function SettingsPage({ studio }: { studio: Studio }) {
             </div>
           </form>
             {studio.desktop && studio.workspaceId && (
-              <>
+              <div className="settings-subsections">
                 <LocalRuntimeSettings key={`runtime:${studio.workspaceId}`} workspaceId={studio.workspaceId} model={draft.model} running={!!studio.activeRun || studio.sending} />
                 <RagIndexSettings key={`index:${studio.workspaceId}`} workspaceId={studio.workspaceId} />
-              </>
+              </div>
             )}
           </div>
         </section>

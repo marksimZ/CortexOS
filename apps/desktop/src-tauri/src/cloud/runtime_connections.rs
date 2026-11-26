@@ -8,7 +8,7 @@ use crate::{
     benchmark::dataset::require_workspace,
     commands::AppState,
     db::{Database, error, json_error},
-    models::{AppResult, IMAGE_ESTIMATED_UNITS, new_id, now},
+    models::{AppResult, GenerationOptions, IMAGE_ESTIMATED_UNITS, new_id, now},
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -418,6 +418,7 @@ impl CloudTarget {
         &self,
         messages: &[crate::models::ChatMessage],
         output_tokens: u32,
+        options: Option<GenerationOptions>,
     ) -> AppResult<Value> {
         let mut input_bytes = 0u64;
         let mut image_count = 0;
@@ -453,20 +454,21 @@ impl CloudTarget {
         .into_iter()
         .flatten()
         .min();
+        let (url, body) = self
+            .endpoint
+            .generation_chat_wire(&self.model, messages, output_tokens, options)
+            .map_err(request_error)?;
+        let output_tokens = generation_output_limit(&body)?;
         if input_max.is_some_and(|max| input_bytes > max)
-            || output_max.is_some_and(|max| u64::from(output_tokens) > max)
+            || output_max.is_some_and(|max| output_tokens > max)
             || saved
                 .and_then(|item| item.context_tokens)
-                .is_some_and(|max| input_bytes + u64::from(output_tokens) > max)
+                .is_some_and(|max| input_bytes + output_tokens > max)
         {
             return Err(
                 "发送内容或回答长度超过云端模型的已知上限，请缩短输入或调整回答长度。".into(),
             );
         }
-        let (url, body) = self
-            .endpoint
-            .generation_chat_wire(&self.model, messages, output_tokens)
-            .map_err(request_error)?;
         if serde_json::to_string(&body)
             .map_err(json_error)?
             .contains(self.key.as_str())
@@ -506,14 +508,7 @@ impl CloudTarget {
             let text_bytes: usize = texts.iter().map(|text| text.len()).sum();
             (text_bytes + image_count * IMAGE_ESTIMATED_UNITS + 64) as u64
         };
-        let max_output = body["max_output_tokens"]
-            .as_u64()
-            .or(body["max_tokens"].as_u64())
-            .or_else(|| {
-                body.pointer("/generationConfig/maxOutputTokens")
-                    .and_then(Value::as_u64)
-            })
-            .ok_or("云端请求缺少回答长度上限。")?;
+        let max_output = generation_output_limit(body)?;
         let data_types: Vec<_> = trace
             .and_then(|trace| trace["dataTypes"].as_array())
             .map(|fields| fields.iter().filter_map(Value::as_str).collect())
@@ -656,15 +651,13 @@ scope 可选 global_preference（长期背景、目标或偏好）、global_rule
         max_output_tokens: u32,
         timeout: Duration,
     ) -> Option<String> {
-        let mut wire = self.generation_chat_wire(messages, max_output_tokens).ok()?;
+        let mut wire = self
+            .generation_chat_wire(messages, max_output_tokens, None)
+            .ok()?;
         let mut body = wire["body"].take();
         let url = wire["url"].as_str()?;
         // These short background tasks use direct output on DeepSeek.
-        if self.endpoint.base().is_some_and(|base| {
-            base.host_str() == Some("api.deepseek.com")
-                && base.port().is_none()
-                && matches!(base.path(), "/" | "/v1/")
-        }) && matches!(
+        if self.endpoint.is_deepseek() && matches!(
             self.model.as_str(),
             "deepseek-flash" | "deepseek-v4-pro" | "deepseek-v4-flash" | "deepseek-v4-flash-vision-exp"
         ) {
@@ -677,6 +670,17 @@ scope 可选 global_preference（长期背景、目标或偏好）、global_rule
             .ok()
             .map(|output| output.text)
     }
+}
+
+fn generation_output_limit(body: &Value) -> AppResult<u64> {
+    body["max_output_tokens"]
+        .as_u64()
+        .or(body["max_tokens"].as_u64())
+        .or_else(|| {
+            body.pointer("/generationConfig/maxOutputTokens")
+                .and_then(Value::as_u64)
+        })
+        .ok_or_else(|| "云端请求缺少回答长度上限。".into())
 }
 
 fn estimated_bytes<'a>(texts: impl IntoIterator<Item = &'a str>) -> u64 {

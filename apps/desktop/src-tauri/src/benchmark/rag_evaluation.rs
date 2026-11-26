@@ -107,6 +107,7 @@ fn compare(suite: &Suite, a: Policy, b: Policy) -> AppResult<Value> {
         num_predict: 512,
         temperature: 0.,
         timeout_seconds: 30,
+        ..Default::default()
     };
     let result_a = a.run(&scratch, suite, &conversation, &settings)?;
     let result_b = b.run(&scratch, suite, &conversation, &settings)?;

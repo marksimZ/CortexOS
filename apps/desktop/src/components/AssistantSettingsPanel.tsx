@@ -7,6 +7,8 @@ import { StatusLabel } from "./StatusLabel";
 import { WebSearchSettings } from "./WebSearchSettings";
 import { GlobalPersonaPanel } from "./GlobalPersonaPanel";
 import { QuickBarSettingsPanel } from "./QuickBarSettingsPanel";
+import { GenerationStylePanel } from "./GenerationStylePanel";
+import type { Studio } from "../studio";
 
 const assistantPresets: { name: string; tag: string; instructions: string }[] = [
   {
@@ -48,7 +50,7 @@ function sameDraft(first: AssistantDraft, second: AssistantDraft) {
   return first.name === second.name && first.instructions === second.instructions;
 }
 
-export function AssistantSettingsPanel({ workspaceId, focusSearch }: { workspaceId: string; focusSearch?: boolean }) {
+export function AssistantSettingsPanel({ studio, workspaceId, focusSearch }: { studio: Studio; workspaceId: string; focusSearch?: boolean }) {
   const [settings, setSettings] = useState<AssistantSettings>();
   const [draft, setDraft] = useState(() => edits.get(workspaceId));
   const [refresh, setRefresh] = useState(0);
@@ -106,6 +108,7 @@ export function AssistantSettingsPanel({ workspaceId, focusSearch }: { workspace
     <div className="settings-fields assistant-settings-fields">
       <QuickBarSettingsPanel />
       <GlobalPersonaPanel />
+      <GenerationStylePanel studio={studio} />
       {loadError && <div className="form-error" role="alert">
         <p>{loadError}</p><button className="button secondary" type="button" onClick={() => {
           setLoadError("");

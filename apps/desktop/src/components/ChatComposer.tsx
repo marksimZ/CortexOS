@@ -5,11 +5,13 @@ import {
   ImagePlus,
   Pencil,
   Send,
+  SlidersHorizontal,
   Square,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MarkdownContent } from "./MarkdownContent";
+import { GenerationStylePanel, activePresetLabel } from "./GenerationStylePanel";
 import { ContextPicker } from "../ContextPicker";
 import { navigationHash } from "../navigation";
 import { webSearchProviderLabel, type WebSearchProvider } from "../api/web-search";
@@ -148,6 +150,8 @@ export function ChatComposer({
   const [assistantState, setAssistantState] = useState<AssistantSettings | null>(null);
   const [switchingAssistant, setSwitchingAssistant] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<MessageImage | null>(null);
+  const [styleOpen, setStyleOpen] = useState(false);
+  const styleAnchorRef = useRef<HTMLDivElement>(null);
   const attachmentDialog = useRef<HTMLDialogElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const taskPreview = taskDraft === "briefing" ? "预览新闻简报" : taskDraft === "reminder" ? "预览提醒" : undefined;
@@ -191,6 +195,24 @@ export function ChatComposer({
   const previousPreview = useRef(false);
   const composing = useRef(false);
   const compositionEndedAt = useRef(-Infinity);
+
+  useEffect(() => {
+    if (!styleOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!styleAnchorRef.current?.contains(event.target as Node)) {
+        setStyleOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setStyleOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [styleOpen]);
 
   useEffect(() => {
     if (previousPreview.current !== preview) {
@@ -486,6 +508,29 @@ export function ChatComposer({
                 <Eye size={17} aria-hidden="true" />
               )}
             </button>
+            <div className="composer-style-anchor" ref={styleAnchorRef}>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="回答风格与生成参数"
+                aria-expanded={styleOpen}
+                aria-haspopup="dialog"
+                title={`回答风格：${activePresetLabel(studio.settings.temperature, studio.settings.topP)}${studio.settings.deepThinking ? " · 深度思考" : ""}`}
+                disabled={!studio.desktop || studio.sending || studio.loadingMessages}
+                onClick={() => setStyleOpen((open) => !open)}
+              >
+                <SlidersHorizontal size={17} aria-hidden="true" />
+              </button>
+              {styleOpen && (
+                <div
+                  className="composer-style-popover"
+                  role="dialog"
+                  aria-label="回答风格与生成参数设置"
+                >
+                  <GenerationStylePanel studio={studio} compact />
+                </div>
+              )}
+            </div>
             {currentRunning ? (
               <button
                 className="button secondary stop-button"

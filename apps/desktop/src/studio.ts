@@ -15,8 +15,10 @@ export interface ModelSettings {
   model: string;
   numCtx: number;
   temperature: number;
+  topP: number;
   numPredict: number;
   timeoutSeconds: number;
+  deepThinking: boolean;
 }
 export interface Workspace {
   id: string;

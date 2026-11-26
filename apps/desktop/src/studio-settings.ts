@@ -7,8 +7,10 @@ export const defaultSettings: ModelSettings = {
   model: "qwen3:4b-instruct",
   numCtx: 4096,
   temperature: 0.3,
+  topP: 0.9,
   numPredict: 512,
   timeoutSeconds: 180,
+  deepThinking: false,
 };
 export function useStudioSettings() {
   const [state, setState] = useState({ saved: defaultSettings, draft: defaultSettings });

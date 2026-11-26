@@ -30,6 +30,7 @@ async fn f7_authorized_local_smoke() {
             temperature: 0.,
             num_predict: 256,
             timeout_seconds: 120,
+            ..Default::default()
         })
         .unwrap();
     let preferences: crate::local_runtime::Preferences =

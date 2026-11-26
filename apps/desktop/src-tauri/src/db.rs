@@ -1355,8 +1355,9 @@ impl Database {
             manifest["cloudTransfer"] = json!({"provider":cloud.target.connection.provider.name(),
                 "connectionId":cloud.target.connection.id,"model":cloud.target.model,
                 "dataTypes":types,"syncContext":cloud_sync});
-            let cloud_max_tokens = settings.num_predict.clamp(4096, 8192);
-            let mut wire = cloud.target.generation_chat_wire(&messages, cloud_max_tokens)?;
+            let options = GenerationOptions::from(settings);
+            let cloud_max_tokens = options.num_predict.clamp(4096, 8192);
+            let mut wire = cloud.target.generation_chat_wire(&messages, cloud_max_tokens, Some(options))?;
             wire["messages"] = serde_json::to_value(&messages).map_err(json_error)?;
             wire
         } else {
