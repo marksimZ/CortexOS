@@ -224,6 +224,7 @@ fn main() {
             "get_knowledge",
             "save_knowledge",
             "approve_knowledge",
+            "workspace_index_summary",
             "load_knowledge_graph",
             "query_graph_nodes",
             "load_graph_node",

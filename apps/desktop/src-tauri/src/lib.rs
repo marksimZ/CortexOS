@@ -328,6 +328,7 @@ pub fn run() {
             commands::get_knowledge,
             commands::save_knowledge,
             commands::approve_knowledge,
+            commands::workspace_index_summary,
             commands::load_knowledge_graph,
             commands::query_graph_nodes,
             commands::load_graph_node,

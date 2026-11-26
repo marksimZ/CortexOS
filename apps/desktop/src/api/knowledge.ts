@@ -71,7 +71,16 @@ export type DroppedFilesReport = {
   errors: DroppedFileError[];
 };
 
+export type WorkspaceIndexSummary = {
+  workspaceId: string;
+  indexedNodes: number;
+  chunkCount: number;
+  staleVectorsPruned: number;
+  pendingVectorChunks: number;
+};
+
 export const knowledge = createClient<{
+  workspace_index_summary: Command<WorkspaceArgs, WorkspaceIndexSummary>;
   list_knowledge: Command<WorkspaceArgs, KnowledgeNode[]>;
   get_knowledge: Command<NodeArgs, KnowledgeDetail>;
   save_knowledge: Command<SaveKnowledge, string>;

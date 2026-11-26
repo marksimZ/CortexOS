@@ -227,6 +227,7 @@
     "allow-get-knowledge",
     "allow-save-knowledge",
     "allow-approve-knowledge",
+    "allow-workspace-index-summary",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:window:allow-close",

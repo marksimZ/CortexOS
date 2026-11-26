@@ -1,7 +1,8 @@
 import { AppDialog, openDialog } from "./components/AppDialog";
 import { SelectMenu } from "./components/SelectMenu";
 import { SourceBrowser, type SourceRef } from "./SourceBrowser";
-import { knowledge } from "./api/knowledge";
+import { knowledge, type WorkspaceIndexSummary } from "./api/knowledge";
+import { listen } from "@tauri-apps/api/event";
 import { notify } from "./components/Toast";
 import { StatusLabel } from "./components/StatusLabel";
 import { useEffect, useRef, useState } from "react";
@@ -54,9 +55,11 @@ export function KnowledgePage({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const [indexSummary, setIndexSummary] = useState<WorkspaceIndexSummary | null>(null);
   useEffect(() => {
     let current = true;
     setItems([]);
+    setIndexSummary(null);
     setError(null);
     setLoading(false);
     if (!studio.desktop || !workspace) return;
@@ -71,8 +74,19 @@ export function KnowledgePage({
       .finally(() => {
         if (current) setLoading(false);
       });
+    void knowledge("workspace_index_summary", { workspaceId: workspace })
+      .then((summary) => {
+        if (current) setIndexSummary(summary);
+      })
+      .catch(() => {});
+    const unlisten = listen<WorkspaceIndexSummary>("knowledge-index-updated", ({ payload }) => {
+      if (current && payload.workspaceId === workspace) {
+        setIndexSummary(payload);
+      }
+    }).catch(() => undefined);
     return () => {
       current = false;
+      void unlisten.then((fn) => fn?.()).catch(() => {});
     };
   }, [workspace, studio.desktop, revision, refresh]);
   const shown = items.filter(
@@ -153,6 +167,23 @@ export function KnowledgePage({
             <ListTree size={16} aria-hidden="true" />
             知识列表
           </button>}
+          {studio.desktop && indexSummary && (
+            <span className="knowledge-index-pill" title="新增或更新资料后自动增量维护词法与分段检索索引（不自动占用显存）">
+              检索索引已同步 · {indexSummary.indexedNodes} 篇 / {indexSummary.chunkCount} 片段
+              {indexSummary.pendingVectorChunks > 0 && (
+                <>
+                  {" · "}
+                  <button
+                    type="button"
+                    className="button text-button"
+                    onClick={() => navigate("settings", { section: "model", workspace })}
+                  >
+                    {indexSummary.pendingVectorChunks} 片段待手动向量化
+                  </button>
+                </>
+              )}
+            </span>
+          )}
           <h1 id="page-title" className="sr-only">知识</h1>
         </div>
         {!emptyLibrary && actions}

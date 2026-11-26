@@ -1,7 +1,7 @@
 use crate::{
     benchmark::dataset::require_workspace,
     cloud::vault::WindowsVault,
-    commands::{AppState, blocking},
+    commands::{AppState, blocking, spawn_index_maintenance},
     http_transport::model_client,
     models::{AppResult, now},
 };
@@ -628,6 +628,7 @@ fn read_news(body: &[u8]) -> AppResult<Vec<WebResult>> {
 
 #[tauri::command]
 pub(crate) async fn fetch_web_page(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     _search: State<'_, WebSearch>,
     workspace_id: String,
@@ -761,6 +762,7 @@ pub(crate) async fn fetch_web_page(
     let fetched_at = now();
     let final_url_str = final_url.to_string();
     let (saved_node_id, saved_version) = if save_to_knowledge.unwrap_or(false) {
+        let workspace = workspace_id.clone();
         let host = final_url.host_str().unwrap_or("网页").to_string();
         let (saved_url, saved_title, saved_text, saved_at) = (
             final_url_str.clone(),
@@ -771,7 +773,7 @@ pub(crate) async fn fetch_web_page(
         let (node_id, version) = blocking(state.database.clone()?, move |db| {
             save_web_page_knowledge(
                 db,
-                &workspace_id,
+                &workspace,
                 &saved_url,
                 &host,
                 &saved_title,
@@ -780,6 +782,7 @@ pub(crate) async fn fetch_web_page(
             )
         })
         .await?;
+        spawn_index_maintenance(&app, &state, workspace_id);
         (Some(node_id), Some(version))
     } else {
         (None, None)

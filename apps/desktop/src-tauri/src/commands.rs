@@ -2,6 +2,7 @@ use crate::{
     db::Database,
     models::*,
     ollama::{ModelHealth, Ollama},
+    retrieval::WorkspaceIndexSummary,
 };
 use std::{
     path::Path,
@@ -11,7 +12,7 @@ use std::{
     },
     time::Duration,
 };
-use tauri::{State, ipc::Channel};
+use tauri::{Emitter, State, ipc::Channel};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -96,6 +97,32 @@ pub(crate) async fn blocking<T: Send + 'static>(
     tauri::async_runtime::spawn_blocking(move || operation(&database))
         .await
         .map_err(|_| "本地数据任务意外结束，请保留草稿并重试。".to_string())?
+}
+
+pub(crate) fn spawn_index_maintenance(app: &tauri::AppHandle, state: &AppState, workspace_id: String) {
+    let Ok(database) = state.database.clone() else {
+        return;
+    };
+    let app = app.clone();
+    let closing = state.closing.clone();
+    tauri::async_runtime::spawn(async move {
+        if closing.load(Ordering::Relaxed) {
+            return;
+        }
+        if let Ok(summary) =
+            blocking(database, move |db| db.maintain_workspace_index(&workspace_id)).await
+        {
+            let _ = app.emit("knowledge-index-updated", summary);
+        }
+    });
+}
+
+#[tauri::command]
+pub async fn workspace_index_summary(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> AppResult<WorkspaceIndexSummary> {
+    blocking(state.database.clone()?, move |db| db.maintain_workspace_index(&workspace_id)).await
 }
 
 #[tauri::command]
@@ -582,7 +609,6 @@ pub async fn start_chat(
         if finished_status == "completed" {
             if let Some(cloud_target) = cloud {
                 use rusqlite::OptionalExtension;
-                use tauri::Emitter;
 
                 let user_message_id = blocking(title_db.clone(), {
                     let (ws, conv) = (title_ws.clone(), title_conv.clone());
@@ -724,26 +750,35 @@ pub async fn get_knowledge(
 }
 #[tauri::command]
 pub async fn save_knowledge(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: crate::knowledge::SaveKnowledge,
     validity: Option<crate::knowledge_scope::Validity>,
 ) -> AppResult<String> {
-    blocking(state.database.clone()?, move |db| match validity {
-        Some(value)=>db.save_version(input,None,Some(value)),
-        None=>db.save_knowledge(input),
-    }).await
+    let workspace_id = input.workspace_id.clone();
+    let saved = blocking(state.database.clone()?, move |db| match validity {
+        Some(value) => db.save_version(input, None, Some(value)),
+        None => db.save_knowledge(input),
+    })
+    .await?;
+    spawn_index_maintenance(&app, &state, workspace_id);
+    Ok(saved)
 }
 #[tauri::command]
 pub async fn approve_knowledge(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     workspace_id: String,
     node_id: String,
     expected_revision: i64,
 ) -> AppResult<()> {
+    let workspace = workspace_id.clone();
     blocking(state.database.clone()?, move |db| {
-        db.approve_knowledge(&workspace_id, &node_id, expected_revision)
+        db.approve_knowledge(&workspace, &node_id, expected_revision)
     })
-    .await
+    .await?;
+    spawn_index_maintenance(&app, &state, workspace_id);
+    Ok(())
 }
 
 #[tauri::command]
@@ -1042,14 +1077,20 @@ pub async fn choose_source(
 }
 #[tauri::command]
 pub async fn import_dropped_files(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     workspace_id: String,
     paths: Vec<String>,
 ) -> AppResult<crate::sources::DroppedFilesReport> {
-    blocking(state.database.clone()?, move |db| {
-        crate::sources::import_dropped_paths(db, &workspace_id, &paths)
+    let workspace = workspace_id.clone();
+    let report = blocking(state.database.clone()?, move |db| {
+        crate::sources::import_dropped_paths(db, &workspace, &paths)
     })
-    .await
+    .await?;
+    if !report.documents.is_empty() {
+        spawn_index_maintenance(&app, &state, workspace_id);
+    }
+    Ok(report)
 }
 
 #[tauri::command]
@@ -1093,14 +1134,18 @@ pub async fn list_watched_folders(
 
 #[tauri::command]
 pub async fn sync_watched_folder(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     workspace_id: String,
     folder_id: String,
 ) -> AppResult<crate::sources::FolderSyncReport> {
-    blocking(state.database.clone()?, move |db| {
-        db.sync_watched_folder(&workspace_id, &folder_id)
+    let workspace = workspace_id.clone();
+    let report = blocking(state.database.clone()?, move |db| {
+        db.sync_watched_folder(&workspace, &folder_id)
     })
-    .await
+    .await?;
+    spawn_index_maintenance(&app, &state, workspace_id);
+    Ok(report)
 }
 
 #[tauri::command]
@@ -1117,17 +1162,22 @@ pub async fn remove_watched_folder(
 
 #[tauri::command]
 pub async fn sync_workspace_watched_folders(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     workspace_id: String,
 ) -> AppResult<Vec<crate::sources::FolderSyncReport>> {
-    blocking(state.database.clone()?, move |db| {
-        db.sync_workspace_watched_folders(&workspace_id)
+    let workspace = workspace_id.clone();
+    let reports = blocking(state.database.clone()?, move |db| {
+        db.sync_workspace_watched_folders(&workspace)
     })
-    .await
+    .await?;
+    spawn_index_maintenance(&app, &state, workspace_id);
+    Ok(reports)
 }
 
 #[tauri::command]
 pub async fn commit_source(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     workspace_id: String,
     ticket: String,
@@ -1148,7 +1198,10 @@ pub async fn commit_source(
     };
     let payload = pending.clone();
     match blocking(state.database.clone()?, move |db| db.import_source(payload)).await {
-        Ok(saved) => Ok(saved),
+        Ok(saved) => {
+            spawn_index_maintenance(&app, &state, workspace_id);
+            Ok(saved)
+        }
         Err(error) => {
             if let Ok(mut slot) = state.pending_source.lock() {
                 if slot.is_none() && pending.created.elapsed() < Duration::from_secs(600) {

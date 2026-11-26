@@ -866,3 +866,15 @@
   gap: 8px;
   margin-top: 8px;
 }
+.knowledge-index-pill {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-inset);
+  border: 1px solid var(--line);
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: var(--text-caption);
+}

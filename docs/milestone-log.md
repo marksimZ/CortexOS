@@ -3233,3 +3233,26 @@ Markdown用原文存储，不改变请求或证据；不支持数学公式/代�
 - 已查看原生 WebView2 实拍截图：`artifacts/page-citation-native/page-citation-native-page--2e9b0-irectly-to-source-page-line-desktop/{evidence-page-badge,source-page-located}.png`，确认「第 2 页：核心推进原理」徽章展示与点击定位后高亮第 4–6 行原文滚动效果。
 
 注：历史 `cargo test ... retrieval` 全名运行中另有 4 项既有用例因早期自审批改版后测试夹具仍在审批 revision 1 而失败（非本切片引入，留待后续清理测试或 C1 一并整理）。真实长 PDF/PPTX 基于真实模型的多轮问答效果待授权后实测。
+
+### 2026-11-26 路线 B · 切片 B2：静默增量词法/分段索引维护与失效向量清理
+
+在资料导入、文件夹同步、网页入库及知识保存后自动后台维护本地词法与章节分段检索索引，并实时向知识页推送最新索引状态，全程零模型加载、零显存占用：
+
+- **Rust 后端与事件推送（由 Codex CLI GPT 执行）**：
+  - [retrieval.rs](apps/desktop/src-tauri/src/retrieval.rs) & [rag.rs](apps/desktop/src-tauri/src/rag.rs)：新增 `WorkspaceIndexSummary` 与 `Database::maintain_workspace_index`，在单次 SQLite 事务内自动补建缺失的 `knowledge_fts` / `rag_chunks` 记录（含旧无章节元数据片段自动升级），清理失配/过期 `rag_vectors` 记录并返回待手动向量化片段计数（纯 SQL 查询，不触发 Ollama）。
+  - [commands.rs](apps/desktop/src-tauri/src/commands.rs)、[web_search.rs](apps/desktop/src-tauri/src/web_search.rs)、[lib.rs](apps/desktop/src-tauri/src/lib.rs)、[build.rs](apps/desktop/src-tauri/build.rs)、[capabilities/default.json](apps/desktop/src-tauri/capabilities/default.json)：注册 `workspace_index_summary` 命令，并在 `import_dropped_files`、`commit_source`、`sync_watched_folder`、`sync_workspace_watched_folders`、`save_knowledge`、`approve_knowledge` 与 `fetch_web_page` 写入后非阻塞调度后台维护并发出 `"knowledge-index-updated"` 事件。
+- **前端实时索引状态胶囊**：
+  - 扩展 [knowledge.ts](apps/desktop/src/api/knowledge.ts)（`WorkspaceIndexSummary`、`workspace_index_summary`）与 [Knowledge.tsx](apps/desktop/src/Knowledge.tsx) / [features.css](apps/desktop/src/styles/features.css)，在知识页顶部展示「检索索引已同步 · N 篇 / M 片段」，并在存在未向量化片段时提供手动前往设置刷新的入口。
+  - 更新 [page-citation-native.spec.ts](apps/desktop/tests/page-citation-native.spec.ts) 验证知识页实时索引计数显示。
+
+实际验证（零真实 Ollama / 向量 / 云端调用）：
+
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run build`：`tsc --noEmit` 与 `vite build` 通过（Vite 671ms）。
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run test:unit`：5/5 通过。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked incremental_index`：1 passed, 0 failed（覆盖自动修复、章节升级、过期向量清理及计数）。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked page_section_chunks`：2 passed, 0 failed。
+- `cargo build --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`：通过（58.76s）。
+- `$env:CORTEXOS_NATIVE_ONLY="1"; npx.cmd playwright test tests/page-citation-native.spec.ts --project=desktop --output=../../artifacts/page-citation-native`（目录 `apps/desktop`）：1 passed（5.3s）。
+- 已查看原生 WebView2 实拍截图：`artifacts/page-citation-native/page-citation-native-page--2e9b0-irectly-to-source-page-line-desktop/knowledge-index-pill.png`，确认「检索索引已同步 · 1 篇 / 9 片段」状态胶囊显示正常。
+
+未验证：大批量文件夹同步后后台重索引吞吐与真实 Ollama 手动刷新向量流程尚未实测。

@@ -2,9 +2,19 @@ use crate::{db::Database, models::*};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const ALGORITHM: &str = "fts5-cjk-bigram-latin-bm25-v2";
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceIndexSummary {
+    pub workspace_id: String,
+    pub indexed_nodes: usize,
+    pub chunk_count: usize,
+    pub stale_vectors_pruned: usize,
+    pub pending_vector_chunks: usize,
+}
 
 #[derive(Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -296,6 +306,121 @@ pub fn enabled(connection: &Connection, workspace: &str, conversation: &str) -> 
     connection.query_row("SELECT COALESCE((SELECT enabled FROM conversation_retrieval_settings WHERE conversation_id=c.id AND workspace_id=c.workspace_id),1) FROM conversations c WHERE c.workspace_id=?1 AND c.id=?2 AND c.purpose='chat'",params![workspace,conversation],|r|r.get(0)).optional().map_err(error)?.ok_or_else(|| "会话不存在或不属于当前对话。".into())
 }
 impl Database {
+    pub fn maintain_workspace_index(&self, workspace_id: &str) -> AppResult<WorkspaceIndexSummary> {
+        let mut connection = self.connection()?;
+        let tx = connection.transaction().map_err(error)?;
+        crate::benchmark::dataset::require_workspace(&tx, workspace_id)?;
+        let candidates = tx
+            .prepare(
+                "WITH indexed AS MATERIALIZED (
+                     SELECT DISTINCT node_id,version FROM knowledge_fts WHERE workspace_id=?1
+                 )
+                 SELECT n.node_id,n.version,v.content,f.node_id IS NULL,
+                        EXISTS (SELECT 1 FROM knowledge_source_links l
+                            WHERE l.node_id=n.node_id AND l.knowledge_version=n.version) AS has_source_link,
+                        EXISTS (SELECT 1 FROM rag_chunks ch WHERE ch.workspace_id=n.workspace_id
+                            AND ch.node_id=n.node_id AND ch.version=n.version) AS has_chunks,
+                        (substr(v.content,1,3)='## ' OR instr(v.content,char(10)||'## ')>0)
+                            AND EXISTS (SELECT 1 FROM rag_chunks ch WHERE ch.workspace_id=n.workspace_id
+                                AND ch.node_id=n.node_id AND ch.version=n.version
+                                AND instr(ch.location_json,'\"sectionPath\":[]')>0) AS may_need_section_upgrade
+                 FROM rag_current_knowledge n
+                 JOIN knowledge_versions v ON v.node_id=n.node_id AND v.version=n.version
+                 LEFT JOIN indexed f ON f.node_id=n.node_id AND f.version=n.version
+                 WHERE n.workspace_id=?1 AND (f.node_id IS NULL OR may_need_section_upgrade
+                     OR (NOT has_chunks AND (has_source_link OR length(CAST(v.content AS BLOB))>?2)))",
+            )
+            .map_err(error)?
+            .query_map(params![workspace_id, crate::source_chunks::CHILD_BYTES as i64], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, bool>(3)?,
+                    row.get::<_, bool>(4)?,
+                    row.get::<_, bool>(5)?,
+                ))
+            })
+            .map_err(error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(error)?;
+
+        for (node_id, version, content, missing_fts, has_source_link, has_chunks) in candidates {
+            if !crate::sources::available(&tx, &node_id, version)? {
+                continue;
+            }
+            if !missing_fts {
+                let evidence = if has_source_link {
+                    crate::sources::evidence(&tx, &node_id, version)?
+                } else {
+                    Vec::new()
+                };
+                let segments = crate::source_chunks::knowledge_segments(
+                    workspace_id, &node_id, version, &content, evidence.first(),
+                );
+                if segments.is_empty() {
+                    continue;
+                }
+                if has_chunks {
+                    // A preamble can legitimately have an empty section path.
+                    let existing = tx
+                        .prepare(
+                            "SELECT id,location_json FROM rag_chunks
+                             WHERE workspace_id=?1 AND node_id=?2 AND version=?3",
+                        )
+                        .map_err(error)?
+                        .query_map(params![workspace_id, node_id, version], |row| {
+                            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                        })
+                        .map_err(error)?
+                        .collect::<rusqlite::Result<BTreeMap<_, _>>>()
+                        .map_err(error)?;
+                    if segments.len() == existing.len() && segments.iter().all(|segment| {
+                        existing.get(&segment.id).is_some_and(|location| {
+                            serde_json::to_string(&segment.location).is_ok_and(|expected| expected == *location)
+                        })
+                    }) {
+                        continue;
+                    }
+                }
+            }
+            index_node(&tx, &node_id)?;
+        }
+
+        let stale_vectors_pruned = tx
+            .execute(
+                "DELETE FROM rag_vectors AS r WHERE r.workspace_id=?1 AND (
+                     NOT EXISTS (SELECT 1 FROM rag_current_knowledge n WHERE n.workspace_id=r.workspace_id
+                         AND n.node_id=r.node_id AND n.version=r.version)
+                     OR (r.chunk_id!='' AND NOT EXISTS (
+                         SELECT 1 FROM rag_chunks ch WHERE ch.workspace_id=r.workspace_id
+                             AND ch.node_id=r.node_id AND ch.version=r.version AND ch.id=r.chunk_id))
+                     OR (r.chunk_id='' AND EXISTS (
+                         SELECT 1 FROM rag_chunks ch WHERE ch.workspace_id=r.workspace_id
+                             AND ch.node_id=r.node_id AND ch.version=r.version))
+                 )",
+                [workspace_id],
+            )
+            .map_err(error)?;
+        let (indexed_nodes, chunk_count) = tx
+            .query_row(
+                "SELECT (SELECT count(DISTINCT node_id) FROM knowledge_fts WHERE workspace_id=?1),
+                        (SELECT count(*) FROM rag_chunks WHERE workspace_id=?1)",
+                [workspace_id],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+            )
+            .map_err(error)?;
+        let pending_vector_chunks = crate::rag::pending_vector_chunks(&tx, workspace_id)?;
+        tx.commit().map_err(error)?;
+        Ok(WorkspaceIndexSummary {
+            workspace_id: workspace_id.to_owned(),
+            indexed_nodes: indexed_nodes as usize,
+            chunk_count: chunk_count as usize,
+            stale_vectors_pruned,
+            pending_vector_chunks,
+        })
+    }
+
     pub fn set_conversation_retrieval(
         &self,
         workspace: &str,
@@ -451,6 +576,89 @@ mod tests {
         let c = db.create_conversation(&w).unwrap().id;
         (path, db, w, c)
     }
+
+    #[test]
+    fn incremental_index_reindexes_missing_and_prunes_stale_vectors() {
+        let db = Database::rag_evaluation_database().unwrap();
+        let workspace = db.create_workspace("Incremental index").unwrap().id;
+        let content = format!(
+            "Preamble\n\n## First section\n{}\n\n## Second section\n{}",
+            "first paragraph\n".repeat(60),
+            "second paragraph\n".repeat(60),
+        );
+        let node = db.save_knowledge(draft(&workspace, "Sections", &content)).unwrap();
+        let standalone = db.save_knowledge(draft(&workspace, "Standalone", "Short note")).unwrap();
+        let baseline = db.maintain_workspace_index(&workspace).unwrap();
+        assert_eq!(baseline.indexed_nodes, 2);
+        assert!(baseline.chunk_count >= 3);
+        assert_eq!(baseline.pending_vector_chunks, 0);
+
+        {
+            let c = db.connection().unwrap();
+            c.execute(
+                "INSERT INTO rag_index_profiles VALUES(?1,'test','ollama','fixture','fixture',1,'l2','approved-knowledge-chunks-v2',?2)",
+                params![workspace, now()],
+            ).unwrap();
+            c.execute("INSERT INTO rag_workspace_settings VALUES(?1,'test',1,0)", [&workspace]).unwrap();
+            c.execute("DELETE FROM knowledge_fts WHERE node_id=?1", [&node]).unwrap();
+        }
+        let repaired_fts = db.maintain_workspace_index(&workspace).unwrap();
+        assert_eq!(repaired_fts.workspace_id, workspace);
+        assert_eq!(repaired_fts.indexed_nodes, 2);
+        assert_eq!(repaired_fts.chunk_count, baseline.chunk_count);
+        assert_eq!(repaired_fts.pending_vector_chunks, baseline.chunk_count + 1);
+
+        {
+            let c = db.connection().unwrap();
+            c.execute("DELETE FROM rag_chunks WHERE node_id=?1", [&node]).unwrap();
+        }
+        let repaired_chunks = db.maintain_workspace_index(&workspace).unwrap();
+        assert_eq!(repaired_chunks.chunk_count, baseline.chunk_count);
+        assert_eq!(repaired_chunks.pending_vector_chunks, baseline.chunk_count + 1);
+
+        {
+            let c = db.connection().unwrap();
+            c.execute(
+                "UPDATE rag_chunks SET location_json=json_set(location_json,'$.sectionPath',json('[]')) WHERE node_id=?1",
+                [&node],
+            ).unwrap();
+            c.execute(
+                "INSERT INTO rag_vectors
+                 SELECT ?1,'test',?2,1,'fake',X'0000803F',id FROM rag_chunks
+                 WHERE workspace_id=?1 AND node_id=?2 ORDER BY id LIMIT 1",
+                params![workspace, node],
+            ).unwrap();
+            c.execute(
+                "INSERT INTO rag_vectors VALUES
+                   (?1,'test',?2,1,'fake',X'0000803F','missing'),
+                   (?1,'test',?2,1,'fake',X'0000803F',''),
+                   (?1,'test',?3,1,'fake',X'0000803F','')",
+                params![workspace, node, standalone],
+            ).unwrap();
+        }
+        let mut updated = draft(&workspace, "Standalone", "New version");
+        updated.node_id = Some(standalone.clone());
+        updated.expected_revision = Some(db.knowledge_detail(&workspace, &standalone).unwrap().node.revision);
+        db.save_knowledge(updated).unwrap();
+
+        let summary = db.maintain_workspace_index(&workspace).unwrap();
+        assert_eq!(summary.stale_vectors_pruned, 3);
+        assert_eq!(summary.indexed_nodes, 2);
+        assert_eq!(summary.chunk_count, baseline.chunk_count);
+        assert_eq!(summary.pending_vector_chunks, baseline.chunk_count);
+        let repeated = db.maintain_workspace_index(&workspace).unwrap();
+        assert_eq!(repeated.stale_vectors_pruned, 0);
+        assert_eq!(repeated.pending_vector_chunks, summary.pending_vector_chunks);
+        let c = db.connection().unwrap();
+        let has_section_path: bool = c.query_row(
+            "SELECT EXISTS(SELECT 1 FROM rag_chunks WHERE node_id=?1
+                           AND json_extract(location_json,'$.sectionPath[0]')='Second section')",
+            [&node],
+            |row| row.get(0),
+        ).unwrap();
+        assert!(has_section_path);
+    }
+
     #[test]
     fn page_section_chunks_indexes_long_standalone_web_knowledge_and_retrieves_matching_section() {
         let db = Database::rag_evaluation_database().unwrap();

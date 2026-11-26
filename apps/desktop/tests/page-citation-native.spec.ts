@@ -87,6 +87,12 @@ test("page/section chunking cites matching section and jumps directly to source 
     await expect(sourcePre.locator(".selected-source-line").first()).toBeVisible();
     await expect(sourcePre).toContainText("火星热核推进公式");
     await page.screenshot({ path: info.outputPath("source-page-located.png"), animations: "disabled" });
+
+    await page.getByRole("button", { name: "关闭资料文件", exact: true }).click();
+    const indexPill = page.locator(".knowledge-index-pill");
+    await expect(indexPill).toBeVisible();
+    await expect(indexPill).toContainText("检索索引已同步 · 1 篇");
+    await page.screenshot({ path: info.outputPath("knowledge-index-pill.png"), animations: "disabled" });
   } finally {
     await app.stop();
     fixture.closeAllConnections();

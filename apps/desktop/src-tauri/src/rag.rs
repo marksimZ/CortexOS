@@ -28,6 +28,8 @@ const MAX_ROWS: usize = 2000;
 const MAX_INPUT_BYTES: usize = 8 * 1024;
 const KNOWLEDGE: &str = "FROM rag_current_knowledge n JOIN knowledge_versions v ON v.node_id=n.node_id AND v.version=n.version";
 const ELIGIBLE: &str = "WHERE n.workspace_id=?1 AND NOT EXISTS(SELECT 1 FROM knowledge_source_links l JOIN source_documents s ON s.id=l.source_id WHERE l.node_id=n.node_id AND l.knowledge_version=v.version AND s.enabled=0)";
+const CHUNK_JOIN: &str = "LEFT JOIN rag_chunks ch ON ch.workspace_id=n.workspace_id AND ch.node_id=n.node_id AND ch.version=v.version";
+const INPUT_FITS: &str = "length(CAST(v.title AS BLOB))+length(CAST(COALESCE(ch.body,v.content) AS BLOB))<?2";
 const VECTOR_JOIN: &str = "JOIN rag_vectors r ON r.workspace_id=n.workspace_id AND r.node_id=n.node_id AND r.version=v.version AND r.index_id=?2 LEFT JOIN rag_chunks ch ON ch.workspace_id=r.workspace_id AND ch.node_id=r.node_id AND ch.version=r.version AND ch.id=r.chunk_id";
 const LIVE_VECTOR: &str = "(ch.id IS NOT NULL OR (r.chunk_id='' AND NOT EXISTS(
     SELECT 1 FROM rag_chunks current WHERE current.workspace_id=n.workspace_id AND current.node_id=n.node_id AND current.version=v.version)))";
@@ -109,6 +111,25 @@ fn documents(c: &Connection, workspace: &str) -> AppResult<Vec<Document>> {
     select_documents(c, workspace, None)
 }
 
+pub(crate) fn pending_vector_chunks(c: &Connection, workspace: &str) -> AppResult<usize> {
+    c.query_row(
+        &format!(
+            "SELECT count(*) {KNOWLEDGE} {CHUNK_JOIN}
+             JOIN rag_workspace_settings s ON s.workspace_id=n.workspace_id AND s.index_id!=''
+             {ELIGIBLE} AND {INPUT_FITS}
+             AND NOT EXISTS (
+                 SELECT 1 FROM rag_vectors r WHERE r.workspace_id=n.workspace_id
+                   AND r.index_id=s.index_id AND r.node_id=n.node_id AND r.version=v.version
+                   AND r.chunk_id=COALESCE(ch.id,'')
+             )"
+        ),
+        params![workspace, MAX_INPUT_BYTES as i64],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|count| count as usize)
+    .map_err(error)
+}
+
 fn select_documents(c: &Connection, workspace: &str, cloud: Option<(&str, &str)>) -> AppResult<Vec<Document>> {
     let filter = if cloud.is_some() {
         "AND EXISTS (SELECT 1 FROM model_cloud_knowledge g
@@ -118,8 +139,8 @@ fn select_documents(c: &Connection, workspace: &str, cloud: Option<(&str, &str)>
     } else { "" };
     let sql = format!(
         "SELECT n.node_id,v.version,v.title,COALESCE(ch.body,v.content),COALESCE(ch.id,'')
-         {KNOWLEDGE} LEFT JOIN rag_chunks ch ON ch.workspace_id=n.workspace_id AND ch.node_id=n.node_id AND ch.version=v.version
-         {ELIGIBLE} AND length(CAST(v.title AS BLOB))+length(CAST(COALESCE(ch.body,v.content) AS BLOB))<?2 {filter}
+         {KNOWLEDGE} {CHUNK_JOIN}
+         {ELIGIBLE} AND {INPUT_FITS} {filter}
          ORDER BY n.node_id,ch.id LIMIT ?3"
     );
     let mut stmt = c.prepare(&sql).map_err(error)?;
