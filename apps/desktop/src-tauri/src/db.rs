@@ -53,6 +53,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0038_assistant_name.sql"),
     include_str!("../migrations/0039_message_thinking.sql"),
     include_str!("../migrations/0040_chat_messages_fts.sql"),
+    include_str!("../migrations/0041_evidence_retrieval_view.sql"),
 ];
 const MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const RUN_COLUMNS: &str = "id,workspace_id,conversation_id,assistant_message_id,model_id,status,started_at,finished_at,error_message";
@@ -264,7 +265,7 @@ fn migrate(connection: &mut Connection, directory: &Path, migrations: &[&str]) -
     let transaction = connection.transaction().map_err(error)?;
     for (index, sql) in migrations.iter().enumerate().skip(applied) {
         transaction.execute_batch(sql).map_err(error)?;
-        if matches!(index + 1, 6 | 13) {
+        if matches!(index + 1, 6 | 13 | 41) {
             crate::retrieval::rebuild(&transaction)?;
         }
         transaction
@@ -1347,19 +1348,22 @@ impl Database {
             let mut proposed = None;
             let mut matched = None;
             if let Some(chunk_id) = item["chunkId"].as_str() {
-                let source = evidence.first().ok_or("找不到文件片段对应的原文版本。")?;
+                let title = item["title"].as_str().unwrap();
+                let source = evidence.first();
                 let windows = if let Some(location) = chunk_location {
-                    serde_json::from_value(location).ok().and_then(|location|crate::source_chunks::windows(text,source,chunk_id,location))
-                        .ok_or("找不到知识快照中的原文片段。")?
+                    serde_json::from_value(location).ok().and_then(|location|crate::source_chunks::knowledge_windows(text,title,source,chunk_id,location))
+                        .ok_or("找不到知识快照中的片段。")?
                 } else {
-                    crate::source_chunks::stored_windows(&connection,workspace_id,id,version,chunk_id,text,source)?
+                    crate::source_chunks::stored_windows(&connection,workspace_id,id,version,chunk_id,text,title,source)?
                 };
-                matched = Some(json!({"startLine":windows[1].matched["matchStartLine"],"endLine":windows[1].matched["matchEndLine"]}));
+                if !windows[1].evidence.is_null() {
+                    matched = Some(json!({"startLine":windows[1].matched["matchStartLine"],"endLine":windows[1].matched["matchEndLine"]}));
+                }
                 if !duplicate && auto_count < 5 {
                     for window in windows {
                         reference["contentHash"] = json!(hash(&window.text));
                         reference["content"] = json!(window.text);
-                        reference["sourceEvidence"] = json!([window.evidence]);
+                        reference["sourceEvidence"] = if window.evidence.is_null() { json!([]) } else { json!([window.evidence]) };
                         reference["sourceChunk"] = window.matched;
                         knowledge.push(reference.clone());
                         let request = block(&knowledge)?;

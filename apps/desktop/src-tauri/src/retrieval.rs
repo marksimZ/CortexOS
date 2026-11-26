@@ -223,16 +223,17 @@ pub fn index_node(connection: &Connection, id: &str) -> AppResult<()> {
             [id]
         ).map_err(error)?;
     }
-    let row: Option<(String,i64,String,String)>=connection.query_row("SELECT n.workspace_id,v.version,v.title,v.content FROM knowledge_nodes n JOIN knowledge_versions v ON v.node_id=n.id AND v.version=n.effective_version WHERE n.id=?1 AND v.kind IN ('knowledge','context','decision')",params![id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional().map_err(error)?;
+    let row: Option<(String,i64,String,String)>=connection.query_row("SELECT n.workspace_id,v.version,v.title,v.content FROM knowledge_nodes n JOIN knowledge_versions v ON v.node_id=n.id AND v.version=n.effective_version WHERE n.id=?1 AND v.kind IN ('knowledge','context','decision','evidence')",params![id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional().map_err(error)?;
     if let Some((workspace, version, title, body)) = row {
         if !crate::sources::available(connection, id, version)? {
             return Ok(());
         }
         let title_terms = terms(&title).join(" ");
-        if chunk_schema
-            && let Some(source) = crate::sources::evidence(connection, id, version)?.first()
-        {
-            let segments = crate::source_chunks::segments(&workspace, &body, source);
+        if chunk_schema {
+            let evidence = crate::sources::evidence(connection, id, version)?;
+            let segments = crate::source_chunks::knowledge_segments(
+                &workspace, id, version, &body, evidence.first(),
+            );
             if !segments.is_empty() {
                 for segment in segments {
                     let location = serde_json::to_string(&segment.location)
@@ -450,6 +451,85 @@ mod tests {
         let c = db.create_conversation(&w).unwrap().id;
         (path, db, w, c)
     }
+    #[test]
+    fn page_section_chunks_indexes_long_standalone_web_knowledge_and_retrieves_matching_section() {
+        let db = Database::rag_evaluation_database().unwrap();
+        let workspace = db.create_workspace("网页检索").unwrap().id;
+        let chat = db.create_conversation(&workspace).unwrap().id;
+        let title = "网页笔记";
+        let overview = "背景资料".repeat(200);
+        let filler = "实验说明".repeat(50);
+        let section = format!("## 第二节 量子纠错\n{filler}\n稳定子测量\n{filler}");
+        let content = format!("## 第一节 概览\n{overview}\n\n{section}");
+        assert!(content.len() > 2048);
+        let mut input = draft(&workspace, title, &content);
+        input.kind = "evidence".into();
+        let node = db.save_knowledge(input).unwrap();
+        {
+            let connection = db.connection().unwrap();
+            assert!(crate::sources::evidence(&connection, &node, 1).unwrap().is_empty());
+            let indexed: (i64, i64, String) = connection.query_row(
+                "SELECT (SELECT count(*) FROM rag_chunks WHERE node_id=?1), count(*),
+                        max(CASE WHEN ch.body LIKE '## 第二节 量子纠错%' THEN ch.id END)
+                 FROM knowledge_fts f
+                 JOIN rag_chunks ch ON ch.workspace_id=f.workspace_id AND ch.node_id=f.node_id
+                     AND ch.version=f.version AND ch.id=f.chunk_id
+                 WHERE f.node_id=?1",
+                [&node],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            ).unwrap();
+            assert!(indexed.0 > 2);
+            assert_eq!(indexed.0, indexed.1);
+            let result = search(&connection, &workspace, "量子纠错").unwrap();
+            let hit = &result["candidates"][0];
+            assert_eq!(hit["nodeId"], node);
+            assert_eq!(hit["kind"], "evidence");
+            assert_eq!(hit["chunkId"], indexed.2);
+            assert!(indexed.2.starts_with(&format!("node/{workspace}/{node}/1/child/")));
+            assert!(hit["chunkText"].as_str().unwrap().starts_with("## 第二节 量子纠错"));
+        }
+
+        let settings = ModelSettings {
+            num_ctx: 8192,
+            ..Default::default()
+        };
+        let snapshot = json!(db.capture_knowledge_snapshot(&workspace, "章节快照").unwrap());
+        let scope = crate::knowledge_scope::Request::Snapshot {
+            snapshot_id: snapshot["id"].as_str().unwrap().into(),
+        };
+        for scope in [None, Some(&scope)] {
+            let prepared = db.prepare_context_run_with_retrieval(
+                &new_id(), &workspace, &chat, "量子纠错", &settings, &[], true, None, scope, false,
+            ).unwrap();
+            let reference = &prepared.manifest["knowledgeRefs"][0];
+            assert_eq!(reference["nodeId"], node);
+            assert_eq!(reference["content"], section);
+            assert_eq!(reference["sourceEvidence"], json!([]));
+            let chunk = &reference["sourceChunk"];
+            assert_eq!(chunk["sourceId"], "");
+            assert_eq!(chunk["documentVersionId"], 1);
+            assert_eq!(chunk["sourcePath"], title);
+            assert_eq!(chunk["sectionPath"], json!(["第二节 量子纠错"]));
+            assert_eq!(chunk["expanded"], true);
+            assert_eq!(chunk["matchStartLine"], 4);
+            assert_eq!(chunk["matchEndLine"], 6);
+            let request = prepared.request.to_string();
+            assert!(request.contains("稳定子测量"));
+            assert!(!request.contains("第一节 概览"));
+        }
+
+        let limited = db.prepare_context_run(
+            &new_id(), &workspace, &chat, "量子纠错", &ModelSettings::default(), &[], true,
+        ).unwrap();
+        let reference = &limited.manifest["knowledgeRefs"][0];
+        assert_eq!(
+            reference["content"],
+            format!("## 第二节 量子纠错\n{filler}\n稳定子测量\n")
+        );
+        assert_eq!(reference["sourceChunk"]["expanded"], false);
+        assert_eq!(reference["sourceChunk"]["sectionPath"], json!(["第二节 量子纠错"]));
+    }
+
     #[test]
     fn tokenizer_comparison_and_fixed_mixed_language_queries() {
         let (path, db, w, _) = setup();

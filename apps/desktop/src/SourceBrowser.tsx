@@ -137,6 +137,14 @@ export function SourceBrowser({
       generation.current++;
     };
   }, []);
+  useEffect(() => {
+    if (!initial || !selected) return;
+    requestAnimationFrame(() => {
+      sourcePreRef.current
+        ?.querySelector<HTMLElement>(".selected-source-line")
+        ?.scrollIntoView({ block: "center" });
+    });
+  }, [initial?.sourceId, initial?.version, initial?.startLine, selected?.document.id, selected?.version]);
   const perform = async (action: () => Promise<void>) => {
     if (busy) return;
     setBusy(true);

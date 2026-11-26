@@ -85,7 +85,7 @@ export interface KnowledgeReference extends ContextSelection {
   content: string;
   contentHash: string;
   reason: string;
-  sourceChunk?: { expanded: boolean; matchStartLine: number; matchEndLine: number; sourcePath: string };
+  sourceChunk?: { expanded: boolean; matchStartLine: number; matchEndLine: number; sourcePath: string; sectionPath?: string[] };
   versionLineage?: VersionLineage;
   sourceEvidence?: Omit<
     import("./SourceBrowser").SourceEvidence,

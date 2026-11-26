@@ -1,6 +1,6 @@
 import { AppDialog, openDialog } from "./AppDialog";
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, BookOpen, Network, PanelRightClose } from "lucide-react";
+import { ArrowUpRight, BookOpen, FileText, Network, PanelRightClose } from "lucide-react";
 import { errorText, type RunDetail, type Studio } from "../studio";
 import { navigate } from "../navigation";
 import { RetrievalInspection } from "./RetrievalInspection";
@@ -57,8 +57,21 @@ export function ChatEvidence({ studio, overlay, runId, onInspect, onClose }: {
       <RetrievalInspection detail={detail} beforeLocate={overlay ? onClose : undefined} />
     </details>}
     {manifest && <section className="evidence-budget"><div><h3>上下文估算</h3><span className="numeric">{manifest.estimatedUnits.toLocaleString()} / {manifest.budgetUnits.toLocaleString()}</span></div><progress aria-label="上下文估算用量" title={manifest.estimateNote} value={manifest.estimatedUnits} max={Math.max(1, manifest.budgetUnits)}/><details><summary>估算说明</summary><p>{manifest.estimateNote}</p></details></section>}
-    <div className="evidence-references">{refs.map(ref => <button key={ref.nodeId} className={`evidence-reference ${selected === ref.nodeId ? "selected" : ""}`} onClick={() => setSelected(ref.nodeId)}><span className="reference-dot"/><span><strong>{ref.title}</strong><span>v{ref.version}</span></span><ArrowUpRight size={14}/></button>)}</div>
-    {item && <section className="evidence-selection"><h3>{item.title}</h3><p>{item.content}</p><button className="button secondary" onClick={() => navigate("knowledge", {workspace:studio.workspaceId,node:item.nodeId,version:item.version})}><BookOpen size={14}/>查看此知识版本</button></section>}
+    <div className="evidence-references">{refs.map(ref => {
+      const sectionLabel = ref.sourceChunk?.sectionPath?.length ? ref.sourceChunk.sectionPath.join(" / ") : undefined;
+      return <button key={ref.nodeId} className={`evidence-reference ${selected === ref.nodeId ? "selected" : ""}`} onClick={() => setSelected(ref.nodeId)}><span className="reference-dot"/><span><strong>{ref.title}</strong><span>v{ref.version}{sectionLabel ? ` · ${sectionLabel}` : ""}</span></span><ArrowUpRight size={14}/></button>;
+    })}</div>
+    {item && <section className="evidence-selection"><h3>{item.title}</h3>{item.sourceChunk?.sectionPath?.length ? <p className="evidence-section-badge">{item.sourceChunk.sectionPath.join(" / ")} · 第 {item.sourceChunk.matchStartLine}–{item.sourceChunk.matchEndLine} 行</p> : null}<p>{item.content}</p><div className="evidence-actions">{item.sourceEvidence?.[0] && <button className="button primary" onClick={() => {
+      const src = item.sourceEvidence![0];
+      if (overlay) onClose();
+      navigate("knowledge", {
+        workspace: studio.workspaceId,
+        source: src.sourceId,
+        sourceVersion: src.version,
+        startLine: item.sourceChunk?.matchStartLine ?? src.startLine,
+        endLine: item.sourceChunk?.matchEndLine ?? src.endLine,
+      });
+    }}><FileText size={14}/>定位原文页码</button>}<button className="button secondary" onClick={() => navigate("knowledge", {workspace:studio.workspaceId,node:item.nodeId,version:item.version})}><BookOpen size={14}/>查看此知识版本</button></div></section>}
     {detail && <button className="button secondary evidence-inspect" onClick={onInspect}>查看完整处理记录<ArrowUpRight size={14}/></button>}
     {!runId && <a className="button secondary" href="#/knowledge">整理项目知识<ArrowUpRight size={14}/></a>}
     </div>

@@ -61,7 +61,20 @@ export function RetrievalInspection({ detail, beforeLocate, showContext = false,
               {referenceReasons[item.reason] && <p>{referenceReasons[item.reason]}</p>}
               <p>{item.citationId && `${item.citationId}，`}文字 {encoder.encode(item.content).length.toLocaleString()} 字节</p>
               {item.sourceEvidence?.map(source => <p key={source.sourceId}>{source.name}，文件 v{source.version}，第 {source.startLine}–{source.endLine} 行</p>)}
-              {item.sourceChunk && <p>命中第 {item.sourceChunk.matchStartLine}–{item.sourceChunk.matchEndLine} 行{item.sourceChunk.expanded ? "，另附同节上下文" : ""}。</p>}
+              {item.sourceChunk && <p>{item.sourceChunk.sectionPath?.length ? `章节/页码：${item.sourceChunk.sectionPath.join(" / ")} · ` : ""}命中第 {item.sourceChunk.matchStartLine}–{item.sourceChunk.matchEndLine} 行{item.sourceChunk.expanded ? "，另附同节上下文" : ""}。</p>}
+              {item.sourceEvidence?.[0] && !archived && <div className="retrieval-links">
+                <button type="button" className="button text-button" onClick={() => {
+                  const src = item.sourceEvidence![0];
+                  beforeLocate?.();
+                  navigate("knowledge", {
+                    workspace: run.workspaceId,
+                    source: src.sourceId,
+                    sourceVersion: src.version,
+                    startLine: item.sourceChunk?.matchStartLine ?? src.startLine,
+                    endLine: item.sourceChunk?.matchEndLine ?? src.endLine,
+                  });
+                }}>定位原文页码</button>
+              </div>}
               {!!item.versionLineage?.replacesVersion && <p>此版本替代 v{item.versionLineage.replacesVersion}。</p>}
               {!!item.versionLineage?.replacedByVersion && <p>此版本后由 v{item.versionLineage.replacedByVersion} 接替。</p>}
               <p className="context-content">{item.content}</p>

@@ -3209,3 +3209,27 @@ Markdown用原文存储，不改变请求或证据；不支持数学公式/代�
 - 已查看原生 WebView2 实拍截图：`artifacts/chat-search-native/chat-search-native-cross-c-1b47e-nd-jumps-to-located-message-desktop/{chat-search-results,chat-search-located}.png`，确认侧栏命中结果列表、角色标记及点击后跨会话跳转并高亮目标消息（`data-located="true"`）表现正常。
 
 未验证：大规模多轮长历史下的检索延迟压测与真实模型生成内容搜索尚未开展。
+
+### 2026-11-26 路线 B · 切片 B1：长文档按页/章节分块与页码直接溯源跳转
+
+升级多格式文档与长文本节点的检索分段逻辑，并在「回答依据」与「处理记录」中补齐章节/页码标签及一键定位原文页码行范围的能力：
+
+- **Rust 后端（由 Codex CLI GPT 执行）**：
+  - [source_chunks.rs](apps/desktop/src-tauri/src/source_chunks.rs)：将 `is_markdown` 扩展为 `uses_section_headings`（覆盖 `.md`、`.markdown`、`.pdf`、`.pptx`、`.xlsx`、`.epub`、`.docx`），统一按 `doc_extract` 输出的 `## 第 N 页` / 章节标题切分父子块；新增 `node_segments` / `node_windows` 为无文件关联的长笔记及抓取网页提供独立章节分块与定位窗口。
+  - [0041_evidence_retrieval_view.sql](apps/desktop/src-tauri/migrations/0041_evidence_retrieval_view.sql)、[retrieval.rs](apps/desktop/src-tauri/src/retrieval.rs)、[db.rs](apps/desktop/src-tauri/src/db.rs)、[knowledge_scope.rs](apps/desktop/src-tauri/src/knowledge_scope.rs)：将 `'evidence'`（网页正文等）纳入 `rag_current_knowledge` 与 `index_node`，长独立节点同样切入 `rag_chunks` 与 `knowledge_fts`，并在 `contextManifest.knowledgeRefs[].sourceChunk` 透出 `sectionPath`。
+- **前端页码展示与原生跳转验收**：
+  - 扩展 [studio.ts](apps/desktop/src/studio.ts)（`sourceChunk.sectionPath`）与 [navigation.ts](apps/desktop/src/navigation.ts)（`source` / `sourceVersion` / `startLine` / `endLine` 查询参数）。
+  - 更新 [ChatEvidence.tsx](apps/desktop/src/components/ChatEvidence.tsx)、[RetrievalInspection.tsx](apps/desktop/src/components/RetrievalInspection.tsx)、[Knowledge.tsx](apps/desktop/src/Knowledge.tsx)、[SourceBrowser.tsx](apps/desktop/src/SourceBrowser.tsx) 与 [features.css](apps/desktop/src/styles/features.css)：展示章节/页码徽章与「定位原文页码」按钮，点击后自动打开目标文件浏览器并居中滚动高亮引用行区间。
+  - 新增原生测试 [page-citation-native.spec.ts](apps/desktop/tests/page-citation-native.spec.ts) 并注册到 [playwright.config.ts](apps/desktop/playwright.config.ts)。
+
+实际验证（仅使用单测与本机 `127.0.0.1` 假 Ollama 服务，未调用真实模型）：
+
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run build`：`tsc --noEmit` 与 `vite build` 通过（Vite 592ms）。
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run test:unit`：5/5 通过。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked page_section_chunks`：2 passed, 0 failed（覆盖 PDF/PPTX 页码切片与长独立网页/笔记章节检索）。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked source_chunks`：4 passed, 0 failed。
+- `cargo build --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`：通过（40.49s）。
+- `$env:CORTEXOS_NATIVE_ONLY="1"; npx.cmd playwright test tests/page-citation-native.spec.ts --project=desktop --output=../../artifacts/page-citation-native`（目录 `apps/desktop`）：1 passed（3.9s）。
+- 已查看原生 WebView2 实拍截图：`artifacts/page-citation-native/page-citation-native-page--2e9b0-irectly-to-source-page-line-desktop/{evidence-page-badge,source-page-located}.png`，确认「第 2 页：核心推进原理」徽章展示与点击定位后高亮第 4–6 行原文滚动效果。
+
+注：历史 `cargo test ... retrieval` 全名运行中另有 4 项既有用例因早期自审批改版后测试夹具仍在审批 revision 1 而失败（非本切片引入，留待后续清理测试或 C1 一并整理）。真实长 PDF/PPTX 基于真实模型的多轮问答效果待授权后实测。

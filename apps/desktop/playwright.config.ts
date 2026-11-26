@@ -92,6 +92,7 @@ export default defineConfig({
         "thinking-stream-native.spec.ts",
         "web-url-import-native.spec.ts",
         "chat-search-native.spec.ts",
+        "page-citation-native.spec.ts",
         "web-search-native.spec.ts",
         "chat.spec.ts",
         "markdown-camera.spec.ts",

@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 const CHUNKING_VERSION: &str = "source-lines-v1";
-const CHILD_BYTES: usize = 800;
+pub(crate) const CHILD_BYTES: usize = 800;
 const PARENT_BYTES: usize = 4800;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -121,20 +121,6 @@ pub(crate) struct Segment<'a> {
     pub location: SegmentLocation,
 }
 
-fn segment_id(
-    workspace: &str,
-    source: &Value,
-    kind: &str,
-    start: usize,
-    end: usize,
-    hash: &str,
-) -> String {
-    digest(&format!(
-        "{CHUNKING_VERSION}/{workspace}/{}/{}/{}/{kind}/{start}/{end}/{hash}",
-        source["sourceId"], source["version"], source["startLine"]
-    ))
-}
-
 pub(crate) fn segments<'a>(workspace: &str, content: &str, source: &'a Value) -> Vec<Segment<'a>> {
     let Some(raw) = source["excerpt"].as_str() else {
         return Vec::new();
@@ -152,23 +138,73 @@ pub(crate) fn segments<'a>(workspace: &str, content: &str, source: &'a Value) ->
     let Some(first_line) = source["startLine"].as_u64() else {
         return Vec::new();
     };
+    let namespace = format!(
+        "{CHUNKING_VERSION}/{workspace}/{}/{version}/{first_line}",
+        source["sourceId"]
+    );
+    build_segments(
+        raw,
+        source["name"].as_str().is_some_and(uses_section_headings),
+        &namespace,
+        source_id,
+        version,
+        first_line as usize,
+    )
+}
+
+pub(crate) fn node_segments<'a>(
+    workspace: &str,
+    node_id: &str,
+    version: i64,
+    content: &'a str,
+) -> Vec<Segment<'a>> {
+    let namespace = format!("node/{workspace}/{node_id}/{version}");
+    build_segments(content, true, &namespace, "", version, 1)
+}
+
+pub(crate) fn knowledge_segments<'a>(
+    workspace: &str,
+    node_id: &str,
+    version: i64,
+    content: &'a str,
+    source: Option<&'a Value>,
+) -> Vec<Segment<'a>> {
+    let segments = source.map_or_else(Vec::new, |source| segments(workspace, content, source));
+    if segments.is_empty() && content.len() > CHILD_BYTES {
+        return node_segments(workspace, node_id, version, content);
+    }
+    segments
+}
+
+fn build_segments<'a>(
+    raw: &'a str,
+    section_headings: bool,
+    namespace: &str,
+    source_id: &str,
+    version: i64,
+    first_line: usize,
+) -> Vec<Segment<'a>> {
+    let segment_id = |kind, start, end, hash: &str| {
+        let key = format!("{namespace}/{kind}/{start}/{end}/{hash}");
+        if source_id.is_empty() {
+            key
+        } else {
+            digest(&key)
+        }
+    };
     let mut starts = vec![0];
     starts.extend(raw.match_indices('\n').map(|(offset, _)| offset + 1));
     let chars: Vec<_> = raw.char_indices().map(|(offset, _)| offset).collect();
     let original = |offset| {
         let mut point = location(&starts, &chars, offset);
-        point.line += first_line as usize - 1;
+        point.line += first_line - 1;
         point
     };
     let mut output = Vec::new();
-    for (a, b, section_path, symbol) in
-        sections(raw, source["name"].as_str().is_some_and(is_markdown))
-    {
+    for (a, b, section_path, symbol) in sections(raw, section_headings) {
         for (start, end) in pieces(&raw[a..b], PARENT_BYTES) {
             let (parent_start, parent_end) = (a + start, a + end);
             let parent_id = segment_id(
-                workspace,
-                source,
                 "parent",
                 parent_start,
                 parent_end,
@@ -182,7 +218,7 @@ pub(crate) fn segments<'a>(workspace: &str, content: &str, source: &'a Value) ->
                 }
                 let content_hash = digest(body);
                 output.push(Segment {
-                    id: segment_id(workspace, source, "child", start, end, &content_hash),
+                    id: segment_id("child", start, end, &content_hash),
                     body,
                     location: SegmentLocation {
                         parent_chunk_id: parent_id.clone(),
@@ -215,16 +251,49 @@ pub(crate) fn windows(
     if raw.trim() != content
         || source["sourceId"] != chunk.source_id
         || source["version"] != chunk.document_version_id
-        || !(chunk.parent_start <= chunk.start
-            && chunk.start < chunk.end
-            && chunk.end <= chunk.parent_end)
+    {
+        return None;
+    }
+    build_windows(
+        raw,
+        source["name"].as_str()?,
+        Some(source),
+        source["startLine"].as_u64()?,
+        source["endLine"].as_u64()?,
+        chunk_id,
+        chunk,
+    )
+}
+
+pub(crate) fn node_windows(
+    content: &str,
+    title: &str,
+    chunk_id: &str,
+    chunk: SegmentLocation,
+) -> Option<[Window; 2]> {
+    if !chunk.source_id.is_empty() {
+        return None;
+    }
+    build_windows(content, title, None, 1, u64::MAX, chunk_id, chunk)
+}
+
+fn build_windows(
+    raw: &str,
+    title: &str,
+    source: Option<&Value>,
+    first_line: u64,
+    original_end: u64,
+    chunk_id: &str,
+    chunk: SegmentLocation,
+) -> Option<[Window; 2]> {
+    if !(chunk.parent_start <= chunk.start
+        && chunk.start < chunk.end
+        && chunk.end <= chunk.parent_end)
         || digest(raw.get(chunk.start..chunk.end)?) != chunk.content_hash
         || raw.get(chunk.parent_start..chunk.parent_end).is_none()
     {
         return None;
     }
-    let first_line = source["startLine"].as_u64()?;
-    let original_end = source["endLine"].as_u64()?;
     let line =
         |offset: usize| first_line + raw[..offset].bytes().filter(|c| *c == b'\n').count() as u64;
     let end_line = |start, end| {
@@ -238,12 +307,15 @@ pub(crate) fn windows(
     };
     let fragment = |start, end, expanded| {
         let text = &raw[start..end];
-        let mut evidence = source.clone();
-        evidence["startLine"] = json!(line(start));
-        evidence["endLine"] = json!(end_line(start, end));
-        evidence["excerpt"] = json!(text);
+        let evidence = source.map_or(Value::Null, |source| {
+            let mut evidence = source.clone();
+            evidence["startLine"] = json!(line(start));
+            evidence["endLine"] = json!(end_line(start, end));
+            evidence["excerpt"] = json!(text);
+            evidence
+        });
         let matched = json!({
-            "sourceId":chunk.source_id,"documentVersionId":chunk.document_version_id,"sourcePath":source["name"],
+            "sourceId":chunk.source_id,"documentVersionId":chunk.document_version_id,"sourcePath":title,
             "chunkId":chunk_id,"parentChunkId":chunk.parent_chunk_id,"chunkingVersion":CHUNKING_VERSION,
             "contentHash":chunk.content_hash,"sectionPath":chunk.section_path,"symbol":chunk.symbol,
             "startLocation":chunk.start_location,"endLocation":chunk.end_location,"expanded":expanded,
@@ -265,6 +337,20 @@ pub(crate) fn windows(
     ])
 }
 
+pub(crate) fn knowledge_windows(
+    content: &str,
+    title: &str,
+    source: Option<&Value>,
+    chunk_id: &str,
+    chunk: SegmentLocation,
+) -> Option<[Window; 2]> {
+    if chunk.source_id.is_empty() {
+        node_windows(content, title, chunk_id, chunk)
+    } else {
+        windows(content, source?, chunk_id, chunk)
+    }
+}
+
 pub(crate) fn stored_windows(
     connection: &rusqlite::Connection,
     workspace: &str,
@@ -272,7 +358,8 @@ pub(crate) fn stored_windows(
     version: i64,
     chunk_id: &str,
     content: &str,
-    source: &Value,
+    title: &str,
+    source: Option<&Value>,
 ) -> crate::models::AppResult<[Window; 2]> {
     let raw: String = connection.query_row(
         "SELECT location_json FROM rag_chunks WHERE workspace_id=?1 AND node_id=?2 AND version=?3 AND id=?4",
@@ -280,13 +367,16 @@ pub(crate) fn stored_windows(
     ).map_err(crate::db::error)?;
     serde_json::from_str(&raw)
         .ok()
-        .and_then(|chunk| windows(content, source, chunk_id, chunk))
-        .ok_or_else(|| "文件片段与原文版本不一致，请重新确认有效知识。".into())
+        .and_then(|chunk| knowledge_windows(content, title, source, chunk_id, chunk))
+        .ok_or_else(|| "知识片段与原文版本不一致，请重新确认有效知识。".into())
 }
 
-fn is_markdown(name: &str) -> bool {
-    name.rsplit_once('.')
-        .is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("md"))
+fn uses_section_headings(name: &str) -> bool {
+    name.rsplit_once('.').is_some_and(|(_, extension)| {
+        ["md", "markdown", "pdf", "pptx", "xlsx", "epub", "docx"]
+            .iter()
+            .any(|candidate| extension.eq_ignore_ascii_case(candidate))
+    })
 }
 
 fn location(starts: &[usize], chars: &[usize], offset: usize) -> Location {
@@ -413,7 +503,7 @@ pub(crate) fn build(
     name: &str,
     content: &str,
 ) -> Structure {
-    let markdown = is_markdown(name);
+    let markdown = uses_section_headings(name);
     let mut starts = vec![0];
     starts.extend(content.match_indices('\n').map(|(offset, _)| offset + 1));
     let chars: Vec<_> = content.char_indices().map(|(offset, _)| offset).collect();
@@ -465,6 +555,43 @@ pub(crate) fn build(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn page_section_chunks_extracts_pdf_and_pptx_page_headings() {
+        let filler = "段落".repeat(100);
+        let raw = format!(
+            "## 第 1 页\n{filler}\n\n## 第 2 页\n{filler}\n仪器校验标记\n{filler}\n\n## 第 3 页\n{filler}"
+        );
+        assert!(raw.len() > 2048);
+        for name in ["文档.PDF", "演示.pptx"] {
+            let source = json!({"sourceId":"fixture","version":2,"name":name,"startLine":10,"endLine":19,"excerpt":raw});
+            let structure = build("w", "fixture", 2, name, &raw).summary();
+            assert_eq!(
+                structure.sections,
+                [("第 1 页".into(), 1), ("第 2 页".into(), 4), ("第 3 页".into(), 9)]
+            );
+            let segment = segments("w", &raw, &source)
+                .into_iter()
+                .find(|segment| segment.body.contains("仪器校验标记"))
+                .unwrap();
+            let [parent, child] = windows(&raw, &source, &segment.id, segment.location).unwrap();
+            assert_eq!(parent.matched["sectionPath"], json!(["第 2 页"]));
+            assert_eq!(parent.matched["expanded"], true);
+            assert_eq!(parent.evidence["startLine"], 13);
+            assert_eq!(parent.evidence["endLine"], 16);
+            assert_eq!(
+                child.matched["startLocation"],
+                json!({"line":13,"column":1})
+            );
+            assert_eq!(child.matched["endLocation"], json!({"line":16,"column":1}));
+            assert_eq!(child.matched["matchStartLine"], 13);
+            assert_eq!(child.matched["matchEndLine"], 15);
+            assert_eq!(
+                parent.text,
+                format!("## 第 2 页\n{filler}\n仪器校验标记\n{filler}\n\n")
+            );
+        }
+    }
 
     #[test]
     fn source_chunk_paths_symbols_and_version_identity() {

@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use std::{collections::BTreeSet, time::Instant};
 use tauri::State;
 
-pub(crate) const SUPPORTED: &str = "v.kind IN ('knowledge','context','decision')";
+pub(crate) const SUPPORTED: &str = "v.kind IN ('knowledge','context','decision','evidence')";
 pub(crate) const SOURCE_AVAILABLE: &str = "NOT EXISTS(SELECT 1 FROM knowledge_source_links l
     JOIN source_documents s ON s.id=l.source_id
     WHERE l.node_id=v.node_id AND l.knowledge_version=v.version AND s.enabled=0)";
@@ -501,20 +501,21 @@ pub(crate) fn search(
             let source: Option<String> = row.get(5).map_err(error)?;
             let mut candidate = json!({"nodeId":id,"version":version,"title":title,"kind":kind,"content":body,"included":false,"reason":"pending_budget","costUnits":0});
             let mut body_score = full_score;
-            if source.is_some() {
-                let evidence = crate::sources::evidence(c, &id, version)?;
-                if let Some(source) = evidence.first()
-                    && let Some((matched, segment)) =
-                        source_chunks::segments(workspace, &body, source)
-                            .into_iter()
-                            .map(|segment| (score(segment.body), segment))
-                            .max_by_key(|(score, _)| *score)
-                    && title_score + matched > 0
-                {
-                    body_score = matched;
-                    candidate["chunkId"] = json!(segment.id);
-                    candidate["chunkLocation"] = json!(segment.location);
-                }
+            let evidence = if source.is_some() {
+                crate::sources::evidence(c, &id, version)?
+            } else {
+                Vec::new()
+            };
+            if let Some((matched, segment)) =
+                source_chunks::knowledge_segments(workspace, &id, version, &body, evidence.first())
+                    .into_iter()
+                    .map(|segment| (score(segment.body), segment))
+                    .max_by_key(|(score, _)| *score)
+                && title_score + matched > 0
+            {
+                body_score = matched;
+                candidate["chunkId"] = json!(segment.id);
+                candidate["chunkLocation"] = json!(segment.location);
             }
             let total = title_score + body_score;
             candidate["score"] = json!(total);

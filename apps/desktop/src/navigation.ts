@@ -19,6 +19,9 @@ export function parseNavigation(hash: string) {
   const params = navigationParams(hash);
   const page = pages.find(item => item === path) ?? "chat";
   const number = Number(params.get("version"));
+  const sourceVersion = Number(params.get("sourceVersion"));
+  const startLine = Number(params.get("startLine"));
+  const endLine = Number(params.get("endLine"));
   const citation = params.has("citation") ? Number(params.get("citation")) : -1;
   const back = params.get("back");
   return {
@@ -29,6 +32,10 @@ export function parseNavigation(hash: string) {
       conversation: params.get("conversation"),
       run: params.get("run"),
       node: params.get("node"),
+      source: params.get("source"),
+      sourceVersion: Number.isSafeInteger(sourceVersion) && sourceVersion > 0 ? sourceVersion : undefined,
+      startLine: Number.isSafeInteger(startLine) && startLine > 0 ? startLine : undefined,
+      endLine: Number.isSafeInteger(endLine) && endLine > 0 ? endLine : undefined,
       event: params.get("event"),
       message: params.get("message"),
       citation: Number.isSafeInteger(citation) && citation >= 0 ? citation : undefined,

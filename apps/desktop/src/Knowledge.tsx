@@ -36,6 +36,16 @@ export function KnowledgePage({
   onEdit: (request: EditKnowledge) => void;
 }) {
   const workspace = studio.workspaceId;
+  const route = useNavigation();
+  const routeSource: SourceRef | undefined =
+    route.source && route.sourceVersion
+      ? {
+          sourceId: route.source,
+          version: route.sourceVersion,
+          startLine: route.startLine ?? 1,
+          endLine: route.endLine ?? route.startLine ?? 1,
+        }
+      : undefined;
   const [listOpen, setListOpen] = useState(true);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [items, setItems] = useState<KnowledgeNode[]>([]);
@@ -106,10 +116,17 @@ export function KnowledgePage({
       className="standard-page knowledge-page"
       aria-labelledby="page-title"
     >
-      {sourcesOpen && workspace && (
+      {(sourcesOpen || !!routeSource) && workspace && (
         <SourceBrowser
+          key={routeSource ? `${routeSource.sourceId}:${routeSource.version}:${routeSource.startLine}:${routeSource.endLine}` : "manual"}
           workspace={workspace}
-          onClose={() => setSourcesOpen(false)}
+          initial={routeSource}
+          onClose={() => {
+            setSourcesOpen(false);
+            if (routeSource) {
+              navigate("knowledge", { workspace, node: selected }, { replace: true });
+            }
+          }}
           onChanged={() => setRefresh(n => n + 1)}
           onDraft={(request) => {
             setSourcesOpen(false);
