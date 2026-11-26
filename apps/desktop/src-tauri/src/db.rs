@@ -51,6 +51,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0036_memory_conflict_evolution.sql"),
     include_str!("../migrations/0037_message_images.sql"),
     include_str!("../migrations/0038_assistant_name.sql"),
+    include_str!("../migrations/0039_message_thinking.sql"),
 ];
 const MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const RUN_COLUMNS: &str = "id,workspace_id,conversation_id,assistant_message_id,model_id,status,started_at,finished_at,error_message";
@@ -344,7 +345,7 @@ pub(crate) fn insert_execution(
         )
         .map_err(error)?;
     c.execute(
-        "INSERT INTO messages VALUES(?1,?2,?3,?4,'user',?5,'completed',?6,?7,?7)",
+        "INSERT INTO messages(id,workspace_id,conversation_id,seq,role,content,status,model_run_id,created_at,updated_at) VALUES(?1,?2,?3,?4,'user',?5,'completed',?6,?7,?7)",
         params![
             user_id,
             run.workspace_id,
@@ -357,7 +358,7 @@ pub(crate) fn insert_execution(
     )
     .map_err(error)?;
     c.execute(
-        "INSERT INTO messages VALUES(?1,?2,?3,?4,'assistant','','streaming',?5,?6,?6)",
+        "INSERT INTO messages(id,workspace_id,conversation_id,seq,role,content,status,model_run_id,created_at,updated_at) VALUES(?1,?2,?3,?4,'assistant','','streaming',?5,?6,?6)",
         params![
             run.assistant_message_id,
             run.workspace_id,
@@ -742,7 +743,7 @@ impl Database {
         &self,
         workspace_id: &str,
         conversation_id: &str,
-        include_images: bool,
+        include_display_fields: bool,
     ) -> AppResult<Vec<Message>> {
         let connection = self.connection()?;
         if !connection
@@ -755,11 +756,13 @@ impl Database {
         {
             return Err(missing());
         }
-        let mut statement = connection.prepare("SELECT id,workspace_id,conversation_id,role,content,status,model_run_id,
+        let thinking_column = if include_display_fields { "thinking" } else { "NULL" };
+        let mut statement = connection.prepare(&format!("SELECT id,workspace_id,conversation_id,role,content,status,model_run_id,
           (SELECT r.model_id FROM execution_runs r WHERE r.id=messages.model_run_id LIMIT 1),created_at,
           CASE WHEN role='assistant' THEN (SELECT json_extract(e.payload_json,'$.metrics.finishReason') FROM execution_events e WHERE e.run_id=messages.model_run_id AND e.kind='response_completed' LIMIT 1) END,
-          CASE WHEN role='assistant' THEN (SELECT e.payload_json FROM execution_events e WHERE e.run_id=messages.model_run_id AND e.kind='citations_checked' LIMIT 1) END
-          FROM messages WHERE workspace_id=?1 AND conversation_id=?2 ORDER BY seq").map_err(error)?;
+          CASE WHEN role='assistant' THEN (SELECT e.payload_json FROM execution_events e WHERE e.run_id=messages.model_run_id AND e.kind='citations_checked' LIMIT 1) END,
+          {thinking_column}
+          FROM messages WHERE workspace_id=?1 AND conversation_id=?2 ORDER BY seq")).map_err(error)?;
         let mut messages = statement
             .query_map(params![workspace_id, conversation_id], |r| {
                 Ok(Message {
@@ -768,6 +771,7 @@ impl Database {
                     conversation_id: r.get(2)?,
                     role: r.get(3)?,
                     content: r.get(4)?,
+                    thinking: r.get::<_, Option<String>>(11)?.filter(|s| !s.is_empty()),
                     status: r.get(5)?,
                     model_run_id: r.get(6)?,
                     model_id: r.get(7)?,
@@ -792,7 +796,7 @@ impl Database {
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(error)?;
 
-        if include_images {
+        if include_display_fields {
             let mut statement = connection.prepare(
                 "SELECT m.id, i.mime_type, i.data_base64 FROM message_images i
                  JOIN messages m ON m.id=i.message_id
@@ -1534,12 +1538,13 @@ impl Database {
         run: &RunSummary,
         purpose: ExecutionPurpose,
         content: &str,
+        thinking: Option<&str>,
     ) -> AppResult<()> {
         let c = self.connection()?;
         if execution_is_running(&c, run, purpose)? {
             c.execute(
-                "UPDATE messages SET content=?1,updated_at=?2 WHERE id=?3 AND workspace_id=?4",
-                params![content, now(), run.assistant_message_id, run.workspace_id],
+                "UPDATE messages SET content=?1,thinking=?2,updated_at=?3 WHERE id=?4 AND workspace_id=?5",
+                params![content, thinking.filter(|s| !s.is_empty()), now(), run.assistant_message_id, run.workspace_id],
             )
             .map_err(error)?;
         }
@@ -1551,6 +1556,7 @@ impl Database {
         run: &RunSummary,
         purpose: ExecutionPurpose,
         content: &str,
+        thinking: Option<&str>,
         status: &str,
         message: Option<&str>,
         metrics: Value,
@@ -1558,7 +1564,7 @@ impl Database {
         if !execution_is_running(&*self.connection()?, run, purpose)? {
             return Ok(());
         }
-        self.finish_recorded_run(run, content, status, message, metrics)
+        self.finish_recorded_run(run, content, thinking, status, message, metrics)
     }
 
     #[cfg(test)]
@@ -1594,7 +1600,7 @@ impl Database {
             let connection = self.connection()?;
             require_chat_run(&connection, &run.id)?;
         }
-        self.finish_recorded_run(run, content, status, message, metrics)
+        self.finish_recorded_run(run, content, None, status, message, metrics)
     }
 
     // Startup recovery handles both purposes, without exposing benchmark data to chat commands.
@@ -1602,6 +1608,7 @@ impl Database {
         &self,
         run: &RunSummary,
         content: &str,
+        thinking: Option<&str>,
         status: &str,
         message: Option<&str>,
         metrics: Value,
@@ -1640,7 +1647,7 @@ impl Database {
             ) {
                 event(&transaction, &run.id, "citations_checked", report)?;
             }
-            transaction.execute("UPDATE messages SET content=?1,status=?2,updated_at=?3 WHERE id=?4 AND workspace_id=?5",params![content,status,time,run.assistant_message_id,run.workspace_id]).map_err(error)?;
+            transaction.execute("UPDATE messages SET content=?1,thinking=?2,status=?3,updated_at=?4 WHERE id=?5 AND workspace_id=?6",params![content,thinking.filter(|s| !s.is_empty()),status,time,run.assistant_message_id,run.workspace_id]).map_err(error)?;
             transaction
                 .execute(
                     "UPDATE conversations SET updated_at=?1 WHERE workspace_id=?2 AND id=?3",
@@ -1804,17 +1811,18 @@ impl Database {
                 .map_err(error)?
         };
         for run in runs {
-            let content: String = self
+            let (content, thinking): (String, Option<String>) = self
                 .connection()?
                 .query_row(
-                    "SELECT content FROM messages WHERE id=?1",
+                    "SELECT content,thinking FROM messages WHERE id=?1",
                     params![run.assistant_message_id],
-                    |r| r.get(0),
+                    |r| Ok((r.get(0)?, r.get(1)?)),
                 )
                 .map_err(error)?;
             self.finish_recorded_run(
                 &run,
                 &content,
+                thinking.as_deref(),
                 "interrupted",
                 Some("上次运行意外中断，已保留最后一次写入的内容。"),
                 json!({}),
@@ -1861,6 +1869,97 @@ mod profile_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn thinking_stream_migration_checkpoint_finish_and_prompt_history() {
+        let db = Database::rag_evaluation_database().unwrap();
+        assert_eq!(
+            backup_schema_version(&db.connection().unwrap()).unwrap(),
+            39
+        );
+        let workspace = db.create_workspace("Fixture").unwrap().id;
+        let chat = db.create_conversation(&workspace).unwrap().id;
+        let settings = ModelSettings::default();
+        let run = db
+            .prepare_run(&new_id(), &workspace, &chat, "Question", &settings)
+            .unwrap()
+            .run;
+        let purpose = ExecutionPurpose::Chat;
+        let output = || {
+            db.messages(&workspace, &chat)
+                .unwrap()
+                .into_iter()
+                .find(|message| message.id == run.assistant_message_id)
+                .unwrap()
+        };
+
+        db.execution_checkpoint(&run, purpose, "", Some("partial-reasoning"))
+            .unwrap();
+        let checkpoint = output();
+        assert_eq!(checkpoint.content, "");
+        assert_eq!(checkpoint.thinking.as_deref(), Some("partial-reasoning"));
+        db.execution_finish(
+            &run,
+            purpose,
+            "Final answer",
+            Some("final-reasoning"),
+            "completed",
+            None,
+            json!({}),
+        )
+        .unwrap();
+        db.execution_checkpoint(&run, purpose, "late", None)
+            .unwrap();
+        let finished = output();
+        assert_eq!(finished.content, "Final answer");
+        assert_eq!(finished.thinking.as_deref(), Some("final-reasoning"));
+        let detail = db.run_detail(&workspace, &run.id).unwrap();
+        assert!(
+            !serde_json::to_string(&detail.events)
+                .unwrap()
+                .contains("reasoning")
+        );
+
+        let next = db
+            .prepare_run(&new_id(), &workspace, &chat, "Follow-up", &settings)
+            .unwrap();
+        let history = next.request["messages"].as_array().unwrap();
+        assert!(
+            history
+                .iter()
+                .any(|message| message["role"] == "assistant"
+                    && message["content"] == "Final answer")
+        );
+        assert!(
+            history
+                .iter()
+                .all(|message| message.get("thinking").is_none())
+        );
+        assert!(!next.request.to_string().contains("final-reasoning"));
+
+        db.execution_checkpoint(&next.run, purpose, "", Some(""))
+            .unwrap();
+        assert!(
+            db.messages(&workspace, &chat)
+                .unwrap()
+                .last()
+                .unwrap()
+                .thinking
+                .is_none()
+        );
+        db.execution_checkpoint(
+            &next.run,
+            purpose,
+            "Partial answer",
+            Some("recoverable-reasoning"),
+        )
+        .unwrap();
+        db.recover_interrupted().unwrap();
+        let recovered = db.messages(&workspace, &chat).unwrap().pop().unwrap();
+        assert_eq!(recovered.status, "interrupted");
+        assert_eq!(recovered.content, "Partial answer");
+        assert_eq!(recovered.thinking.as_deref(), Some("recoverable-reasoning"));
+    }
 
     #[test]
     fn multimodal_local_backup_preserves_ollama_and_cloud_attachments() {

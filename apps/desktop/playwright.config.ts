@@ -89,6 +89,7 @@ export default defineConfig({
         "reminders-native.spec.ts",
         "personal-assistant-native.spec.ts",
         "generation-style-native.spec.ts",
+        "thinking-stream-native.spec.ts",
         "web-search-native.spec.ts",
         "chat.spec.ts",
         "markdown-camera.spec.ts",

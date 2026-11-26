@@ -3132,3 +3132,31 @@ Markdown用原文存储，不改变请求或证据；不支持数学公式/代�
 - 已查看原生 WebView2 实拍截图：`artifacts/generation-style-native/generation-style-native-ge-a525d-settings-and-Ollama-payload-desktop/{composer-style-popover,settings-assistant-style,settings-model-advanced}.png`，确认弹窗与设置页排布清晰、「保存设置」已正确禁用且无溢出。
 
 未验证：真实本地 Ollama 模型推理（受本地显存调用确认门槛限制）与真实线上云端模型返回表现待后续人工或授权测试确认。
+
+### 2026-11-26 路线 A · 切片 A1：深度思考流式折叠展示
+
+为用户补充本地与云端模型的「思考过程」流式解析、独立落库与可折叠前端展示，严格将模型输出思考文本与正式回答、执行追踪以及后续多轮历史隔离开：
+
+- **Rust 后端与协议适配（由 Codex CLI GPT 执行）**：
+  - 数据库迁移 [0039_message_thinking.sql](apps/desktop/src-tauri/migrations/0039_message_thinking.sql)：为 `messages` 表新增 `thinking TEXT` 列（[db.rs](apps/desktop/src-tauri/src/db.rs) 注册迁移，`execution_checkpoint`、`finish_recorded_run` 与 `chat_messages` 读写同步支持 `thinking`，且后续上下文组装与 `execution_events` 均不混入思考文本）。
+  - 流式解析与安全过滤：
+    - [ollama.rs](apps/desktop/src-tauri/src/ollama.rs)、[model_runtime.rs](apps/desktop/src-tauri/src/model_runtime.rs)：扩展 `FrameMessage.thinking` 与 `GenerationFrame.thinking`。
+    - [chat_stream.rs](apps/desktop/src-tauri/src/cloud/chat_stream.rs)、[completion.rs](apps/desktop/src-tauri/src/cloud/completion.rs)、[runtime_protocol.rs](apps/desktop/src-tauri/src/cloud/runtime_protocol.rs)、[runtime_connections.rs](apps/desktop/src-tauri/src/cloud/runtime_connections.rs)：引入 `StreamChunk::{Content, Thinking}`，支持 OpenAI-compatible/DeepSeek（`delta.reasoning_content` / `delta.reasoning`）、官方 OpenAI Responses（`response.reasoning_summary_text.delta` / `response.reasoning_text.delta`）、Anthropic（`thinking_delta`）与 Gemini（`thought: true`）；正文与思考文本共同受密钥跨分片泄漏拦截保护，非流式 `completion::parse` 同步提取 `thinking`。
+    - [generation.rs](apps/desktop/src-tauri/src/generation.rs)：本地与云端流式过程同步推送 `StreamUpdate.thinking`，250 ms 检查点与最终落库原子保存；若主模型失败前已输出思考文本，则保留当前结果而不在同一消息内切换备用模型。同步更新相关调用方与单测文件。
+- **前端可折叠展示与原生验收**：
+  - 扩展 [chat-stream.ts](apps/desktop/src/chat-stream.ts)（`StreamUpdate.thinking`）与 [studio.ts](apps/desktop/src/studio.ts)（`Message.thinking`）。
+  - 升级 [ChatMessage.tsx](apps/desktop/src/components/ChatMessage.tsx) 与 [features.css](apps/desktop/src/styles/features.css)：在正式回答上方增加「正在深度思考… / 已深度思考」折叠面板，标注 `模型输出思考文本` 徽章与字数；正文未开始前自动展开，正式正文输出或完成后支持收起/手动切换，复制、划词与存为知识仅作用于 `message.content`。
+  - 新增原生测试 [thinking-stream-native.spec.ts](apps/desktop/tests/thinking-stream-native.spec.ts) 并注册到 [playwright.config.ts](apps/desktop/playwright.config.ts)。
+
+实际验证（未运行任何真实本地 Ollama 推理或在线云端请求，全部基于单测与本机回环假服务）：
+
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run build`：`tsc --noEmit` 与 `vite build` 通过（Vite 10.32s）。
+- `npm.cmd --prefix d:\vibecoding\CortexOS\apps\desktop run test:unit`：5/5 通过。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked thinking_stream`：6 passed, 0 failed（覆盖 Ollama NDJSON、四种云端 SSE 思考增量与密钥防泄漏、非流式提取、迁移 0039/检查点/持久化隔离与备用模型边界）。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked generation_options`：6 passed, 0 failed。
+- `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked cloud_chat_loopback_preserves_roles_and_excludes_private_lineage`：1 passed, 0 failed。
+- `cargo build --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`：通过（57.32s）。
+- `$env:CORTEXOS_NATIVE_ONLY="1"; npx.cmd playwright test tests/thinking-stream-native.spec.ts --project=desktop --output=../../artifacts/thinking-stream-native`（目录 `apps/desktop`）：1 passed（5.0s）。
+- 已查看原生 WebView2 实拍截图：`artifacts/thinking-stream-native/thinking-stream-native-str-e60a9-content-and-persist-cleanly-desktop/{thinking-collapsed,thinking-expanded}.png`，确认折叠与展开排版、诚实标签及内容隔离正常。
+
+未验证：真实本地 Ollama 模型（如 `qwen3`）与真实线上 DeepSeek / Anthropic / Gemini / OpenAI 推理输出尚未端到端实测。

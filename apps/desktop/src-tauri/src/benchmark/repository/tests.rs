@@ -94,7 +94,7 @@ fn benchmark_development_prepare_rolls_back_and_isolates_purposes() {
     let prepared = prepare(&db, &workspace, &intent).unwrap();
     let run = &prepared.execution.run;
     assert!(
-        db.execution_checkpoint(run, ExecutionPurpose::Chat, "bad")
+        db.execution_checkpoint(run, ExecutionPurpose::Chat, "bad", None)
             .is_err()
     );
     let mut forged = run.clone();
@@ -152,12 +152,13 @@ fn benchmark_development_scores_saved_output_once_and_ignores_late_writes() {
             json!({"source":"synthetic"}),
         )
         .unwrap();
-        db.execution_checkpoint(run, ExecutionPurpose::Benchmark, "partial")
+        db.execution_checkpoint(run, ExecutionPurpose::Benchmark, "partial", None)
             .unwrap();
         db.execution_finish(
             run,
             ExecutionPurpose::Benchmark,
             output,
+            None,
             "completed",
             None,
             json!({"finishReason":reason}),
@@ -172,7 +173,7 @@ fn benchmark_development_scores_saved_output_once_and_ignores_late_writes() {
         .unwrap();
         db.finish_benchmark(&workspace, &prepared.summary.id)
             .unwrap();
-        db.execution_checkpoint(run, ExecutionPurpose::Benchmark, "late")
+        db.execution_checkpoint(run, ExecutionPurpose::Benchmark, "late", None)
             .unwrap();
         db.execution_event(run, ExecutionPurpose::Benchmark, "late", json!({}))
             .unwrap();
@@ -180,6 +181,7 @@ fn benchmark_development_scores_saved_output_once_and_ignores_late_writes() {
             run,
             ExecutionPurpose::Benchmark,
             "late",
+            None,
             "failed",
             None,
             json!({}),
@@ -238,6 +240,7 @@ fn benchmark_development_preserves_output_when_score_storage_fails() {
         &prepared.execution.run,
         ExecutionPurpose::Benchmark,
         "95",
+        None,
         "completed",
         None,
         json!({"finishReason":"stop"}),

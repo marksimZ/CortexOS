@@ -1,5 +1,6 @@
 pub mod completion;
 mod chat_stream;
+pub(crate) use chat_stream::StreamChunk;
 #[cfg(test)]
 mod completion_tests;
 mod provider;

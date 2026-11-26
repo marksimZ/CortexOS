@@ -7,6 +7,7 @@ export interface StreamUpdate {
   messageId: string;
   seq: number;
   content: string;
+  thinking?: string | null;
   status: string;
   errorMessage: string | null;
 }

@@ -1489,7 +1489,7 @@ mod tests {
             )
             .unwrap();
             tx.execute(
-                "INSERT INTO messages VALUES
+                "INSERT INTO messages(id,workspace_id,conversation_id,seq,role,content,status,model_run_id,created_at,updated_at) VALUES
                     (?1 || '-question',?2,?1,1,'user','下一步是什么？','completed',?1,?3,?3),
                     (?1,?2,?1,2,'assistant',?4,'completed',?1,?3,?3)",
                 params![

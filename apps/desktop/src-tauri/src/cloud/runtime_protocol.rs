@@ -1,5 +1,5 @@
 use super::{
-    ConnectionState, Provider,
+    ConnectionState, Provider, StreamChunk,
     completion::{self, CompletionInput, CompletionOutput, post_json},
     provider::{Model, catalog},
 };
@@ -306,7 +306,7 @@ impl Endpoint {
         url: &str,
         request: &Value,
         timeout: Duration,
-        on_delta: &mut (dyn FnMut(&str) + Send),
+        on_delta: &mut (dyn FnMut(StreamChunk<'_>) + Send),
     ) -> CloudResult<CompletionOutput> {
         let hash =
             crate::benchmark::dataset::hash(&serde_json::to_vec(request).map_err(|_| INVALID)?);
@@ -362,8 +362,11 @@ impl Endpoint {
                 hash,
             )?;
             let checked = completion::checked_output(output, key)?;
+            if let Some(thinking) = checked.thinking.as_deref() {
+                on_delta(StreamChunk::Thinking(thinking));
+            }
             if !checked.text.is_empty() {
-                on_delta(&checked.text);
+                on_delta(StreamChunk::Content(&checked.text));
             }
             return Ok(checked);
         }
@@ -516,6 +519,12 @@ fn compatible_completion(response: &Value) -> CloudResult<Value> {
     let mut output = Vec::new();
     if let Some(text) = message["content"].as_str() {
         output.push(json!({"type":"message","content":[{"type":"output_text","text":text}]}));
+    }
+    if let Some(thinking) = message["reasoning_content"]
+        .as_str()
+        .or_else(|| message["reasoning"].as_str())
+    {
+        output.push(json!({"type":"reasoning","summary":[{"type":"summary_text","text":thinking}]}));
     }
     if let Some(calls) = message["tool_calls"].as_array() {
         for call in calls {

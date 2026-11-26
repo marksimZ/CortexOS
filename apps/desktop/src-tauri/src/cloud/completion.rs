@@ -22,6 +22,8 @@ pub struct CompletionInput {
 #[serde(rename_all = "camelCase")]
 pub struct CompletionOutput {
     pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<String>,
     pub calls: Vec<Value>,
     pub usage: Value,
     pub finish_reason: String,
@@ -94,6 +96,7 @@ pub fn parse(
     request_hash: String,
 ) -> Result<CompletionOutput, ConnectionState> {
     let mut text = String::new();
+    let mut thinking = String::new();
     let mut calls = vec![];
     let call = |name: &Value, args: Value| json!({"function":{"name":name,"arguments":args}});
     let (usage, finish) = match provider {
@@ -109,6 +112,12 @@ pub fn parse(
                     {
                         if c["type"] == "output_text" {
                             text.push_str(c["text"].as_str().ok_or(ConnectionState::ServiceError)?);
+                        }
+                    }
+                } else if item["type"] == "reasoning" {
+                    for summary in item["summary"].as_array().into_iter().flatten() {
+                        if let Some(text) = summary["text"].as_str() {
+                            thinking.push_str(text);
                         }
                     }
                 } else if item["type"] == "function_call" {
@@ -143,6 +152,10 @@ pub fn parse(
             {
                 if item["type"] == "text" {
                     text.push_str(item["text"].as_str().ok_or(ConnectionState::ServiceError)?);
+                } else if item["type"] == "thinking" {
+                    if let Some(text) = item["thinking"].as_str() {
+                        thinking.push_str(text);
+                    }
                 } else if item["type"] == "tool_use" {
                     calls.push(call(&item["name"], item["input"].clone()));
                 }
@@ -166,6 +179,9 @@ pub fn parse(
                 .ok_or(ConnectionState::ServiceError)?
             {
                 if part["thought"] == true {
+                    if let Some(text) = part["text"].as_str() {
+                        thinking.push_str(text);
+                    }
                     continue;
                 }
                 if let Some(t) = part["text"].as_str() {
@@ -191,11 +207,12 @@ pub fn parse(
     if text.is_empty() && calls.is_empty() {
         return Err(ConnectionState::ServiceError);
     }
-    if calls.len() > 32 {
+    if calls.len() > 32 || thinking.len() > 1 << 20 {
         return Err(ConnectionState::ServiceError);
     }
     Ok(CompletionOutput {
         text,
+        thinking: (!thinking.is_empty()).then_some(thinking),
         calls,
         usage,
         finish_reason: finish.into(),
@@ -236,6 +253,10 @@ pub(super) fn checked_output(
     key: &str,
 ) -> Result<CompletionOutput, ConnectionState> {
     if output.text.contains(key)
+        || output
+            .thinking
+            .as_deref()
+            .is_some_and(|text| text.contains(key))
         || serde_json::to_string(&output)
             .map_err(|_| ConnectionState::ServiceError)?
             .contains(key)

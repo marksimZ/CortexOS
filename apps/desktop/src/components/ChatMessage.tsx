@@ -1,4 +1,4 @@
-import { BookOpen, Check, Code2, Copy, Sparkles, X } from "lucide-react";
+import { BookOpen, Brain, Check, ChevronDown, ChevronRight, Code2, Copy, Sparkles, X } from "lucide-react";
 import { memo, useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { knowledge } from "../api/knowledge";
 import { memoryApi } from "../api/memory";
@@ -89,13 +89,23 @@ export const ChatMessage = memo(function ChatMessage({
             update.status === "running" && stored.content.startsWith(update.content)
               ? stored.content
               : update.content,
+          thinking:
+            update.status === "running" &&
+            stored.thinking &&
+            (!update.thinking || stored.thinking.startsWith(update.thinking))
+              ? stored.thinking
+              : (update.thinking ?? stored.thinking),
           status: update.status === "running" ? "streaming" : update.status,
         }
       : stored;
   const [raw, setRaw] = useState(false);
+  const [thinkingManual, setThinkingManual] = useState<boolean | null>(null);
   const [previewImage, setPreviewImage] = useState<MessageImage | null>(null);
   const previewDialog = useRef<HTMLDialogElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const hasThinking = message.role === "assistant" && !!message.thinking?.trim();
+  const thinkingInProgress = message.status === "streaming" && !message.content;
+  const thinkingOpen = thinkingManual ?? thinkingInProgress;
 
   const openImagePreview = (img: MessageImage) => {
     setPreviewImage(img);
@@ -165,6 +175,29 @@ export const ChatMessage = memo(function ChatMessage({
           ))}
         </div>
       )}
+      {hasThinking && (
+        <div className="thinking-panel" data-streaming={thinkingInProgress || undefined}>
+          <button
+            type="button"
+            className="thinking-toggle"
+            aria-expanded={thinkingOpen}
+            onClick={() => setThinkingManual(!thinkingOpen)}
+          >
+            <span className="thinking-toggle-meta">
+              <Brain size={15} aria-hidden="true" />
+              <strong>{thinkingInProgress ? "正在深度思考…" : "已深度思考"}</strong>
+              <span className="thinking-badge">模型输出思考文本</span>
+              <span className="thinking-count">· {message.thinking!.trim().length} 字</span>
+            </span>
+            {thinkingOpen ? (
+              <ChevronDown size={15} aria-hidden="true" />
+            ) : (
+              <ChevronRight size={15} aria-hidden="true" />
+            )}
+          </button>
+          {thinkingOpen && <div className="thinking-body">{message.thinking}</div>}
+        </div>
+      )}
       {message.content ? (
         <div ref={contentRef} className="message-selection-scope">
           <AnswerContent message={message} raw={raw} />
@@ -211,8 +244,12 @@ export const ChatMessage = memo(function ChatMessage({
           />
         </div>
       ) : (
-        <div className="message-content">
-          {message.status === "streaming" ? "正在准备回答…" : "本次未生成可用文字。"}
+        <div className={hasThinking && message.status === "streaming" ? "message-content thinking-pending-note" : "message-content"}>
+          {message.status === "streaming"
+            ? hasThinking
+              ? "正在组织正式回答…"
+              : "正在准备回答…"
+            : "本次未生成可用文字。"}
         </div>
       )}
       {message.role === "assistant" && message.finishReason === "length" && (

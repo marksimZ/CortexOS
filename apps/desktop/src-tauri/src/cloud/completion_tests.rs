@@ -58,6 +58,43 @@ async fn sequential_cloud_posts_reuse_a_connection_with_request_scoped_auth() {
     assert_eq!(connections, 1);
 }
 #[test]
+fn thinking_stream_non_streaming_completion_and_secret_guard() {
+    for (provider, body) in [
+        (
+            Provider::Openai,
+            json!({
+                "status":"completed",
+                "output":[{"type":"reasoning","summary":[{"type":"summary_text","text":"fixture-reasoning"}]},
+                          {"type":"message","content":[{"type":"output_text","text":"answer"}]}]
+            }),
+        ),
+        (
+            Provider::Anthropic,
+            json!({
+                "stop_reason":"end_turn",
+                "content":[{"type":"thinking","thinking":"fixture-reasoning"},{"type":"text","text":"answer"}]
+            }),
+        ),
+        (
+            Provider::Gemini,
+            json!({
+                "candidates":[{"finishReason":"STOP","content":{"parts":[
+                    {"thought":true,"text":"fixture-reasoning"},{"text":"answer"}
+                ]}}]
+            }),
+        ),
+    ] {
+        let output = parse(provider, &body, 0, String::new()).unwrap();
+        assert_eq!(output.text, "answer");
+        assert_eq!(output.thinking.as_deref(), Some("fixture-reasoning"));
+        assert!(matches!(
+            checked_output(output, "fixture-reasoning"),
+            Err(ConnectionState::ServiceError)
+        ));
+    }
+}
+
+#[test]
 fn personalized_cloud_wire_and_native_object_parsers_cover_three_official_protocols() {
     let mut input = request();
     input.schema = Some(

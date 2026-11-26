@@ -60,7 +60,7 @@ impl Database {
                 .find(|m| m.id == detail.run.assistant_message_id)
                 .ok_or("Output missing")?
         } else {
-            self.connection()?.query_row("SELECT id,workspace_id,conversation_id,role,content,status,model_run_id,created_at FROM messages WHERE workspace_id=?1 AND id=?2",params![workspace,detail.run.assistant_message_id],|r|Ok(Message{id:r.get(0)?,workspace_id:r.get(1)?,conversation_id:r.get(2)?,role:r.get(3)?,content:r.get(4)?,status:r.get(5)?,model_run_id:r.get(6)?,model_id:Some(detail.run.model_id.clone()),created_at:r.get(7)?,finish_reason:detail.events.iter().rev().find(|e|e.kind=="response_completed").and_then(|e|e.payload["metrics"]["finishReason"].as_str()).map(str::to_string),citations:None,images:Vec::new()})).map_err(error)?
+            self.connection()?.query_row("SELECT id,workspace_id,conversation_id,role,content,status,model_run_id,created_at,thinking FROM messages WHERE workspace_id=?1 AND id=?2",params![workspace,detail.run.assistant_message_id],|r|Ok(Message{id:r.get(0)?,workspace_id:r.get(1)?,conversation_id:r.get(2)?,role:r.get(3)?,content:r.get(4)?,thinking:r.get::<_,Option<String>>(8)?.filter(|s| !s.is_empty()),status:r.get(5)?,model_run_id:r.get(6)?,model_id:Some(detail.run.model_id.clone()),created_at:r.get(7)?,finish_reason:detail.events.iter().rev().find(|e|e.kind=="response_completed").and_then(|e|e.payload["metrics"]["finishReason"].as_str()).map(str::to_string),citations:None,images:Vec::new()})).map_err(error)?
         };
         if detail.run.status == "running" && output.status != "streaming" {
             detail = self.recorded_run_detail(workspace, run, purpose)?;

@@ -43,6 +43,7 @@ export interface Message {
   conversationId: string;
   role: "user" | "assistant";
   content: string;
+  thinking?: string | null;
   images?: MessageImage[];
   status: string;
   modelRunId: string | null;

@@ -97,7 +97,7 @@ fn report_paging_is_scoped_bounded_lazy_and_matches_full_statistics() {
     )
     .unwrap();
     let output = format!("SAVED_BODY_MARKER{}", "x".repeat(200_000));
-    db.execution_finish(&p.execution.run,ExecutionPurpose::Benchmark,&output,"completed",None,json!({"evalCount":2,"promptEvalCount":3,"evalDurationNs":100000000,"clientTiming":{"responseMs":500,"firstTextMs":20}})).unwrap();
+    db.execution_finish(&p.execution.run,ExecutionPurpose::Benchmark,&output,None,"completed",None,json!({"evalCount":2,"promptEvalCount":3,"evalDurationNs":100000000,"clientTiming":{"responseMs":500,"firstTextMs":20}})).unwrap();
     db.finish_benchmark_v2(&w, &p.summary.id, None).unwrap();
     db.set_batch_item(id, 0, "finished", Some(&p.summary.id), None)
         .unwrap();
@@ -431,6 +431,7 @@ async fn standard_restart_recovers_saved_output_score_without_new_model_request(
         &prepared.execution.run,
         ExecutionPurpose::Benchmark,
         &expected,
+        None,
         "completed",
         None,
         json!({"finishReason":"stop"}),
@@ -658,6 +659,7 @@ fn report_transfer_fixture() -> (Database, String, String, String) {
         &p.execution.run,
         ExecutionPurpose::Benchmark,
         "95",
+        None,
         "completed",
         None,
         json!({"finishReason":"stop"}),

@@ -92,6 +92,7 @@ fn generated(db: &Database, workspace: &str, connection: &Connection) -> Value {
         id,
         Ok(CompletionOutput {
             text: json!({"candidates":candidates}).to_string(),
+            thinking: None,
             calls: vec![],
             usage: json!({"input_tokens":200,"output_tokens":300}),
             finish_reason: "stop".into(),
@@ -350,6 +351,7 @@ fn personalized_publication_revisions_are_immutable_and_reuse_existing_scoring_a
             &prepared.execution.run,
             ExecutionPurpose::Benchmark,
             &answer,
+            None,
             "completed",
             None,
             json!({"finishReason":"stop"}),
@@ -468,6 +470,7 @@ fn personalized_source_selection_negative_generation_and_duplicate_checks() {
         id,
         Ok(CompletionOutput {
             text: "not JSON".into(),
+            thinking: None,
             calls: vec![],
             usage: json!({}),
             finish_reason: "stop".into(),
@@ -494,6 +497,7 @@ fn personalized_source_selection_negative_generation_and_duplicate_checks() {
         id,
         Ok(CompletionOutput {
             text: json!({"candidates":[item,item]}).to_string(),
+            thinking: None,
             calls: vec![],
             usage: json!({}),
             finish_reason: "stop".into(),

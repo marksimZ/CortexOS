@@ -131,6 +131,7 @@ async fn start_inner(
                 &run,
                 ExecutionPurpose::Benchmark,
                 "",
+                None,
                 "failed",
                 Some("预检未通过，未发送模型请求。"),
                 json!({}),

@@ -1,5 +1,6 @@
 use crate::{
     benchmark::preflight::ModelRequest,
+    cloud::StreamChunk,
     commands::blocking,
     db::Database,
     model_runtime::{Generated, GenerationProvider, LocalGeneration, ModelIdentity},
@@ -50,6 +51,7 @@ pub struct Completion {
 
 struct Attempt {
     content: String,
+    thinking: String,
     seq: u64,
     status: &'static str,
     message: Option<String>,
@@ -69,6 +71,7 @@ impl Attempt {
             purpose,
             self.seq + 1,
             self.content,
+            self.thinking,
             self.status,
             self.message,
             self.metrics,
@@ -115,6 +118,7 @@ async fn attempt_local(
     let v2 = matches!(&policy, InspectionPolicy::BenchmarkV2(_));
     let run = &prepared.run;
     let mut content = String::new();
+    let mut thinking = String::new();
     let operation_started = std::time::Instant::now();
     let mut sent_at: Option<std::time::Instant> = None;
     let mut header_ms = None;
@@ -236,8 +240,15 @@ async fn attempt_local(
                     frames=response.receive()=>frames?,
                     _=checkpoint.tick()=>{
                         if dirty {
-                            let (recorded,text)=(run.clone(),content.clone());
-                            blocking(database.clone(),move|db|db.execution_checkpoint(&recorded,purpose,&text)).await?;
+                            let (recorded, text, thought) = (run.clone(), content.clone(), thinking.clone());
+                            blocking(database.clone(), move |db| {
+                                db.execution_checkpoint(
+                                    &recorded,
+                                    purpose,
+                                    &text,
+                                    (!thought.is_empty()).then_some(thought.as_str()),
+                                )
+                            }).await?;
                             dirty=false;
                         }
                         continue;
@@ -255,7 +266,15 @@ async fn attempt_local(
                         content.push_str(&frame.text);
                         dirty = true;
                     }
-                    if v2 && !frame.calls.is_empty() {
+                    if !frame.thinking.is_empty() {
+                        if thinking.len() + frame.thinking.len() > 1 << 20 {
+                            return Err("模型思考输出超出安全长度，已停止生成。".into());
+                        }
+                        thinking.push_str(&frame.thinking);
+                        dirty = true;
+                    }
+                    let has_calls = !frame.calls.is_empty();
+                    if v2 && has_calls {
                         let calls = frame.calls;
                         let bytes = serde_json::to_vec(&calls)
                             .map_err(|_| "无法记录模型工具字段。")?
@@ -282,8 +301,10 @@ async fn attempt_local(
                     if content.len() > 1024 * 1024 {
                         return Err("模型输出超出安全长度，已停止生成。".into());
                     }
-                    seq += 1;
-                    notify(update(run, seq, &content, "running", None));
+                    if !frame.text.is_empty() || !frame.thinking.is_empty() || has_calls {
+                        seq += 1;
+                        notify(update(run, seq, &content, &thinking, "running", None));
+                    }
                     if let Some(metrics) = frame.final_metrics {
                         if content.trim().is_empty() && !(v2 && tool_entries > 0) {
                             return Err("模型没有返回可用文字，请换一个模型或重试。".into());
@@ -333,6 +354,7 @@ async fn attempt_local(
     }
     Attempt {
         content,
+        thinking,
         seq,
         status,
         message,
@@ -354,6 +376,7 @@ async fn attempt_cloud_chat(
     let provider = target.connection.provider.name();
     let timeout = Duration::from_secs(timeout_seconds);
     let mut streamed = String::new();
+    let mut streamed_thinking = String::new();
     let mut seq = 0u64;
     let result = if *cancel.borrow() {
         None
@@ -361,10 +384,14 @@ async fn attempt_cloud_chat(
         let call = async {
             let dispatch = &prepared.manifest["cloudTransfer"];
             let knowledge = crate::cloud::privacy::context_versions(&prepared.manifest)?;
-            let mut on_delta = |delta: &str| {
-                streamed.push_str(delta);
+            let mut on_delta = |delta: StreamChunk<'_>| {
+                // Both cloud parsers bound the accumulated thinking before publication.
+                match delta {
+                    StreamChunk::Content(text) => streamed.push_str(text),
+                    StreamChunk::Thinking(text) => streamed_thinking.push_str(text),
+                }
                 seq += 1;
-                notify(update(run, seq, &streamed, "running", None));
+                notify(update(run, seq, &streamed, &streamed_thinking, "running", None));
             };
             let output = target
                 .generate_stream(
@@ -399,6 +426,9 @@ async fn attempt_cloud_chat(
     };
     let (content, status, message, metrics) = match result {
         Some(Ok(output)) => {
+            if let Some(thinking) = output.thinking {
+                streamed_thinking = thinking;
+            }
             let (input, output_tokens) = target.generation_tokens(&output.usage);
             (
                 output.text,
@@ -425,6 +455,7 @@ async fn attempt_cloud_chat(
     };
     Attempt {
         content,
+        thinking: streamed_thinking,
         seq,
         status,
         message,
@@ -469,6 +500,7 @@ pub(crate) async fn execute_chat(
     } else {
         Attempt {
             content: String::new(),
+            thinking: String::new(),
             seq: 0,
             status: "failed",
             message: Some("本地模型服务不可用。".into()),
@@ -477,6 +509,7 @@ pub(crate) async fn execute_chat(
     };
     if attempt.status == "failed"
         && attempt.content.is_empty()
+        && attempt.thinking.is_empty()
         && !*cancel.borrow()
         && let (Some(model), Some(provider)) = (backup, provider.as_ref())
         && (cloud.is_some() || model != settings.model)
@@ -533,7 +566,7 @@ pub(crate) async fn execute_rag_case(
     } else if let Some(provider)=provider {
         attempt_local(database.clone(),provider,&prepared,settings,&InspectionPolicy::Chat,cancel,0,&mut |_|{}).await
     } else {
-        Attempt {content:String::new(),seq:0,status:"failed",message:Some("本地模型服务不可用。".into()),metrics:json!({})}
+        Attempt {content:String::new(),thinking:String::new(),seq:0,status:"failed",message:Some("本地模型服务不可用。".into()),metrics:json!({})}
     };
     attempt.save(database,prepared.run,ExecutionPurpose::Chat).await
 }
@@ -544,17 +577,20 @@ async fn finish(
     purpose: ExecutionPurpose,
     seq: u64,
     content: String,
+    thinking: String,
     status: &'static str,
     mut message: Option<String>,
     metrics: Value,
 ) -> Completion {
-    let (saved_run, saved_content, saved_message) = (run.clone(), content.clone(), message.clone());
+    let (saved_run, saved_content, saved_thinking, saved_message) =
+        (run.clone(), content.clone(), thinking.clone(), message.clone());
     let mut saved = true;
     if let Err(error) = blocking(database, move |db| {
         db.execution_finish(
             &saved_run,
             purpose,
             &saved_content,
+            (!saved_thinking.is_empty()).then_some(saved_thinking.as_str()),
             status,
             saved_message.as_deref(),
             metrics,
@@ -577,6 +613,7 @@ async fn finish(
             &run,
             seq,
             &content,
+            &thinking,
             if message.is_some() { "failed" } else { status },
             message,
         ),
@@ -587,6 +624,7 @@ fn update(
     run: &RunSummary,
     seq: u64,
     content: &str,
+    thinking: &str,
     status: &str,
     error_message: Option<String>,
 ) -> StreamUpdate {
@@ -597,6 +635,7 @@ fn update(
         message_id: run.assistant_message_id.clone(),
         seq,
         content: content.into(),
+        thinking: (!thinking.is_empty()).then(|| thinking.to_owned()),
         status: status.into(),
         error_message,
     }
@@ -666,14 +705,15 @@ mod tests {
         // Introduce an independent completed turn with no inherited private context.
         let clean = db.create_conversation(&workspace).unwrap().id;
         let safe_turn = db.prepare_context_run(&new_id(), &workspace, &clean, "safe opening", &local, &[], false).unwrap();
-        db.finish(&safe_turn.run, "PUBLIC-HISTORY-ANSWER", "completed", None, json!({})).unwrap();
+        db.execution_finish(&safe_turn.run, ExecutionPurpose::Chat, "PUBLIC-HISTORY-ANSWER",
+            Some("THINKING-HISTORY-SENTINEL"), "completed", None, json!({})).unwrap();
 
         let captured = Arc::new(std::sync::Mutex::new(None));
         let observed = captured.clone();
         let (url, server) = http_fixture::serve(1, move |_, path, body| {
             assert_eq!(path, "/chat/completions");
             *observed.lock().unwrap() = Some(body);
-            (200, json!({"choices":[{"message":{"content":"synthetic response"},"finish_reason":"stop"}]}))
+            (200, json!({"choices":[{"message":{"content":"synthetic response","reasoning_content":"synthetic reasoning"},"finish_reason":"stop"}]}))
         });
         let target = CloudTarget::loopback_test(url, "remote");
         let profile: Profile = serde_json::from_value(json!({"id":new_id(),"updatedAt":now(),
@@ -703,8 +743,14 @@ mod tests {
         let prepared = prepare(&clean, &[], false).unwrap();
         let expected = prepared.request["body"].clone();
         let (_keep, cancel) = watch::channel(false);
-        let result = execute_chat(db.clone(), None, Some(&target), prepared, settings, None, cancel, |_| {}).await;
+        let mut updates = Vec::new();
+        let result = execute_chat(db.clone(), None, Some(&target), prepared, settings, None, cancel, |update| updates.push(update)).await;
         assert_eq!(result.update.status, "completed", "{:?}", result.update.error_message);
+        assert_eq!(result.update.content, "synthetic response");
+        assert_eq!(result.update.thinking.as_deref(), Some("synthetic reasoning"));
+        assert!(updates[0].content.is_empty());
+        assert_eq!(updates[0].thinking.as_deref(), Some("synthetic reasoning"));
+        assert_eq!(db.messages(&workspace, &clean).unwrap().last().unwrap().thinking.as_deref(), Some("synthetic reasoning"));
         server.join().unwrap();
         let body = captured.lock().unwrap().take().unwrap();
         assert_eq!(body, expected);
@@ -716,13 +762,14 @@ mod tests {
             assert!(raw.contains(expected), "missing {expected}");
         }
         assert!(!raw.contains("PRIVATE-"));
+        assert!(!raw.contains("THINKING-HISTORY-SENTINEL"));
         let messages = body["messages"].as_array().unwrap();
         assert!(messages.iter().any(|message| message["role"] == "assistant" && message["content"] == "PUBLIC-HISTORY-ANSWER"));
         assert_eq!(messages.last().unwrap()["content"], "launch dependency");
     }
 
     #[tokio::test]
-    async fn chat_fallback_keeps_both_snapshots_and_uses_only_local_backup() {
+    async fn thinking_stream_chat_fallback_keeps_both_snapshots_and_uses_only_local_backup() {
         let db = Arc::new(Database::rag_evaluation_database().unwrap());
         let ws = db.create_workspace("备用请求").unwrap().id;
         let chat = db.create_conversation(&ws).unwrap().id;
@@ -778,7 +825,7 @@ mod tests {
                     assert_eq!(body["messages"][1]["content"], "固定题目");
                     (
                         200,
-                        json!({"done":true,"message":{"role":"assistant","content":"本机备用答案"},"eval_count":6}),
+                        json!({"done":true,"message":{"role":"assistant","content":"本机备用答案","thinking":"local fixture thinking"},"eval_count":6}),
                     )
                 }
                 _ => panic!("unexpected fixture path {path}"),
@@ -803,6 +850,7 @@ mod tests {
             finished.update.error_message
         );
         assert_eq!(finished.update.content, "本机备用答案");
+        assert_eq!(finished.update.thinking.as_deref(), Some("local fixture thinking"));
         let detail = db.run_detail(&ws, &run).unwrap();
         assert_eq!(detail.run.model_id, "backup");
         assert_eq!(detail.primary_snapshot.unwrap().request, original);

@@ -33,6 +33,8 @@ pub struct FrameMessage {
     #[serde(default)]
     pub content: String,
     #[serde(default)]
+    pub thinking: String,
+    #[serde(default)]
     pub tool_calls: Option<Vec<Value>>,
 }
 
@@ -420,6 +422,33 @@ mod tests {
         assert!(error.contains("HTTP 503"));
         assert!(!error.contains("private-service-fixture"));
         server.join().unwrap();
+    }
+
+    #[test]
+    fn thinking_stream_ndjson_parses_separate_fields() {
+        let mut parser = Ndjson::default();
+        let frames = parser.push(
+            concat!(
+                r#"{"message":{"thinking":"working"}}"#,
+                "\n",
+                r#"{"message":{"content":"answer","thinking":"checked"}}"#,
+                "\n",
+                r#"{"message":{"content":" done"},"done":true}"#,
+                "\n",
+            )
+            .as_bytes(),
+        );
+        let messages: Vec<_> = frames
+            .into_iter()
+            .map(|frame| {
+                let item = frame.unwrap().message.unwrap();
+                (item.content, item.thinking)
+            })
+            .collect();
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0], (String::new(), "working".into()));
+        assert_eq!(messages[1], ("answer".into(), "checked".into()));
+        assert_eq!(messages[2], (" done".into(), String::new()));
     }
 
     #[test]

@@ -583,6 +583,7 @@ mod tests {
             &history.run,
             ExecutionPurpose::Chat,
             "private-answer-marker",
+            None,
             "completed",
             None,
             json!({}),

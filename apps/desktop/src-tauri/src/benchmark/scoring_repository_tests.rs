@@ -56,7 +56,7 @@ fn completed(db: &Database, p: &Prepared, text: &str) {
         json!({"synthetic":true}),
     )
     .unwrap();
-    db.execution_finish(&p.execution.run,ExecutionPurpose::Benchmark,text,"completed",None,json!({"finishReason":"stop","evalCount":7,"promptEvalCount":23,"clientTiming":{"clock":"monotonic","firstTextMs":12,"completeMs":25}})).unwrap();
+    db.execution_finish(&p.execution.run,ExecutionPurpose::Benchmark,text,None,"completed",None,json!({"finishReason":"stop","evalCount":7,"promptEvalCount":23,"clientTiming":{"clock":"monotonic","firstTextMs":12,"completeMs":25}})).unwrap();
 }
 
 #[test]
@@ -172,6 +172,7 @@ fn scoring_storage_excluded_states_do_not_become_zero_answers() {
                 &p.execution.run,
                 ExecutionPurpose::Benchmark,
                 "",
+                None,
                 "failed",
                 Some("synthetic preflight exclusion"),
                 json!({}),

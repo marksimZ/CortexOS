@@ -7,10 +7,17 @@ use std::time::Instant;
 
 const INVALID: ConnectionState = ConnectionState::ServiceError;
 
+pub(crate) enum StreamChunk<'a> {
+    Content(&'a str),
+    Thinking(&'a str),
+}
+
 #[derive(Default)]
 struct Answer {
     text: String,
     published: usize,
+    thinking: String,
+    published_thinking: usize,
     usage: Value,
     finish: Option<&'static str>,
 }
@@ -35,6 +42,12 @@ impl Answer {
                 if let Some(delta) = choice["delta"]["content"].as_str() {
                     self.text.push_str(delta);
                 }
+                if let Some(delta) = choice["delta"]["reasoning_content"]
+                    .as_str()
+                    .or_else(|| choice["delta"]["reasoning"].as_str())
+                {
+                    self.thinking.push_str(delta);
+                }
                 if let Some(reason) = choice["finish_reason"].as_str().filter(|r| !r.is_empty()) {
                     self.finish = Some(match reason {
                         "stop" => "stop",
@@ -46,6 +59,9 @@ impl Answer {
             Some(Provider::Openai) => match kind {
                 "response.output_text.delta" => {
                     self.text.push_str(event["delta"].as_str().ok_or(INVALID)?)
+                }
+                "response.reasoning_summary_text.delta" | "response.reasoning_text.delta" => {
+                    self.thinking.push_str(event["delta"].as_str().ok_or(INVALID)?);
                 }
                 "response.completed" | "response.incomplete" => {
                     self.usage = event["response"]["usage"].clone();
@@ -67,6 +83,10 @@ impl Answer {
                     self.text
                         .push_str(event["delta"]["text"].as_str().ok_or(INVALID)?);
                 }
+                "content_block_delta" if event["delta"]["type"] == "thinking_delta" => {
+                    self.thinking
+                        .push_str(event["delta"]["thinking"].as_str().ok_or(INVALID)?);
+                }
                 "message_delta" => {
                     self.usage["output_tokens"] = event["usage"]["output_tokens"].clone();
                     self.finish = Some(match event["delta"]["stop_reason"].as_str() {
@@ -87,10 +107,12 @@ impl Answer {
                     .into_iter()
                     .flatten()
                 {
-                    if part["thought"] != true
-                        && let Some(text) = part["text"].as_str()
-                    {
-                        self.text.push_str(text);
+                    if let Some(text) = part["text"].as_str() {
+                        if part["thought"] == true {
+                            self.thinking.push_str(text);
+                        } else {
+                            self.text.push_str(text);
+                        }
                     }
                 }
                 if let Some(reason) = candidate["finishReason"].as_str() {
@@ -109,29 +131,44 @@ impl Answer {
         &mut self,
         key: &str,
         final_chunk: bool,
-        on_delta: &mut dyn FnMut(&str),
+        on_delta: &mut (dyn FnMut(StreamChunk<'_>) + Send),
     ) -> Result<(), ConnectionState> {
-        let pending = &self.text[self.published..];
-        if self.text.len() > 1 << 20 || pending.contains(key) {
-            return Err(INVALID);
+        let thinking = publishable(&self.thinking, &mut self.published_thinking, key, final_chunk)?;
+        let content = publishable(&self.text, &mut self.published, key, final_chunk)?;
+        if !thinking.is_empty() {
+            on_delta(StreamChunk::Thinking(thinking));
         }
-        // A credential may span events. Hold only the suffix that could still complete it.
-        let held = if final_chunk {
-            0
-        } else {
-            key.char_indices()
-                .rev()
-                .map(|(end, _)| end)
-                .find(|&end| pending.ends_with(&key[..end]))
-                .unwrap_or(0)
-        };
-        let end = self.text.len() - held;
-        if end > self.published {
-            on_delta(&self.text[self.published..end]);
-            self.published = end;
+        if !content.is_empty() {
+            on_delta(StreamChunk::Content(content));
         }
         Ok(())
     }
+}
+
+fn publishable<'a>(
+    text: &'a str,
+    published: &mut usize,
+    key: &str,
+    final_chunk: bool,
+) -> Result<&'a str, ConnectionState> {
+    let pending = &text[*published..];
+    if text.len() > 1 << 20 || pending.contains(key) {
+        return Err(INVALID);
+    }
+    // A credential may span events. Hold only the suffix that could still complete it.
+    let held = if final_chunk {
+        0
+    } else {
+        key.char_indices()
+            .rev()
+            .map(|(end, _)| end)
+            .find(|&end| pending.ends_with(&key[..end]))
+            .unwrap_or(0)
+    };
+    let end = text.len() - held;
+    let delta = &text[*published..end];
+    *published = end;
+    Ok(delta)
 }
 
 pub(super) async fn read(
@@ -140,7 +177,7 @@ pub(super) async fn read(
     key: &str,
     start: Instant,
     hash: String,
-    on_delta: &mut (dyn FnMut(&str) + Send),
+    on_delta: &mut (dyn FnMut(StreamChunk<'_>) + Send),
 ) -> Result<CompletionOutput, ConnectionState> {
     let mut answer = Answer::default();
     let mut line = Vec::new();
@@ -201,6 +238,7 @@ pub(super) async fn read(
     completion::checked_output(
         CompletionOutput {
             text: answer.text,
+            thinking: (!answer.thinking.is_empty()).then_some(answer.thinking),
             calls: vec![],
             usage: answer.usage,
             finish_reason: finish_reason.into(),
@@ -220,7 +258,7 @@ mod tests {
     async fn sample(
         provider: Option<Provider>,
         frames: &[&str],
-    ) -> (Result<CompletionOutput, ConnectionState>, String) {
+    ) -> (Result<CompletionOutput, ConnectionState>, Vec<(bool, String)>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let body = frames
@@ -243,27 +281,39 @@ mod tests {
             }
             socket.write_all(b"0\r\n\r\n").unwrap();
         });
-        let response = reqwest::get(format!("http://{address}/")).await.unwrap();
+        let response = reqwest::Client::builder()
+            .no_proxy()
+            .build()
+            .unwrap()
+            .get(format!("http://{address}/"))
+            .send()
+            .await
+            .unwrap();
         server.join().unwrap();
-        let mut visible = String::new();
+        let mut visible = Vec::new();
         let output = read(
             response,
             provider,
             "test-fixture-secret",
             Instant::now(),
             "fixture".into(),
-            &mut |text| visible.push_str(text),
+            &mut |chunk| match chunk {
+                StreamChunk::Content(text) => visible.push((false, text.to_owned())),
+                StreamChunk::Thinking(text) => visible.push((true, text.to_owned())),
+            },
         )
         .await;
         (output, visible)
     }
 
     #[tokio::test]
-    async fn cloud_chat_stream_protocols_and_interruptions() {
+    async fn thinking_stream_cloud_sse_protocols() {
         for (provider, frames) in [
             (
                 None,
                 vec![
+                    r#"{"choices":[{"delta":{"reasoning_content":"work"}}]}"#,
+                    r#"{"choices":[{"delta":{"reasoning":"ing"}}]}"#,
                     r#"{"choices":[{"delta":{"content":"你好"}}]}"#,
                     r#"{"choices":[{"finish_reason":"stop"}]}"#,
                     "[DONE]",
@@ -272,6 +322,8 @@ mod tests {
             (
                 Some(Provider::Openai),
                 vec![
+                    r#"{"type":"response.reasoning_summary_text.delta","delta":"work"}"#,
+                    r#"{"type":"response.reasoning_text.delta","delta":"ing"}"#,
                     r#"{"type":"response.output_text.delta","delta":"你好"}"#,
                     r#"{"type":"response.completed","response":{"usage":{"input_tokens":2}}}"#,
                 ],
@@ -279,6 +331,8 @@ mod tests {
             (
                 Some(Provider::Anthropic),
                 vec![
+                    r#"{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"work"}}"#,
+                    r#"{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"ing"}}"#,
                     r#"{"type":"content_block_delta","delta":{"type":"text_delta","text":"你好"}}"#,
                     r#"{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}"#,
                 ],
@@ -286,27 +340,50 @@ mod tests {
             (
                 Some(Provider::Gemini),
                 vec![
-                    r#"{"candidates":[{"content":{"parts":[{"thought":true,"text":"private"},{"text":"你好"}]},"finishReason":"STOP"}]}"#,
+                    r#"{"candidates":[{"content":{"parts":[{"thought":true,"text":"work"},{"thought":true,"text":"ing"},{"text":"你好"}]},"finishReason":"STOP"}]}"#,
                 ],
             ),
         ] {
             let (output, visible) = sample(provider, &frames).await;
-            assert_eq!(output.unwrap().text, "你好");
-            assert_eq!(visible, "你好");
+            let output = output.unwrap();
+            assert_eq!(output.text, "你好");
+            assert_eq!(output.thinking.as_deref(), Some("working"));
+            assert_eq!(
+                visible
+                    .iter()
+                    .filter(|(thinking, _)| *thinking)
+                    .map(|(_, text)| text.as_str())
+                    .collect::<String>(),
+                "working"
+            );
+            assert_eq!(visible.last(), Some(&(false, "你好".into())));
+            assert!(visible.first().unwrap().0);
         }
+    }
+
+    #[tokio::test]
+    async fn thinking_stream_cloud_sse_rejects_secret_and_requires_final_content() {
         let (truncated, partial) =
-            sample(None, &[r#"{"choices":[{"delta":{"content":"未完成"}}]}"#]).await;
+            sample(None, &[r#"{"choices":[{"delta":{"content":"partial"}}]}"#]).await;
         assert!(truncated.is_err());
-        assert_eq!(partial, "未完成");
-        let (echo, visible) = sample(
+        assert_eq!(partial, [(false, "partial".into())]);
+
+        let (thinking_only, partial) = sample(
             None,
-            &[
-                r#"{"choices":[{"delta":{"content":"开始test-fixture-"}}]}"#,
-                r#"{"choices":[{"delta":{"content":"secret"}}]}"#,
-            ],
+            &[r#"{"choices":[{"delta":{"reasoning_content":"working"},"finish_reason":"stop"}]}"#],
         )
         .await;
-        assert!(echo.is_err());
-        assert_eq!(visible, "开始");
+        assert!(thinking_only.is_err());
+        assert_eq!(partial, [(true, "working".into())]);
+
+        for (field, is_thinking) in [("content", false), ("reasoning_content", true)] {
+            let first = json!({"choices":[{"delta":{(field):"prefix test-fixture-"}}]}).to_string();
+            let second = json!({"choices":[{"delta":{(field):"secret"}}]}).to_string();
+            let (echo, visible) = sample(None, &[&first, &second]).await;
+            assert!(matches!(echo, Err(INVALID)));
+            assert_eq!(visible, [(is_thinking, "prefix ".into())]);
+        }
     }
+
+
 }

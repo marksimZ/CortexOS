@@ -130,6 +130,7 @@ pub(crate) enum Generated {
 
 pub(crate) struct GenerationFrame {
     pub text: String,
+    pub thinking: String,
     pub calls: Vec<Value>,
     pub final_metrics: Option<Value>,
 }
@@ -163,12 +164,15 @@ impl GenerationStream {
                 .map(|frame| {
                     frame.map(|frame| {
                         let final_metrics = frame.done.then(|| frame.metrics());
-                        let (text, calls) = frame
+                        let (text, thinking, calls) = frame
                             .message
-                            .map(|item| (item.content, item.tool_calls.unwrap_or_default()))
+                            .map(|item| {
+                                (item.content, item.thinking, item.tool_calls.unwrap_or_default())
+                            })
                             .unwrap_or_default();
                         GenerationFrame {
                             text,
+                            thinking,
                             calls,
                             final_metrics,
                         }

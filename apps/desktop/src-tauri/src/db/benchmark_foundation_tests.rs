@@ -31,12 +31,12 @@ fn seed_execution(
     }
     tx.execute("INSERT INTO execution_runs(id,workspace_id,conversation_id,assistant_message_id,model_id,model_config_json,context_manifest_json,status,started_at,finished_at) VALUES(?1,?2,?3,?4,?5,?6,'{}',?7,'t',CASE WHEN ?7='running' THEN NULL ELSE 't' END)",params![id,workspace,conversation,answer,settings.model,serde_json::to_string(&settings).unwrap(),status]).unwrap();
     tx.execute(
-        "INSERT INTO messages VALUES(?1,?2,?3,1,'user','fixture question','completed',?4,'t','t')",
+        "INSERT INTO messages(id,workspace_id,conversation_id,seq,role,content,status,model_run_id,created_at,updated_at) VALUES(?1,?2,?3,1,'user','fixture question','completed',?4,'t','t')",
         params![format!("{id}-question"), workspace, conversation, id],
     )
     .unwrap();
     tx.execute(
-        "INSERT INTO messages VALUES(?1,?2,?3,2,'assistant','saved fixture output',?4,?5,'t','t')",
+        "INSERT INTO messages(id,workspace_id,conversation_id,seq,role,content,status,model_run_id,created_at,updated_at) VALUES(?1,?2,?3,2,'assistant','saved fixture output',?4,?5,'t','t')",
         params![
             answer,
             workspace,

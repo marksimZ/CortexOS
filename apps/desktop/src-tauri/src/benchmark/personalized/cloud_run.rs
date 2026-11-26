@@ -98,6 +98,7 @@ pub async fn run(
             &run,
             ExecutionPurpose::Benchmark,
             "",
+            None,
             "failed",
             Some("Docker环境不可用，未发送云端请求。"),
             json!({}),
@@ -125,6 +126,7 @@ pub async fn run(
                 &run,
                 ExecutionPurpose::Benchmark,
                 &output.text,
+                output.thinking.as_deref(),
                 "completed",
                 None,
                 metrics,
@@ -135,6 +137,7 @@ pub async fn run(
                 &run,
                 ExecutionPurpose::Benchmark,
                 "",
+                None,
                 if *cancel.borrow() {
                     "cancelled"
                 } else {

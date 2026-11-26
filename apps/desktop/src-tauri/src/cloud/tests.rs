@@ -187,6 +187,7 @@ impl ProviderAdapter for CompletionMock {
             };
             Ok(completion::CompletionOutput {
                 text,
+                thinking: None,
                 calls: vec![],
                 usage: json!({"input_tokens":100,"output_tokens":10}),
                 finish_reason: "stop".into(),

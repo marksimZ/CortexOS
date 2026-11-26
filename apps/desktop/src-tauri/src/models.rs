@@ -182,6 +182,8 @@ pub struct Message {
     pub conversation_id: String,
     pub role: String,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<String>,
     pub status: String,
     pub model_run_id: Option<String>,
     pub model_id: Option<String>,
@@ -283,6 +285,8 @@ pub struct StreamUpdate {
     pub message_id: String,
     pub seq: u64,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<String>,
     pub status: String,
     pub error_message: Option<String>,
 }

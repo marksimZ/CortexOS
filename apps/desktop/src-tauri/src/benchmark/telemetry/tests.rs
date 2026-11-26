@@ -140,6 +140,7 @@ fn telemetry_samples_are_scoped_append_only_and_survive_restart_without_rewritin
         &p.execution.run,
         ExecutionPurpose::Benchmark,
         "partial",
+        None,
         "cancelled",
         None,
         json!({"clientTiming":{"responseMs":42,"firstTextMs":12}}),

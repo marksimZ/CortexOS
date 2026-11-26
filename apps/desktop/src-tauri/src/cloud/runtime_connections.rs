@@ -1,5 +1,5 @@
 use super::{
-    ConnectionState, Provider,
+    ConnectionState, Provider, StreamChunk,
     runtime_protocol::{Endpoint, valid_model},
     valid_key,
     vault::WindowsVault,
@@ -485,7 +485,7 @@ impl CloudTarget {
         meter: &crate::runtime_usage::Meter,
         trace: Option<&Value>,
         knowledge: &[super::privacy::TransferVersion],
-        on_delta: &mut (dyn FnMut(&str) + Send),
+        on_delta: &mut (dyn FnMut(StreamChunk<'_>) + Send),
     ) -> AppResult<super::completion::CompletionOutput> {
         let url = wire["url"].as_str().ok_or("云端请求地址未准备。")?;
         use crate::runtime_usage::{Call, Usage};
@@ -529,7 +529,7 @@ impl CloudTarget {
                 || async {
                     let mut guard = delta_cell.lock().await;
                     let mut visible = false;
-                    let mut forward = |delta: &str| {
+                    let mut forward = |delta: StreamChunk<'_>| {
                         visible = true;
                         guard(delta);
                     };
@@ -663,7 +663,7 @@ scope 可选 global_preference（长期背景、目标或偏好）、global_rule
         ) {
             body["thinking"] = json!({"type":"disabled"});
         }
-        let mut noop = |_: &str| {};
+        let mut noop = |_: StreamChunk<'_>| {};
         self.endpoint
             .send_generation_stream(&self.key, url, &body, timeout, &mut noop)
             .await
