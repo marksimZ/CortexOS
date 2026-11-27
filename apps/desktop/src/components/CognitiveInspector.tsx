@@ -120,7 +120,10 @@ export function CognitiveInspector({
             <div>
               <dt>总容量 / 回答长度上限（Token）</dt>
               <dd>
-                {detail.settings.numCtx} / {detail.settings.numPredict}
+                {detail.settings.numCtx} /{" "}
+                {detail.settings.numPredict === 0
+                  ? "自动"
+                  : detail.settings.numPredict}
               </dd>
             </div>
             <div>

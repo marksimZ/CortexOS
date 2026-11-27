@@ -252,7 +252,7 @@ fn estimate(
             settings.num_ctx as u64
         };
         let max_output = if generates {
-            settings.num_predict as u64
+            settings.reserved_output_budget() as u64
         } else {
             0
         };

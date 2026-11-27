@@ -20,7 +20,34 @@ test("one-click web URL import saves readable text to knowledge and mounts it to
   if (!address || typeof address === "string") throw Error("web fixture address unavailable");
   const articleUrl = `http://127.0.0.1:${address.port}/quantum-notes`;
 
-  const app = await launchNative(info, { webPageUrl: articleUrl });
+  const ollamaFixture = createServer((req, res) => {
+    if (req.url === "/api/chat") {
+      req.resume();
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "application/x-ndjson" });
+        res.end(
+          JSON.stringify({
+            message: { role: "assistant", content: "量子比特可以同时处于 0 与 1 的叠加态。" },
+            done: true,
+          }) + "\n",
+        );
+      });
+      return;
+    }
+    res.setHeader("content-type", "application/json");
+    if (req.url === "/api/version") res.end('{"version":"web-mount-fixture"}');
+    else if (req.url === "/api/show") res.end('{"details":{"format":"gguf"}}');
+    else if (req.url === "/api/tags") res.end('{"models":[{"name":"qwen3:4b-instruct","size":1}]}');
+    else res.end("{}");
+  });
+  await new Promise<void>((done) => ollamaFixture.listen(0, "127.0.0.1", done));
+  const ollamaAddress = ollamaFixture.address();
+  if (!ollamaAddress || typeof ollamaAddress === "string") throw Error("ollama fixture address unavailable");
+
+  const app = await launchNative(info, {
+    endpoint: `http://127.0.0.1:${ollamaAddress.port}`,
+    webPageUrl: articleUrl,
+  });
   try {
     const { page } = app;
     await expect(page.getByRole("button", { name: "新建工作区", exact: true })).toBeVisible();
@@ -47,8 +74,15 @@ test("one-click web URL import saves readable text to knowledge and mounts it to
     await expect(page.getByText("手动选择: 1 项知识").or(page.getByText("手动选择：1 项知识")).first()).toBeVisible();
 
     await page.screenshot({ path: info.outputPath("web-import-mounted.png"), animations: "disabled" });
+
+    await page.getByRole("textbox", { name: "你的问题" }).fill("量子比特有什么特点？");
+    await page.getByRole("button", { name: "发送消息", exact: true }).click();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByText("量子比特可以同时处于 0 与 1 的叠加态。", { exact: true })).toBeVisible();
   } finally {
     await app.stop();
+    ollamaFixture.closeAllConnections();
+    ollamaFixture.close();
     webServer.closeAllConnections();
     webServer.close();
   }

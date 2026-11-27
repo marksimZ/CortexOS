@@ -78,10 +78,11 @@ export function GenerationStylePanel({
     matchesPreset(studio.settings.temperature, studio.settings.topP, preset),
   );
   const numPredictValid =
-    Number.isInteger(numPredictDraft) &&
-    numPredictDraft >= 32 &&
-    numPredictDraft <= 2048 &&
-    validModelCapacity(studio.settings.numCtx, numPredictDraft);
+    numPredictDraft === 0 ||
+    (Number.isInteger(numPredictDraft) &&
+      numPredictDraft >= 32 &&
+      numPredictDraft <= 8192 &&
+      validModelCapacity(studio.settings.numCtx, numPredictDraft));
   const advancedDirty =
     Math.abs(tempDraft - studio.settings.temperature) >= 0.001 ||
     Math.abs(topPDraft - studio.settings.topP) >= 0.001 ||
@@ -218,23 +219,27 @@ export function GenerationStylePanel({
               <label htmlFor={compact ? "compact-predict-input" : "settings-predict-input"}>
                 回答长度上限（Token）
               </label>
-              <span>32–2048</span>
+              <span>留空 = 自动（不截断）</span>
             </div>
             <input
               id={compact ? "compact-predict-input" : "settings-predict-input"}
               type="number"
               min={32}
-              max={2048}
+              max={8192}
               step={1}
-              value={Number.isFinite(numPredictDraft) ? numPredictDraft : ""}
+              placeholder="自动（不截断）"
+              value={numPredictDraft > 0 && Number.isFinite(numPredictDraft) ? numPredictDraft : ""}
               disabled={!studio.desktop || saving}
-              onChange={(event) => setNumPredictDraft(Number(event.target.value))}
+              onChange={(event) => {
+                const raw = event.target.value.trim();
+                setNumPredictDraft(raw === "" ? 0 : Number(raw));
+              }}
             />
             {!numPredictValid && (
               <p className="form-error" role="alert">
-                {numPredictDraft >= studio.settings.numCtx
+                {numPredictDraft > 0 && !validModelCapacity(studio.settings.numCtx, numPredictDraft)
                   ? capacityError
-                  : "回答长度上限需为 32 到 2048 之间的整数。"}
+                  : "留空设为自动，或输入 32 到 8192 之间的整数。"}
               </p>
             )}
           </div>

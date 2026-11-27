@@ -196,7 +196,10 @@ export function ChatPage({
   const selectedWebSources = visibleResults?.status === "ready"
     ? visibleResults.response.results.filter(source => !visibleResults.excludedUrls.includes(source.url)) : [];
   // The backend's context calculation reserves 256 bytes and adds its system instructions.
-  const maxQuestionBytes = Math.min(16_384, studio.settings.numCtx - studio.settings.numPredict - 256 - 768);
+  const reservedOutput = studio.settings.numPredict === 0
+    ? Math.min(512, Math.max(256, Math.floor(studio.settings.numCtx / 8)))
+    : studio.settings.numPredict;
+  const maxQuestionBytes = Math.min(16_384, studio.settings.numCtx - reservedOutput - 256 - 768);
   const webInput = visibleResults?.status === "ready" && selectedWebSources.length
     ? questionWithSources(query, { ...visibleResults.response, results: selectedWebSources }, visibleResults.provider, maxQuestionBytes) : null;
   const showWebResults = visibleResults !== null && !currentReminder;

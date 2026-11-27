@@ -47,7 +47,7 @@ test("cross-conversation full-text search finds matching turn and jumps to locat
     await expect(page.getByText("收到第 1 轮内容", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "新建对话", exact: true }).first().click();
-    await expect(page.getByText("欢迎使用 CortexOS")).toBeVisible();
+    await expect(page.getByRole("article")).toHaveCount(0);
     await page.getByRole("textbox", { name: "你的问题" }).fill("周末郊游清单安排");
     await page.getByRole("button", { name: "发送消息", exact: true }).click();
     await expect(page.getByText("收到第 2 轮内容", { exact: true })).toBeVisible();

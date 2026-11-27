@@ -197,7 +197,7 @@ export function SettingsPage({ studio }: { studio: Studio }) {
                 <summary>如何选择模型</summary>
                 <p>
                   建议
-                  qwen3:4b-instruct。带思考功能的模型可能需要更高的回答长度上限。更改从下一次回答开始使用。
+                  qwen3:4b-instruct。回答长度默认自动（不主动截断），开启深度思考也不会因默认短上限被中途拦截。更改从下一次回答开始使用。
                 </p>
               </details>
             </div>
@@ -205,7 +205,7 @@ export function SettingsPage({ studio }: { studio: Studio }) {
               <summary>生成参数</summary>
               <div className="parameter-fields">
                 <NumberField label="输入与回答总容量（Token）" min={1024} max={16384} value={draft.numCtx} readOnly={!studio.desktop} disabled={!studio.desktop} error={capacityInvalid ? capacityError : undefined} onChange={value => field("numCtx", value)} />
-                <NumberField label="回答长度上限（Token）" min={32} max={2048} value={draft.numPredict} readOnly={!studio.desktop} disabled={!studio.desktop} onChange={value => field("numPredict", value)} />
+                <NumberField label="回答长度上限（Token）" min={32} max={8192} allowEmpty placeholder="自动（不截断）" value={draft.numPredict === 0 ? null : draft.numPredict} readOnly={!studio.desktop} disabled={!studio.desktop} onChange={value => field("numPredict", value === null ? 0 : value)} />
                 <NumberField label="回答变化程度（温度）" min={0} max={2} step="any" value={draft.temperature} readOnly={!studio.desktop} disabled={!studio.desktop} onChange={value => field("temperature", value)} />
                 <NumberField label="核采样（top_p）" min={0.1} max={1} step={0.05} value={draft.topP} readOnly={!studio.desktop} disabled={!studio.desktop} onChange={value => field("topP", value)} />
                 <NumberField label="生成超时（秒）" min={30} max={600} value={draft.timeoutSeconds} readOnly={!studio.desktop} disabled={!studio.desktop} onChange={value => field("timeoutSeconds", value)} />

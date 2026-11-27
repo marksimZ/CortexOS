@@ -411,6 +411,15 @@ mod tests {
         assert_eq!(chat_request(&settings, &[])["think"], true);
     }
 
+    #[test]
+    fn generation_options_send_ollama_auto_and_custom_output_caps() {
+        let mut settings = ModelSettings::default();
+        assert_eq!(chat_request(&settings, &[])["options"]["num_predict"], -1);
+
+        settings.num_predict = 768;
+        assert_eq!(chat_request(&settings, &[])["options"]["num_predict"], 768);
+    }
+
     #[tokio::test]
     async fn local_http_503_reports_service_failure_without_response_body() {
         let (url, server) = crate::model_runtime::http_fixture::serve(1, |_, path, _| {
@@ -513,7 +522,7 @@ pub fn chat_request(settings: &ModelSettings, messages: &[ChatMessage]) -> Value
         })
         .collect();
     let mut request = json!({"model":settings.model,"messages":messages,"stream":true,"keep_alive":"5m",
-        "options":{"num_ctx":settings.num_ctx,"temperature":settings.temperature,"top_p":settings.top_p,"num_predict":settings.num_predict}});
+        "options":{"num_ctx":settings.num_ctx,"temperature":settings.temperature,"top_p":settings.top_p,"num_predict":if settings.num_predict == 0 { -1 } else { i64::from(settings.num_predict) }}});
     if settings.deep_thinking {
         request["think"] = json!(true);
     }

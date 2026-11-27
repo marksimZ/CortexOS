@@ -3304,3 +3304,71 @@ Markdown用原文存储，不改变请求或证据；不支持数学公式/代�
 - **未执行 / 手工待测项**：
   - 所有原生 WebView2 E2E 用例均使用 `127.0.0.1` loopback HTTP 本地测试桩，真实 Ollama 推理、真实本地向量生成、公网网页抓取与真实云端 API 调用尚未在此轮回归中实测；
   - 已核对 `.exe` 字节大小、SHA256 与签名状态，未自动安装运行 `CortexOS_0.2.0_x64-setup.exe`。
+
+
+### 2026-11-26 真实本机 Ollama 串行验收与网页挂载 Bug 修复
+
+在获得明确弹窗授权后，使用隔离临时数据目录运行原生桌面调试二进制（`debug` + `--features tauri/custom-protocol`，因 `CORTEXOS_TEST_DATA_DIR` / `CORTEXOS_TEST_CDP_PORT` 仅在 `#[cfg(debug_assertions)]` 下生效），串行接入本机 `Ollama 0.40.16`（GPU：`NVIDIA GeForce RTX 4070 Laptop GPU`, `8,188 MiB`）执行共计 4 次真实推理（全程严格单模型加载，无向量模型调用，结束时显式卸载释放显存）。
+
+#### 一、发现并修复真实缺陷：`db.rs` 手动上下文拦截网页入库 `evidence` 节点
+
+- **问题现象**：A2 阶段通过对话输入栏“抓取并挂载”导入本地测试网页后（[web_search.rs](apps/desktop/src-tauri/src/web_search.rs#L823) 将网页保存为 `kind = "evidence"`），实际点击“发送消息”触发报错：`当前仅支持已确认的知识、上下文和决策。`（仅跑本地测试桩时未暴露）。
+- **修复与复测**：
+  - 由 Codex CLI 修改 [db.rs](apps/desktop/src-tauri/src/db.rs#L1237) 允许已确认的 `"evidence"` 节点进入手动 `contextSelection`，更新提示文案并新增单元测试 `db::context_tests::manual_context_selection_accepts_approved_evidence_and_rejects_hypothesis`。
+  - 扩展 [web-url-import-native.spec.ts](apps/desktop/tests/web-url-import-native.spec.ts) 增加“抓取并挂载后实际发送消息”的回归断言。
+  - 实测命令（`--offline --locked`）：
+    - `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked web_page_import`：4 passed, 0 failed。
+    - `cargo test --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked manual_context_selection`：1 passed, 0 failed。
+    - `cargo build --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`：0 warning, 0 error（40.69s）。
+    - `$env:CORTEXOS_NATIVE_ONLY="1"; npx.cmd playwright test tests/web-url-import-native.spec.ts --project=desktop --output=../../artifacts/web-url-import-fix`（目录 `apps/desktop`）：1 passed（5.3s）。
+
+#### 二、真实模型串行验收实测记录（`num_ctx=4096`，`num_predict=256`，共 4 次推理）
+
+1. **Batch A · `qwen3:4b-instruct`（3 次真实推理，全部通过）**：
+   - **A1 文档分段检索、引用溯源跳转与索引状态胶囊**：导入 3 页测试课件（`courseware.md`），真实问答返回 `火星热核推进公式的比冲 I_sp 数值是 920s [资料1]。`（`promptEvalCount: 400`、`evalCount: 24`、`loadDurationNs: 7.916s`、`evalDurationNs: 0.411s`、`totalDurationNs: 8.599s`、`finishReason: stop`、`citationCount: 1`）；点击依据卡片准确标出 `第 2 页` 并高亮跳转到原文行，知识页顶部显示 `检索索引已同步 · 1 篇 / 9 片段`（截图见 `artifacts/real-ollama-acceptance-0.2.0/real-a1-source-located.png`、`real-a1-index-pill.png`）。
+   - **A2 网页抓取挂载 + 真实问答 + 跨会话 FTS5 检索跳转**：挂载本地测试网页后真实回答 `量子比特可以同时处于 0 与 1 的叠加态，测量时会坍缩为确定状态[资料1]。`（首字 `9,751 ms`，总耗时 `10,161 ms`）；侧栏输入 `热核推进` 成功检索并定位回 A1 历史消息高亮（截图见 `real-a2-web-mounted-answer.png`、`real-a2-fts-search-located.png`）。
+   - **A3 流式中途停止、重启持久化与显存释放**：流式生成 61 字后点击“停止生成”准确停在 `已停止`，关闭并重启桌面端后 4 条会话均完整保留；执行 `ollama stop qwen3:4b-instruct` 后 `ollama ps` 清空，显存占用从 `3,221 MiB` 回落至 `3,062 MiB`。
+2. **Batch B · `qwen3:4b`（1 次真实推理，`deepThinking=true`）**：
+   - 真实加载 `qwen3:4b` 后成功触发深度思考流并分离折叠为 `已深度思考 模型输出思考文本 · 391 字`（`<think>` 未泄漏至正文区）；但因 Ollama 将思考 token 计入 `num_predict=256`，模型在输出思考过程后即耗尽 `num_predict` 上限而未能输出最终正文，前端空正文兜底按预期拦截并显示 `生成失败 / 本次未生成可用文字。 / 模型没有返回可用文字，请换一个模型或重试。`。按用户确认范围结束测试，未追加推理，结束后 `ollama ps` 确认 0 模型残留。
+
+#### 三、仍未实测项与待处理事项
+
+- 未提高 `num_predict`（如 `1024`）对 `qwen3:4b` 做“思考 + 正文双输出”补测；
+- 未在本次实测中调用真实云端模型 API、真实公网网页链接、本地向量模型（本机未安装）及手动运行 `CortexOS_0.2.0_x64-setup.exe` 安装包（注：`db.rs` 修复与本日志更新暂保留在工作区，待用户确认后再提交推送及重打 `0.2.0` 安装包）。
+
+### 2026-11-27 Automatic output budget and thinking-stream schema assertion
+
+Automatic output reservation now uses one eighth of the context size, clamped to 256–512 tokens. The thinking-stream migration test expects schema 41.
+
+- `cargo test --manifest-path D:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked generation_options` — 9 passed.
+- `cargo test --manifest-path D:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked thinking_stream` — 7 passed.
+- `cargo test --manifest-path D:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked retrieval` — 6 passed.
+- `cargo test --manifest-path D:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked manual_context_selection` — 1 passed.
+- `cargo check --manifest-path D:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol` — passed.
+
+All five commands exited with code 0 and emitted zero errors and warnings. Verification used Rust tests and compile checks only, with loopback HTTP fixtures and no real Ollama or external network calls.
+
+
+### 2026-11-27 回答长度上限默认自动（不截断）与 `0.2.0` 安装包重编
+
+针对真实 `qwen3:4b` 验收暴露的 `num_predict` 默认短截断冲突及网页挂载 `evidence` 修复，完成前后端统一调整、回归验证与安装包重打：
+
+- **Rust 后端修改（由 Codex CLI GPT 执行）**：
+  - [models.rs](apps/desktop/src-tauri/src/models.rs)：将 `ModelSettings::default().num_predict` 从 `512` 改为 `0`（自动不截断），新增 `reserved_output_budget()`（自动模式下按 `(num_ctx / 8).clamp(256, 512)` 为输入预算预留余量），扩展自定义上限范围至 `32..=8192`（要求 `num_predict + 512 < num_ctx`）。
+  - [ollama.rs](apps/desktop/src-tauri/src/ollama.rs)：`chat_request` 在 `num_predict == 0` 时发送 `"num_predict": -1`，保留自然结束语义；[db.rs](apps/desktop/src-tauri/src/db.rs#L102) 使用 `reserved_output_budget()` 计算 `chat_budget`，云端自动模式按 `4096`（深度思考 `8192`）配置上限；[routing.rs](apps/desktop/src-tauri/src/runtime_profiles/routing.rs#L255) 同步采用 `reserved_output_budget()`。
+  - [generation.rs](apps/desktop/src-tauri/src/generation.rs#L628)：拆分纯函数 `empty_content_error`，当思考过程耗尽 `num_predict` 导致空正文时返回明确提示，引导用户将“回答长度上限”留空设为自动或调大上限。
+- **前端界面与交互同步**：
+  - 更新 [studio-settings.ts](apps/desktop/src/studio-settings.ts)（`numPredict: 0`）、[NumberField.tsx](apps/desktop/src/components/NumberField.tsx)（支持 `allowEmpty` 与 `validModelCapacity` 将 `0` 视为有效）、[Chat.tsx](apps/desktop/src/Chat.tsx)（同步预留预算计算）、[GenerationStylePanel.tsx](apps/desktop/src/components/GenerationStylePanel.tsx) 与 [Settings.tsx](apps/desktop/src/Settings.tsx)（支持留空设为自动或填入 `32–8192`）、[CognitiveInspector.tsx](apps/desktop/src/components/CognitiveInspector.tsx)（展示为 `自动`）及 [ChatMessage.tsx](apps/desktop/src/components/ChatMessage.tsx)（长度上限引导文案）。
+  - 更新 [generation-style-native.spec.ts](apps/desktop/tests/generation-style-native.spec.ts)（校验默认发送 `num_predict: -1`、保存 `768` 与清空恢复 `0`）及 [chat-search-native.spec.ts](apps/desktop/tests/chat-search-native.spec.ts)（移除受 `DailyFocus` 时段问候影响的固定文案断言）。
+
+实际验证（零真实 Ollama / 向量 / 公网 / 云端调用）：
+
+- 前端（目录 `apps/desktop`）：`npm run build`（Vite `516ms` 零大块告警）、`npm run test:unit`（5/5）、`npm run format:check`（退出码 `0`）、`npm run lint`（0 error，24 既有 warning）。
+- Rust（`--offline --locked`）：`generation_options` 9 passed、`thinking_stream` 7 passed、`ollama::tests` 6 passed、`manual_context_selection` 1 passed、`web_page_import` 4 passed、`retrieval` 6 passed、`chat_search` 2 passed、`doc_extract` 3 passed、`cargo check --features tauri/custom-protocol` 0 error / 0 warning。
+- 原生 WebView2 5 项全量回归（loopback 测试桩，目录 `apps/desktop`）：`$env:CORTEXOS_NATIVE_ONLY="1"; npx.cmd playwright test tests/generation-style-native.spec.ts tests/thinking-stream-native.spec.ts tests/web-url-import-native.spec.ts tests/chat-search-native.spec.ts tests/page-citation-native.spec.ts --project=desktop --output=../../artifacts/release-0.2.0-auto-limit` -> **5 passed (15.5s), 0 failed**。
+- 新版 `0.2.0` Release NSIS 安装包构建（`npm.cmd run tauri -- build --bundles nsis -- --offline --locked`，Release 编译 `6m 22s`，Release 非测试 cfg 保持 3 项既有 `unused_mut`）：
+  - 文件：`apps/desktop/src-tauri/target/release/bundle/nsis/CortexOS_0.2.0_x64-setup.exe`
+  - 大小：`6764650` bytes（`6.45 MiB`）
+  - SHA256：`0B2A2396A6E0CA3AA795EF98C88AE9BC342FDEA7C73441563FFECA141AA7BE72`
+  - 代码签名：`NotSigned`
+- 仍未实测项：未再次实调真实 `qwen3:4b` 在 `num_predict = 0 (-1)` 下输出思考 + 正文双内容，未实调云端模型、本地向量刷新与手动安装 `.exe`。

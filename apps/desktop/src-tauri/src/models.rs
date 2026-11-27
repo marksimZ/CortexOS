@@ -28,13 +28,21 @@ impl Default for ModelSettings {
             temperature: 0.3,
             top_p: default_top_p(),
             deep_thinking: false,
-            num_predict: 512,
+            num_predict: 0,
             timeout_seconds: 180,
         }
     }
 }
 
 impl ModelSettings {
+    pub fn reserved_output_budget(&self) -> u32 {
+        if self.num_predict == 0 {
+            (self.num_ctx / 8).clamp(256, 512)
+        } else {
+            self.num_predict
+        }
+    }
+
     pub fn validate(&self) -> AppResult<()> {
         if self.model.trim().is_empty()
             || self.model.len() > 200
@@ -43,13 +51,16 @@ impl ModelSettings {
             return Err("请选择有效的本地模型。".into());
         }
         if !(1024..=16384).contains(&self.num_ctx)
-            || !(32..=2048).contains(&self.num_predict)
-            || self.num_predict + 512 >= self.num_ctx
             || !self.temperature.is_finite()
             || !(0.0..=2.0).contains(&self.temperature)
             || !(30..=600).contains(&self.timeout_seconds)
         {
-            return Err("请检查回答设置：输入与回答总容量 1024–16384 Token，回答上限 32–2048 Token，回答变化程度（温度）0–2，超时 30–600 秒；总容量必须大于回答上限加 512 Token。".into());
+            return Err("请检查回答设置：输入与回答总容量 1024–16384 Token，回答变化程度（温度）0–2，超时 30–600 秒。".into());
+        }
+        if self.num_predict != 0
+            && (!(32..=8192).contains(&self.num_predict) || self.num_predict + 512 >= self.num_ctx)
+        {
+            return Err("回答上限 0（自动）或 32–8192 Token；自定义上限时总容量必须大于回答上限加 512 Token。".into());
         }
         if !(0.05..=1.0).contains(&self.top_p) {
             return Err("请将回答设置中的采样范围（Top P）设为 0.05–1.0。".into());
@@ -86,6 +97,42 @@ impl Default for GenerationOptions {
 #[cfg(test)]
 mod generation_options {
     use super::*;
+
+    #[test]
+    fn auto_output_budget_validates_across_context_sizes() {
+        let mut settings = ModelSettings::default();
+        assert_eq!(GenerationOptions::from(&settings).num_predict, 0);
+        assert_eq!(GenerationOptions::default().num_predict, 0);
+        for num_ctx in 1024..=16384 {
+            settings.num_ctx = num_ctx;
+            assert!(settings.validate().is_ok(), "num_ctx={num_ctx}");
+        }
+        for (num_ctx, budget) in [(1024, 256), (2048, 256), (4096, 512), (8192, 512), (16384, 512)] {
+            settings.num_ctx = num_ctx;
+            assert_eq!(settings.reserved_output_budget(), budget);
+        }
+    }
+
+    #[test]
+    fn custom_output_budget_requires_a_valid_cap_and_context_headroom() {
+        let mut settings = ModelSettings::default();
+        for cap in 32..=8192 {
+            settings.num_predict = cap;
+            settings.num_ctx = (cap + 513).max(1024);
+            assert!(settings.validate().is_ok(), "num_predict={cap}");
+            assert_eq!(settings.reserved_output_budget(), cap);
+        }
+        settings.num_ctx = 16384;
+        for cap in (1..32).chain([8193, u32::MAX]) {
+            settings.num_predict = cap;
+            assert!(settings.validate().unwrap_err().contains("32–8192 Token"));
+        }
+        settings.num_ctx = 1024;
+        for cap in [512, 513] {
+            settings.num_predict = cap;
+            assert!(settings.validate().unwrap_err().contains("上限加 512 Token"));
+        }
+    }
 
     #[test]
     fn legacy_model_settings_use_generation_defaults() {

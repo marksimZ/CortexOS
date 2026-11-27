@@ -73,6 +73,7 @@ test("generation style presets, deep thinking, and advanced tuning sync across c
     expect(chatBodies).toHaveLength(1);
     expect(chatBodies[0].options?.temperature).toBeCloseTo(1.1, 4);
     expect(chatBodies[0].options?.top_p).toBeCloseTo(0.95, 4);
+    expect(chatBodies[0].options?.num_predict).toBe(-1);
     expect(chatBodies[0].think).toBe(true);
 
     await styleButton.click();
@@ -117,10 +118,22 @@ test("generation style presets, deep thinking, and advanced tuning sync across c
     await styleCard.scrollIntoViewIfNeeded();
     await page.screenshot({ path: info.outputPath("settings-assistant-style.png"), animations: "disabled" });
 
+    await styleCard.getByLabel("回答长度上限（Token）").fill("");
+    await styleCard.getByRole("button", { name: "保存高级参数", exact: true }).click();
+    await expect
+      .poll(async () => (await nativeInvoke<{ settings: Record<string, unknown> }>(page, "bootstrap")).settings)
+      .toMatchObject({
+        temperature: 0.2,
+        topP: 0.85,
+        numPredict: 0,
+        deepThinking: false,
+      });
+
     await page.getByRole("button", { name: "模型连接", exact: true }).click();
     const modelSection = page.locator("#model-section");
     const modelAdvanced = modelSection.locator("details.advanced-settings").first();
     await modelAdvanced.locator("> summary").click();
+    await expect(modelAdvanced.getByLabel("回答长度上限（Token）")).toHaveValue("");
     await expect(modelAdvanced.getByLabel("核采样（top_p）")).toHaveValue("0.85");
     await expect(modelAdvanced.getByRole("checkbox")).not.toBeChecked();
     await expect(modelSection.getByRole("button", { name: "保存设置", exact: true })).toBeDisabled();

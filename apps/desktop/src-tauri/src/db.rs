@@ -99,7 +99,7 @@ pub(crate) fn smart_fallback_title(content: &str) -> String {
 
 pub(crate) fn chat_budget(settings: &ModelSettings, content: &str) -> AppResult<(usize, usize)> {
     settings.validate()?;
-    let budget = (settings.num_ctx - settings.num_predict - 256) as usize;
+    let budget = (settings.num_ctx - settings.reserved_output_budget() - 256) as usize;
     let used = SYSTEM_PROMPT.len() + content.len() + 64;
     if content.is_empty() || used > budget {
         return Err("这条消息为空或过长，请缩短问题或在设置中增加上下文长度。".into());
@@ -1234,8 +1234,8 @@ impl Database {
             if version != item.version {
                 return Err("知识生效版本已变化。问题已保留，请更新上下文预览后重新发送。".into());
             }
-            if !matches!(kind.as_str(), "knowledge" | "context" | "decision") {
-                return Err("当前仅支持已确认的知识、上下文和决策。".into());
+            if !matches!(kind.as_str(), "knowledge" | "context" | "decision" | "evidence") {
+                return Err("当前仅支持已确认的知识、上下文、决策和依据。".into());
             }
             if scope.is_none() && !connection.query_row(
                 "SELECT EXISTS(SELECT 1 FROM rag_current_knowledge WHERE workspace_id=?1 AND node_id=?2 AND version=?3)",
@@ -1552,7 +1552,11 @@ impl Database {
                 "connectionId":cloud.target.connection.id,"model":cloud.target.model,
                 "dataTypes":types,"syncContext":cloud_sync});
             let options = GenerationOptions::from(settings);
-            let cloud_max_tokens = options.num_predict.clamp(4096, 8192);
+            let cloud_max_tokens = if options.num_predict == 0 {
+                if options.deep_thinking { 8192 } else { 4096 }
+            } else {
+                options.num_predict.clamp(32, 8192)
+            };
             let mut wire = cloud.target.generation_chat_wire(&messages, cloud_max_tokens, Some(options))?;
             wire["messages"] = serde_json::to_value(&messages).map_err(json_error)?;
             wire
@@ -2087,7 +2091,7 @@ mod tests {
         let db = Database::rag_evaluation_database().unwrap();
         assert_eq!(
             backup_schema_version(&db.connection().unwrap()).unwrap(),
-            40
+            41
         );
         let workspace = db.create_workspace("Fixture").unwrap().id;
         let chat = db.create_conversation(&workspace).unwrap().id;
@@ -2717,6 +2721,81 @@ mod tests {
 mod context_tests {
     use super::*;
     use crate::knowledge::SaveKnowledge;
+
+    #[test]
+    fn manual_context_selection_accepts_approved_evidence_and_rejects_hypothesis() {
+        let directory = std::env::temp_dir().join(format!("cortexos-context-{}", new_id()));
+        let db = Database::open(&directory).unwrap();
+        let workspace = db.create_workspace("Manual context").unwrap().id;
+        let conversation = db.create_conversation(&workspace).unwrap().id;
+        db.set_conversation_retrieval(&workspace, &conversation, false)
+            .unwrap();
+        let settings = ModelSettings::default();
+        let content = "来源网页：https://example.com/article\n抓取时间：2026-11-26T00:00:00Z\n\n可读正文";
+        let draft = SaveKnowledge {
+            workspace_id: workspace.clone(),
+            node_id: None,
+            expected_revision: None,
+            title: "网页资料".into(),
+            kind: "evidence".into(),
+            content: content.into(),
+            change_reason: "抓取网页正文：example.com".into(),
+            source_message_id: None,
+            source_excerpt: None,
+        };
+        let evidence = db.save_knowledge(draft.clone()).unwrap();
+        let hypothesis = db
+            .save_knowledge(SaveKnowledge {
+                title: "待验证假设".into(),
+                kind: "hypothesis".into(),
+                content: "待验证的内容".into(),
+                change_reason: "用户保存".into(),
+                ..draft
+            })
+            .unwrap();
+        assert_eq!(
+            db.knowledge_detail(&workspace, &hypothesis)
+                .unwrap()
+                .node
+                .effective_version,
+            Some(1)
+        );
+
+        let prepare = |node_id: String| {
+            db.prepare_context_run(
+                &new_id(),
+                &workspace,
+                &conversation,
+                "请总结网页资料。",
+                &settings,
+                &[ContextSelection { node_id, version: 1 }],
+                false,
+            )
+        };
+        let prepared = prepare(evidence.clone()).unwrap();
+        let references = prepared.manifest["knowledgeRefs"].as_array().unwrap();
+        assert_eq!(references.len(), 1);
+        assert_eq!(references[0]["nodeId"], evidence);
+        assert_eq!(references[0]["version"], 1);
+        assert_eq!(references[0]["kind"], "evidence");
+        assert_eq!(references[0]["content"], content);
+        assert_eq!(references[0]["reason"], "user_selected_effective_version");
+        assert_eq!(references[0]["citationId"], "资料1");
+        assert_eq!(
+            db.run_detail(&workspace, &prepared.run.id)
+                .unwrap()
+                .context_manifest["knowledgeRefs"],
+            prepared.manifest["knowledgeRefs"]
+        );
+        assert_eq!(
+            prepare(hypothesis).unwrap_err(),
+            "当前仅支持已确认的知识、上下文、决策和依据。"
+        );
+
+        drop(db);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
     #[test]
     fn effective_context_snapshot_scope_conflicts_and_atomicity() {
         let directory = std::env::temp_dir().join(format!("cortexos-context-{}", new_id()));

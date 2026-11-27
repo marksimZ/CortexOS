@@ -8,7 +8,7 @@ export const defaultSettings: ModelSettings = {
   numCtx: 4096,
   temperature: 0.3,
   topP: 0.9,
-  numPredict: 512,
+  numPredict: 0,
   timeoutSeconds: 180,
   deepThinking: false,
 };

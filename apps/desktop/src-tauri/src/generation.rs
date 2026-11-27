@@ -307,7 +307,12 @@ async fn attempt_local(
                     }
                     if let Some(metrics) = frame.final_metrics {
                         if content.trim().is_empty() && !(v2 && tool_entries > 0) {
-                            return Err("模型没有返回可用文字，请换一个模型或重试。".into());
+                            return Err(empty_content_error(
+                                &thinking,
+                                metrics["finishReason"].as_str(),
+                                settings.num_predict,
+                            )
+                            .into());
                         }
                         return Ok(metrics);
                     }
@@ -620,6 +625,16 @@ async fn finish(
     }
 }
 
+fn empty_content_error(thinking: &str, finish_reason: Option<&str>, num_predict: u32) -> &'static str {
+    if thinking.trim().is_empty() {
+        "模型没有返回可用文字，请换一个模型或重试。"
+    } else if finish_reason == Some("length") || num_predict > 0 {
+        "深度思考过程已达到回答长度上限，未能输出正文。请在回答参数中将「回答长度上限」留空设为自动，或调大上限后重试。"
+    } else {
+        "模型仅输出了思考过程，未生成正式回答正文，请重试或切换模型。"
+    }
+}
+
 fn update(
     run: &RunSummary,
     seq: u64,
@@ -649,6 +664,24 @@ mod tests {
         model_runtime::http_fixture,
         runtime_profiles::{ChatRuntime, CloudChat, Profile},
     };
+
+    #[test]
+    fn thinking_stream_empty_content_errors_explain_the_output() {
+        for (finish_reason, num_predict) in [(Some("length"), 0), (None, 768)] {
+            assert_eq!(
+                empty_content_error("working", finish_reason, num_predict),
+                "深度思考过程已达到回答长度上限，未能输出正文。请在回答参数中将「回答长度上限」留空设为自动，或调大上限后重试。"
+            );
+        }
+        assert_eq!(
+            empty_content_error("working", Some("stop"), 0),
+            "模型仅输出了思考过程，未生成正式回答正文，请重试或切换模型。"
+        );
+        assert_eq!(
+            empty_content_error(" \n", Some("length"), 768),
+            "模型没有返回可用文字，请换一个模型或重试。"
+        );
+    }
 
     #[tokio::test]
     async fn cloud_chat_loopback_preserves_roles_and_excludes_private_lineage() {

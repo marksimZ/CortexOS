@@ -254,7 +254,7 @@ export const ChatMessage = memo(function ChatMessage({
       )}
       {message.role === "assistant" && message.finishReason === "length" && (
         <p className="output-limit-note">
-          已达到长度上限，回答可能不完整。可在设置中增加“回答长度上限（Token）”后重试。
+          已达到长度上限，回答可能不完整。可在回答参数中将「回答长度上限」留空设为自动，或调大上限后重试。
         </p>
       )}
       {message.role === "user" &&
