@@ -9,6 +9,7 @@ import {
   Unplug,
 } from "lucide-react";
 import { errorText, type Studio } from "./studio";
+import { useModelUsagePreference } from "./model-usage-preference";
 import { notify } from "./components/Toast";
 import { RagIndexSettings } from "./components/RagIndexSettings";
 import { LocalRuntimeSettings } from "./components/LocalRuntimeSettings";
@@ -33,6 +34,8 @@ const sections = [
 ] as const;
 
 export function SettingsPage({ studio }: { studio: Studio }) {
+  const [modelUsage, setModelUsage] = useModelUsagePreference();
+  const [usageError, setUsageError] = useState<string | null>(null);
   const draft = studio.settingsDraft;
   const setDraft = studio.setSettingsDraft;
   const [saving, setSaving] = useState(false);
@@ -95,6 +98,50 @@ export function SettingsPage({ studio }: { studio: Studio }) {
             </h2>
           </div>
           <div className="settings-fields">
+          <div className="model-usage-card" role="group" aria-label="模型使用方式偏好">
+            <div className="model-usage-head">
+              <strong>模型使用方式（决定右上角显示哪些连接状态监测）</strong>
+            </div>
+            <div className="model-usage-options">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={modelUsage.local}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    if (!checked && !modelUsage.cloud) {
+                      setUsageError("至少保留一种模型使用方式（本地或云端）。");
+                      return;
+                    }
+                    setUsageError(null);
+                    setModelUsage({ ...modelUsage, local: checked });
+                  }}
+                />
+                <span>本地模型（Ollama）</span>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={modelUsage.cloud}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    if (!checked && !modelUsage.local) {
+                      setUsageError("至少保留一种模型使用方式（本地或云端）。");
+                      return;
+                    }
+                    setUsageError(null);
+                    setModelUsage({ ...modelUsage, cloud: checked });
+                  }}
+                />
+                <span>云端模型（API）</span>
+              </label>
+            </div>
+            {usageError && (
+              <p className="form-error" role="alert">
+                {usageError}
+              </p>
+            )}
+          </div>
           <form
             className="settings-fields"
             onSubmit={(event) => {

@@ -1,6 +1,7 @@
 import { BookmarkPlus, MessageSquareQuote } from "lucide-react";
 import { useCallback, useEffect, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { useStickyPresence } from "../use-presence";
 
 interface PopoverState {
   text: string;
@@ -104,19 +105,21 @@ export function SelectionPopover({
     };
   }, [disabled, evaluateSelection]);
 
-  if (!state) return null;
+  const { current: activeState, closing } = useStickyPresence(state, 140);
+  if (!activeState) return null;
 
-  const placeBelow = state.y > state.range.getBoundingClientRect().top;
+  const placeBelow = activeState.y > activeState.range.getBoundingClientRect().top;
 
   return createPortal(
     <div
       className="selection-popover"
+      data-closing={closing || undefined}
       role="toolbar"
       aria-label="选中文字快捷操作"
       style={{
         position: "fixed",
-        left: `${state.x}px`,
-        top: `${state.y}px`,
+        left: `${activeState.x}px`,
+        top: `${activeState.y}px`,
         transform: placeBelow ? "translate(-50%, 0)" : "translate(-50%, -100%)",
         zIndex: 1200,
         display: "inline-flex",
@@ -139,7 +142,7 @@ export function SelectionPopover({
         className="button text-button"
         style={{ padding: "4px 10px", fontSize: "12.5px", borderRadius: "999px", gap: "5px" }}
         onClick={() => {
-          const { text, range } = state;
+          const { text, range } = activeState;
           window.getSelection()?.removeAllRanges();
           setState(null);
           onAsk(text, range);
@@ -154,7 +157,7 @@ export function SelectionPopover({
         className="button text-button"
         style={{ padding: "4px 10px", fontSize: "12.5px", borderRadius: "999px", gap: "5px" }}
         onClick={() => {
-          const { text, range } = state;
+          const { text, range } = activeState;
           window.getSelection()?.removeAllRanges();
           setState(null);
           onSaveCard(text, range);

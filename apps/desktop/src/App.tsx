@@ -13,6 +13,12 @@ import type { EditKnowledge } from "./knowledge-types";
 import { ChatPage } from "./Chat";
 import type { EditEdge } from "./RelationshipEditor";
 import { errorText, preference, remember, useStudio, type Message } from "./studio";
+import {
+  isModelUsagePrompted,
+  markModelUsagePrompted,
+  readModelUsagePreference,
+  saveModelUsagePreference,
+} from "./model-usage-preference";
 import { WORKSPACE_TEMPLATES, type WorkspaceTemplateId } from "./workspace-templates";
 import { notify } from "./components/Toast";
 import "./styles/tokens.css";
@@ -154,6 +160,8 @@ export default function App() {
   const volatileDialog = useRef<HTMLDialogElement>(null);
   const namingDialog = useRef<HTMLDialogElement>(null);
   const namingPromptedRef = useRef(false);
+  const [useLocalDraft, setUseLocalDraft] = useState(() => readModelUsagePreference().local);
+  const [useCloudDraft, setUseCloudDraft] = useState(() => readModelUsagePreference().cloud);
   const [assistantNameDraft, setAssistantNameDraft] = useState("");
   const [savingAssistantName, setSavingAssistantName] = useState(false);
   const [assistantNameError, setAssistantNameError] = useState<string | null>(null);
@@ -166,7 +174,11 @@ export default function App() {
     ) {
       return;
     }
-    if (studio.assistantName || preference("assistant-naming-prompted") === "true") {
+    if (
+      studio.assistantName ||
+      preference("assistant-naming-prompted") === "true" ||
+      isModelUsagePrompted()
+    ) {
       namingPromptedRef.current = true;
       return;
     }
@@ -332,14 +344,38 @@ export default function App() {
         className="form-dialog"
         aria-labelledby="naming-assistant-title"
         onCancel={() => {
+          saveModelUsagePreference({ local: useLocalDraft, cloud: useCloudDraft });
           remember("assistant-naming-prompted", "true");
+          markModelUsagePrompted();
         }}
       >
         <form
           onSubmit={(event) => {
             event.preventDefault();
+            if (savingAssistantName) return;
+            if (!useLocalDraft && !useCloudDraft) {
+              setAssistantNameError("请至少勾选一种模型使用方式（本地或云端）。");
+              return;
+            }
+            const savedPref = saveModelUsagePreference({
+              local: useLocalDraft,
+              cloud: useCloudDraft,
+            });
+            remember("assistant-naming-prompted", "true");
+            markModelUsagePrompted();
+
             const trimmed = assistantNameDraft.trim();
-            if (!trimmed || savingAssistantName) return;
+            if (!trimmed) {
+              const modeHint =
+                savedPref.local && savedPref.cloud
+                  ? "已启用本地 + 云端双通道（右上角可随时查看连接状态）"
+                  : savedPref.cloud
+                    ? "已启用云端模型（点击右上角云端状态可配置 API 密钥）"
+                    : "已启用本地 Ollama 模型";
+              notify(modeHint);
+              namingDialog.current?.close();
+              return;
+            }
             setSavingAssistantName(true);
             setAssistantNameError(null);
             void memoryApi("get_global_persona", undefined)
@@ -349,19 +385,70 @@ export default function App() {
                 }),
               )
               .then((saved) => {
-                remember("assistant-naming-prompted", "true");
                 studio.setAssistantName(saved.assistantName?.trim() || trimmed);
-                notify(`你好，我是 ${trimmed}！随时在「设置 → 我的助手」可修改称呼`);
+                notify(
+                  savedPref.cloud && !savedPref.local
+                    ? `你好，我是 ${trimmed}！点击右上角云端状态可配置 API 密钥`
+                    : `你好，我是 ${trimmed}！随时在「设置 → 我的助手」可修改称呼`,
+                );
                 namingDialog.current?.close();
               })
               .catch((value) => setAssistantNameError(errorText(value)))
               .finally(() => setSavingAssistantName(false));
           }}
         >
-          <h2 id="naming-assistant-title">想给你的专属 AI 起个名字吗？</h2>
+          <h2 id="naming-assistant-title">欢迎使用 CortexOS</h2>
           <p>
-            给它起一个顺口的名字，后续对话、今日聚焦与全局随手记都会用这个称呼陪伴你（随时可在「设置 → 我的助手」修改）。
+            请先勾选希望使用的模型方式（可多选，随时可在「设置 → 模型连接」调整），也可以顺便给专属助手起个名字：
           </p>
+          <div className="field">
+            <span className="onboarding-section-label">模型使用方式（可多选）</span>
+            <div className="onboarding-mode-grid" role="group" aria-label="模型使用方式">
+              <label
+                htmlFor="onboarding-mode-local"
+                className={`onboarding-mode-card ${useLocalDraft ? "selected" : ""}`}
+              >
+                <input
+                  id="onboarding-mode-local"
+                  type="checkbox"
+                  checked={useLocalDraft}
+                  disabled={savingAssistantName}
+                  onChange={(event) => {
+                    setUseLocalDraft(event.target.checked);
+                    setAssistantNameError(null);
+                  }}
+                />
+                <span>
+                  <strong>本地模型（Ollama）</strong>
+                  <small>离线运行、数据不出本机，适合日常写作与本地知识库。</small>
+                </span>
+              </label>
+              <label
+                htmlFor="onboarding-mode-cloud"
+                className={`onboarding-mode-card ${useCloudDraft ? "selected" : ""}`}
+              >
+                <input
+                  id="onboarding-mode-cloud"
+                  type="checkbox"
+                  checked={useCloudDraft}
+                  disabled={savingAssistantName}
+                  onChange={(event) => {
+                    setUseCloudDraft(event.target.checked);
+                    setAssistantNameError(null);
+                  }}
+                />
+                <span>
+                  <strong>云端模型（DeepSeek / 百炼 / OpenAI 等）</strong>
+                  <small>支持更强推理与长上下文，配置 API Key 即可连接使用。</small>
+                </span>
+              </label>
+            </div>
+          </div>
+          {!useLocalDraft && !useCloudDraft && (
+            <p className="form-error" role="alert">
+              请至少勾选一种模型使用方式（本地或云端）。
+            </p>
+          )}
           <div className="field">
             <label htmlFor="first-run-assistant-name">助手称呼（选填）</label>
             <input
@@ -399,7 +486,9 @@ export default function App() {
               type="button"
               disabled={savingAssistantName}
               onClick={() => {
+                saveModelUsagePreference({ local: useLocalDraft, cloud: useCloudDraft });
                 remember("assistant-naming-prompted", "true");
+                markModelUsagePrompted();
                 namingDialog.current?.close();
               }}
             >
@@ -407,9 +496,13 @@ export default function App() {
             </button>
             <button
               className="button primary"
-              disabled={savingAssistantName || !assistantNameDraft.trim()}
+              disabled={savingAssistantName || (!useLocalDraft && !useCloudDraft)}
             >
-              {savingAssistantName ? "正在保存…" : "就叫这个名字"}
+              {savingAssistantName
+                ? "正在保存…"
+                : assistantNameDraft.trim()
+                  ? "保存并开始"
+                  : "确认并开始"}
             </button>
           </div>
         </form>

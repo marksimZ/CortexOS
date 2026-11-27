@@ -1,9 +1,11 @@
 /* All feature pages use the reference's glass surface and compact hierarchy. */
 .knowledge-page-location { display: flex; align-items: center; gap: 8px; }
 .knowledge-workbench { display: grid; grid-template-columns: 290px minmax(0,1fr); gap: 16px; flex: 1; min-height: 0; }
-.knowledge-workbench.list-collapsed { grid-template-columns: minmax(0,1fr); }
-.knowledge-workbench.list-collapsed > .knowledge-sidebar { display: none; }
-.knowledge-sidebar { min-height: 0; overflow: auto;  }
+@media (max-width: 760px) {
+  .knowledge-workbench.list-collapsed { grid-template-columns: minmax(0,1fr); }
+  .knowledge-workbench.list-collapsed > .knowledge-sidebar { display: none; }
+}
+.knowledge-sidebar { min-height: 0; min-width: 0; overflow: auto; }
 .knowledge-list-pane { display: flex; flex-direction: column; gap: 10px; }
 .knowledge-filters { display: flex; flex-direction: column; gap: 10px; }
 .search-field { display: flex; align-items: center; gap: 8px; padding: 0 12px; background: var(--surface-subtle); border: 0; border-radius: var(--radius-control); color: var(--muted); }
@@ -877,4 +879,99 @@
   background: var(--surface-subtle);
   color: var(--muted);
   font-size: var(--text-caption);
+}
+
+.model-status-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.model-status.cloud-status.warning > svg:first-child { color: var(--warning); }
+.model-status.cloud-status.error > svg:first-child { color: var(--danger); }
+.onboarding-section-label {
+  display: block;
+  font-size: var(--text-compact);
+  font-weight: var(--font-medium);
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.onboarding-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (max-width: 540px) {
+  .onboarding-mode-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.onboarding-mode-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--line);
+  background: var(--surface-subtle);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease), background-color var(--motion-fast) var(--ease);
+}
+.onboarding-mode-card:hover { border-color: var(--line-strong); }
+.onboarding-mode-card.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.onboarding-mode-card input[type="checkbox"],
+.model-usage-options input[type="checkbox"] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  padding: 0;
+  flex: 0 0 16px;
+  accent-color: var(--accent);
+}
+.onboarding-mode-card span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.onboarding-mode-card strong {
+  font-size: var(--text-compact);
+  font-weight: var(--font-medium);
+  color: var(--text);
+}
+.onboarding-mode-card small {
+  font-size: var(--text-caption);
+  color: var(--muted);
+  line-height: 1.4;
+}
+.model-usage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--line);
+  background: var(--surface-subtle);
+}
+.model-usage-head strong {
+  font-size: var(--text-compact);
+  font-weight: var(--font-medium);
+  color: var(--text);
+}
+.model-usage-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.model-usage-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-compact);
+  cursor: pointer;
 }

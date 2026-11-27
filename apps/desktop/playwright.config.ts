@@ -88,6 +88,7 @@ export default defineConfig({
         "h5-product-native.spec.ts",
         "reminders-native.spec.ts",
         "personal-assistant-native.spec.ts",
+        "model-onboarding-status-native.spec.ts",
         "generation-style-native.spec.ts",
         "thinking-stream-native.spec.ts",
         "web-url-import-native.spec.ts",

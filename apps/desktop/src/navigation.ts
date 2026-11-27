@@ -1,4 +1,5 @@
 import { useMemo, useSyncExternalStore } from "react";
+import { flushSync } from "react-dom";
 export type PageName = "chat" | "knowledge" | "graph" | "settings";
 const pages: readonly PageName[] = ["chat", "knowledge", "graph", "settings"];
 export function navigationParams(hash: string): URLSearchParams {
@@ -53,10 +54,34 @@ export function navigationHash(
     if (value !== null && value !== undefined) params.set(key, String(value));
   return `#/${page}${params.size ? `?${params}` : ""}`;
 }
-export function navigate(page: PageName, values: Record<string, string | number | null | undefined> = {}, options: { replace?: boolean; state?: unknown } = {}) {
-  const hash = navigationHash(page, values);
-  if (hash === window.location.hash && !options.replace) return;
+function applyHash(hash: string, options: { replace?: boolean; state?: unknown } = {}) {
   const oldURL = window.location.href;
   window.history[options.replace ? "replaceState" : "pushState"](options.state ?? null, "", hash);
   window.dispatchEvent(new HashChangeEvent("hashchange", { oldURL, newURL: window.location.href }));
+}
+export function navigateHash(hash: string, options: { replace?: boolean; state?: unknown } = {}) {
+  if (hash === window.location.hash && !options.replace) return;
+  const prevPage = parseNavigation(window.location.hash).page;
+  const nextPage = parseNavigation(hash).page;
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  const canTransition =
+    prevPage !== nextPage &&
+    typeof doc.startViewTransition === "function" &&
+    document.visibilityState === "visible" &&
+    !document.body.classList.contains("app-dialog-open") &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (canTransition) {
+    try {
+      doc.startViewTransition!(() => {
+        flushSync(() => applyHash(hash, options));
+      });
+      return;
+    } catch {
+      // Fall back to direct update if a transition cannot start.
+    }
+  }
+  applyHash(hash, options);
+}
+export function navigate(page: PageName, values: Record<string, string | number | null | undefined> = {}, options: { replace?: boolean; state?: unknown } = {}) {
+  navigateHash(navigationHash(page, values), options);
 }

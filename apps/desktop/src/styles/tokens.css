@@ -37,8 +37,8 @@
   --font-normal: 400; --font-medium: 500; --font-strong: 600;
   --font-ui: -apple-system, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
-  --ease: cubic-bezier(.2, 0, 0, 1); --spring: cubic-bezier(.2, 0, 0, 1);
-  --motion: 140ms; --motion-fast: 60ms; --motion-enter: 180ms; --sidebar-width: 252px; --reading-width: 45rem;
+  --ease: cubic-bezier(.22, 1, .36, 1); --spring: cubic-bezier(.22, 1, .36, 1);
+  --motion: 160ms; --motion-fast: 80ms; --motion-enter: 220ms; --motion-layout: 240ms; --sidebar-width: 252px; --reading-width: 45rem;
   --knowledge-reading-width: 68ch;
   --node-knowledge: #3f8f7f; --node-context: #7b8494; --node-hypothesis: #8b7fae;
   --node-decision: #5b6bb5; --node-evidence: #4a8f8a; --node-conflict: #a2741f;
@@ -67,4 +67,9 @@
   --node-decision: #8493e0; --node-evidence: #6ab5ae; --node-conflict: #d0a052;
   --node-event: #9aa5b7; --node-input: #c0a072; --node-output: #5fb8a4; --node-error: #d98b91;
   --graph-edge: #3a3a42; --trace-order: #3a3a42; --trace-context: #6f6488; --trace-output: #5fb8a4;
+}
+@supports (animation-timing-function: linear(0, 1)) {
+  :root {
+    --spring: linear(0, 0.012, 0.047 2.2%, 0.181 4.9%, 0.354 7.9%, 0.692 14.3%, 0.875 19.3%, 0.958 24%, 0.991 29.2%, 1.001 35.8%, 1);
+  }
 }

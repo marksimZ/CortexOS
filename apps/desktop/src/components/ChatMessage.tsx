@@ -1,5 +1,6 @@
-import { BookOpen, Brain, Check, ChevronDown, ChevronRight, Code2, Copy, Sparkles, X } from "lucide-react";
+import { BookOpen, Brain, Check, ChevronRight, Code2, Copy, Sparkles, X } from "lucide-react";
 import { memo, useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { useExitPresence } from "../use-presence";
 import { knowledge } from "../api/knowledge";
 import { memoryApi } from "../api/memory";
 import type { ChatStream } from "../chat-stream";
@@ -16,6 +17,48 @@ const statusNames: Record<string, string> = {
   failed: "生成失败",
   interrupted: "生成中断",
 };
+
+function ThinkingBlock({
+  thinking,
+  thinkingOpen,
+  thinkingInProgress,
+  onToggle,
+}: {
+  thinking: string;
+  thinkingOpen: boolean;
+  thinkingInProgress: boolean;
+  onToggle: () => void;
+}) {
+  const { mounted, closing } = useExitPresence(thinkingOpen, 180);
+  return (
+    <div className="thinking-panel" data-streaming={thinkingInProgress || undefined}>
+      <button
+        type="button"
+        className="thinking-toggle"
+        aria-expanded={thinkingOpen}
+        onClick={onToggle}
+      >
+        <span className="thinking-toggle-meta">
+          <Brain size={15} aria-hidden="true" />
+          <strong>{thinkingInProgress ? "正在深度思考…" : "已深度思考"}</strong>
+          <span className="thinking-badge">模型输出思考文本</span>
+          <span className="thinking-count">· {thinking.trim().length} 字</span>
+        </span>
+        <ChevronRight size={15} className="thinking-chevron" aria-hidden="true" />
+      </button>
+      {mounted && (
+        <div
+          className="thinking-collapse"
+          data-open={thinkingOpen && !closing ? "true" : "false"}
+        >
+          <div className="thinking-collapse-inner">
+            <div className="thinking-body">{thinking}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function deriveCardTitle(text: string): string {
   const firstLine =
@@ -176,27 +219,12 @@ export const ChatMessage = memo(function ChatMessage({
         </div>
       )}
       {hasThinking && (
-        <div className="thinking-panel" data-streaming={thinkingInProgress || undefined}>
-          <button
-            type="button"
-            className="thinking-toggle"
-            aria-expanded={thinkingOpen}
-            onClick={() => setThinkingManual(!thinkingOpen)}
-          >
-            <span className="thinking-toggle-meta">
-              <Brain size={15} aria-hidden="true" />
-              <strong>{thinkingInProgress ? "正在深度思考…" : "已深度思考"}</strong>
-              <span className="thinking-badge">模型输出思考文本</span>
-              <span className="thinking-count">· {message.thinking!.trim().length} 字</span>
-            </span>
-            {thinkingOpen ? (
-              <ChevronDown size={15} aria-hidden="true" />
-            ) : (
-              <ChevronRight size={15} aria-hidden="true" />
-            )}
-          </button>
-          {thinkingOpen && <div className="thinking-body">{message.thinking}</div>}
-        </div>
+        <ThinkingBlock
+          thinking={message.thinking!}
+          thinkingOpen={thinkingOpen}
+          thinkingInProgress={thinkingInProgress}
+          onToggle={() => setThinkingManual(!thinkingOpen)}
+        />
       )}
       {message.content ? (
         <div ref={contentRef} className="message-selection-scope">

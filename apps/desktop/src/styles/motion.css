@@ -1,67 +1,564 @@
-/* Motion communicates state only: background, colour and opacity. No displacement or scale on hover or press. */
+/* Fluid spatial motion: critically damped springs, symmetric enter/exit, tactile press, no hover displacement. */
+:root {
+  interpolate-size: allow-keywords;
+  view-transition-name: none;
+}
 
-/* Hover and focus transitions for every interactive surface. */
+/* Cross-page & Knowledge View Transitions: chrome stays live while target stage cross-fades or morphs. */
+body:not(.app-dialog-open) #main-content { view-transition-name: main-stage; }
+html[data-vt-scope] #main-content { view-transition-name: none !important; }
+html[data-vt-scope="knowledge"] .page-knowledge .knowledge-detail {
+  view-transition-name: knowledge-detail-stage;
+}
+html[data-vt-scope="knowledge"] .knowledge-detail-heading,
+html[data-vt-scope="knowledge"] .knowledge-prose {
+  animation: none;
+}
+@media (max-width: 760px) {
+  html[data-vt-scope="knowledge-drill"] .knowledge-workbench:not(.has-selection) .knowledge-row[data-vt-source="true"] .knowledge-row-title {
+    view-transition-name: knowledge-hero-title;
+  }
+  html[data-vt-scope="knowledge-drill"] .knowledge-workbench.has-selection .knowledge-detail-heading h2 {
+    view-transition-name: knowledge-hero-title;
+  }
+}
+
+::view-transition,
+::view-transition-group(*),
+::view-transition-image-pair(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+  pointer-events: none;
+}
+::view-transition-old(main-stage) { animation: vt-stage-out 130ms var(--ease) both; }
+::view-transition-new(main-stage) { animation: vt-stage-in var(--motion-enter) var(--spring) both; }
+::view-transition-old(knowledge-detail-stage) { animation: vt-detail-out 140ms var(--ease) both; }
+::view-transition-new(knowledge-detail-stage) { animation: vt-detail-in var(--motion-enter) var(--spring) both; }
+::view-transition-group(knowledge-hero-title) {
+  animation-duration: var(--motion-layout);
+  animation-timing-function: var(--spring);
+}
+
+/* GPU-composited sliding active pill for primary navigation, settings, segmented controls, and lists. */
+.prototype-topbar .primary-navigation[data-pill-ready="true"],
+.settings-navigation[data-pill-ready="true"],
+.segmented-control[data-pill-ready="true"],
+.knowledge-list[data-pill-ready="true"],
+.sidebar-threads > .conversation-list[data-pill-ready="true"] {
+  position: relative;
+  isolation: isolate;
+}
+.prototype-topbar .primary-navigation[data-pill-ready="true"] > a,
+.settings-navigation[data-pill-ready="true"] > .button,
+.segmented-control[data-pill-ready="true"] > label,
+.knowledge-list[data-pill-ready="true"] > li,
+.sidebar-threads > .conversation-list[data-pill-ready="true"] > li {
+  position: relative;
+  z-index: 1;
+}
+.prototype-topbar .primary-navigation[data-pill-ready="true"] > a[aria-current],
+.settings-navigation[data-pill-ready="true"] > [aria-pressed="true"],
+.segmented-control[data-pill-ready="true"] > label:has(input:checked),
+.knowledge-list[data-pill-ready="true"] .knowledge-row[aria-current="true"],
+.sidebar-threads > .conversation-list[data-pill-ready="true"] .conversation-item[aria-current="true"] {
+  background: transparent;
+  box-shadow: none;
+}
+.prototype-topbar .primary-navigation[data-pill-ready="true"]::before,
+.settings-navigation[data-pill-ready="true"]::before,
+.segmented-control[data-pill-ready="true"]::before,
+.knowledge-list[data-pill-ready="true"]::before,
+.sidebar-threads > .conversation-list[data-pill-ready="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--pill-w, 0px);
+  height: var(--pill-h, 0px);
+  transform: translate3d(var(--pill-x, 0px), var(--pill-y, 0px), 0);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  z-index: 0;
+  pointer-events: none;
+  will-change: transform, width, height;
+}
+.segmented-control[data-pill-ready="true"]::before { border-radius: var(--radius-inset); }
+.knowledge-list[data-pill-ready="true"]::before,
+.sidebar-threads > .conversation-list[data-pill-ready="true"]::before {
+  background: var(--selected);
+  box-shadow: none;
+}
+@media (min-width: 1181px) {
+  .settings-navigation[data-pill-ready="true"]::before {
+    background: var(--selected);
+    box-shadow: none;
+  }
+}
+.prototype-topbar .primary-navigation[data-pill-animate="true"]::before,
+.settings-navigation[data-pill-animate="true"]::before,
+.segmented-control[data-pill-animate="true"]::before,
+.knowledge-list[data-pill-animate="true"]::before,
+.sidebar-threads > .conversation-list[data-pill-animate="true"]::before {
+  transition:
+    transform var(--motion-layout) var(--spring),
+    width var(--motion-layout) var(--spring),
+    height var(--motion-layout) var(--spring);
+}
+
+/* Hover, focus and tactile press transitions across all interactive controls. */
 .button,.icon-button,.send-button,.window-control,.model-status,.toast-close,.answer-citation,
 .primary-navigation a,.conversation-item,.knowledge-row,.evidence-reference,.knowledge-history button,
-.source-list button,.graph-node-index button,.trace-node,.segmented-control label,.new-thread,summary {
-  transition: background-color var(--motion) var(--ease), color var(--motion) var(--ease), box-shadow var(--motion) var(--ease), opacity var(--motion) var(--ease);
+.source-list button,.graph-node-index button,.trace-node,.segmented-control label,.new-thread,
+.generation-preset-button,.thinking-toggle,.conversation-context-menu button,.mindmap-collapse-btn,
+.suggested-link-title,summary {
+  transition:
+    background-color var(--motion) var(--ease),
+    color var(--motion) var(--ease),
+    border-color var(--motion) var(--ease),
+    box-shadow var(--motion) var(--ease),
+    opacity var(--motion) var(--ease),
+    scale var(--motion) var(--spring);
 }
-input:not([type=checkbox]):not([type=radio]),select,textarea,.search-field { transition: box-shadow var(--motion) var(--ease), outline-color var(--motion) var(--ease); }
-.composer { transition: border-color var(--motion) var(--ease), box-shadow var(--motion) var(--ease); }
+input:not([type=checkbox]):not([type=radio]),select,textarea,.search-field {
+  transition: box-shadow var(--motion) var(--ease), outline-color var(--motion) var(--ease);
+}
+.composer {
+  transition: border-color var(--motion) var(--ease), box-shadow var(--motion) var(--ease);
+}
+@supports (field-sizing: content) {
+  .composer textarea {
+    field-sizing: content;
+    transition: height var(--motion) var(--spring);
+  }
+}
 
-/* Press feedback: one step darker than hover, applied almost immediately. */
-:where(.button,.icon-button,.window-control,.model-status,.toast-close,.primary-navigation a,.conversation-item,.knowledge-row,
-  .evidence-reference,.knowledge-history button,.source-list button,.graph-node-index button,.trace-node,.segmented-control label):active:not(:disabled) {
-  background-color: var(--surface-pressed); transition-duration: var(--motion-fast);
+/* Tactile press feedback: darken surface + subtle spring compression (no hover scale/translate). */
+:where(
+  .button,.model-status,.primary-navigation a,.conversation-item,.knowledge-row,
+  .evidence-reference,.knowledge-history button,.source-list button,.graph-node-index button,
+  .trace-node,.segmented-control label,.generation-preset-button,.conversation-context-menu button
+):active:not(:disabled) {
+  background-color: var(--surface-pressed);
+  scale: 0.98;
+  transition-duration: var(--motion-fast);
 }
-.button.primary:active:not(:disabled),.send-button:active:not(:disabled) { background-color: var(--primary-pressed); transition-duration: var(--motion-fast); }
-.button.danger:active:not(:disabled) { background-color: var(--danger-bg); box-shadow: inset 0 0 0 1px var(--danger); }
+:where(.icon-button,.window-control,.toast-close,.mindmap-collapse-btn):active:not(:disabled) {
+  background-color: var(--surface-pressed);
+  scale: 0.94;
+  transition-duration: var(--motion-fast);
+}
+.button.primary:active:not(:disabled) {
+  background-color: var(--primary-pressed);
+  scale: 0.98;
+  transition-duration: var(--motion-fast);
+}
+.send-button:active:not(:disabled) {
+  background-color: var(--primary-pressed);
+  scale: 0.94;
+  transition-duration: var(--motion-fast);
+}
+.button.danger:active:not(:disabled) {
+  background-color: var(--danger-bg);
+  box-shadow: inset 0 0 0 1px var(--danger);
+  scale: 0.98;
+}
 .window-close:active { background-color: var(--danger-bg); }
 .send-button:hover:not(:disabled) { background-color: var(--primary-hover); }
-.answer-citation:active { background-color: var(--chip); }
+.answer-citation:active { background-color: var(--chip); scale: 0.97; }
 summary:hover { color: var(--text); }
 
-/* Busy controls breathe instead of freezing. */
-.button[aria-busy=true],.send-button[aria-label="正在发送"] { animation: busy-pulse 1.2s var(--ease) infinite alternate; }
-
-/* Page and view changes. Pages remount per route (ErrorBoundary key), so entering replays on each switch. */
-.standard-page,.chat-layout { animation: view-enter var(--motion-enter) var(--ease) both; }
-.settings-section:not([hidden]),.knowledge-detail-heading,.knowledge-prose,.graph-inspector,.trace-detail { animation: view-enter var(--motion-enter) var(--ease) both; }
-.prototype-sidebar,.chat-evidence:not(.evidence-overlay) { animation: view-enter var(--motion-enter) var(--ease) both; }
-.message.user,.message.assistant:last-child { animation: view-enter var(--motion-enter) var(--ease) both; }
-.welcome-starters { animation: view-enter 240ms var(--ease) 60ms both; }
-
-/* Overlays. */
-.toast { animation: feedback-pop 180ms var(--ease) both; }
-@supports selector(select::picker(select)) {
-  .select-control:open::picker(select) { animation: panel-enter 120ms var(--ease) both; }
+/* Smooth layout transitions for collapsible panes, thinking blocks, attachment strips, and list rows. */
+@media (min-width: 901px) {
+  .prototype-sidebar {
+    margin-left: 0;
+    opacity: 1;
+    visibility: visible;
+    transition:
+      margin-left var(--motion-layout) var(--spring),
+      opacity var(--motion) var(--ease),
+      border-color var(--motion) var(--ease),
+      visibility 0s linear 0s;
+  }
+  .sidebar-collapsed .prototype-sidebar {
+    margin-left: calc(-1 * var(--sidebar-width));
+    opacity: 0;
+    border-right-color: transparent;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      margin-left var(--motion-layout) var(--spring),
+      opacity 120ms var(--ease),
+      border-color var(--motion) var(--ease),
+      visibility 0s linear var(--motion-layout);
+  }
 }
-dialog[open] { animation: panel-enter 160ms var(--ease) both; }
-.app-dialog-backdrop { animation: panel-enter 160ms var(--ease) both; }
-.knowledge-history-drawer[open],.run-drawer[open],.side-drawer[open] { animation: drawer-enter 180ms var(--ease) both; }
+@media (min-width: 1101px) {
+  .chat-layout.evidence-closed {
+    grid-template-columns: minmax(0, 1fr) 0px;
+    gap: 0;
+  }
+  body:not(:has(.pane-drag-shield)) .chat-layout {
+    transition:
+      grid-template-columns var(--motion-layout) var(--spring),
+      gap var(--motion-layout) var(--spring);
+  }
+}
+@media (min-width: 761px) {
+  .knowledge-workbench {
+    transition:
+      grid-template-columns var(--motion-layout) var(--spring),
+      gap var(--motion-layout) var(--spring);
+  }
+  .knowledge-sidebar {
+    width: 290px;
+    opacity: 1;
+    translate: 0 0;
+    visibility: visible;
+    transition:
+      opacity var(--motion) var(--ease),
+      translate var(--motion-layout) var(--spring),
+      visibility 0s linear 0s;
+  }
+  .knowledge-workbench.list-collapsed {
+    grid-template-columns: 0px minmax(0, 1fr);
+    gap: 0;
+  }
+  .knowledge-workbench.list-collapsed > .knowledge-sidebar {
+    overflow: hidden;
+    opacity: 0;
+    translate: -12px 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 120ms var(--ease),
+      translate var(--motion-layout) var(--spring),
+      visibility 0s linear var(--motion-layout);
+  }
+}
+@media (min-width: 761px) and (max-width: 1200px) {
+  .knowledge-sidebar { width: 250px; }
+}
 
-/* Disclosure: chevron marker rotates, content height eases open and closed. */
+/* Thinking fold/unfold & dynamic strips/rows. */
+.thinking-chevron {
+  transition: transform var(--motion-enter) var(--spring);
+  flex-shrink: 0;
+}
+.thinking-toggle[aria-expanded="true"] .thinking-chevron {
+  transform: rotate(90deg);
+}
+.thinking-collapse,
+.collapsible-strip {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--motion-enter) var(--spring),
+    opacity 140ms var(--ease);
+}
+.thinking-collapse[data-open="true"],
+.collapsible-strip[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+@starting-style {
+  .thinking-collapse[data-open="true"],
+  .collapsible-strip[data-open="true"] {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+.thinking-collapse-inner,
+.collapsible-strip-inner,
+.collapsible-row-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.collapsible-row {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 180ms var(--spring),
+    opacity 140ms var(--ease),
+    padding 180ms var(--spring),
+    margin 180ms var(--spring);
+}
+.collapsible-row[data-leaving="true"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  pointer-events: none;
+}
+.memory-candidates-bar {
+  transition:
+    opacity 160ms var(--ease),
+    translate 180ms var(--spring),
+    scale 180ms var(--spring);
+}
+.memory-candidates-bar[data-leaving="true"] {
+  opacity: 0;
+  translate: 0 -6px;
+  scale: 0.99;
+  pointer-events: none;
+}
+
+/* Busy controls and spinners. */
+.button[aria-busy=true],.send-button[aria-label="正在发送"] {
+  animation: busy-pulse 1.2s var(--ease) infinite alternate;
+}
+.spin { animation: spin 0.9s linear infinite; }
+.message-actions .button svg { animation: icon-swap var(--motion) var(--spring) both; }
+
+/* Sub-views, messages, and dynamic feature panels. */
+.standard-page,.chat-layout { animation: stage-enter var(--motion-enter) var(--spring) both; }
+.settings-section:not([hidden]),
+.knowledge-detail-heading,
+.knowledge-prose,
+.graph-inspector,
+.trace-detail {
+  animation: section-enter var(--motion-enter) var(--spring) both;
+}
+.chat-evidence:not(.evidence-overlay) { animation: drawer-enter var(--motion-enter) var(--spring) both; }
+.message.user { animation: message-enter var(--motion-enter) var(--spring) both; transform-origin: right bottom; }
+.message.assistant:last-child { animation: section-enter var(--motion-enter) var(--spring) both; }
+.welcome-starters { animation: section-enter 260ms var(--spring) 40ms both; }
+.memory-candidates-bar,
+.suggested-links-panel {
+  animation: section-enter 180ms var(--spring) both;
+}
+.mindmap-topic-bar { animation: float-bar-enter 220ms var(--spring) both; }
+
+/* QuickBar Spotlight expand & collapse. */
+.quickbar-answer-panel {
+  transform-origin: top center;
+  animation: quickbar-panel-in var(--motion-enter) var(--spring) both;
+}
+.quickbar-answer-panel[data-closing="true"] {
+  animation: quickbar-panel-out 150ms var(--ease) forwards;
+  pointer-events: none;
+}
+.quickbar-saved-feedback {
+  animation: section-enter 180ms var(--spring) both;
+}
+.quickbar-saved-feedback[data-closing="true"] {
+  animation: popover-down-out 140ms var(--ease) forwards;
+}
+
+/* Symmetric enter & exit for floating popovers, context menus, selection toolbar, and drag-import overlay. */
+.composer-style-popover,
+.composer-web-popover,
+.composer-help-popover {
+  transform-origin: bottom right;
+  animation: popover-up 200ms var(--spring) both;
+}
+.composer-style-popover[data-closing="true"],
+.composer-web-popover[data-closing="true"] {
+  animation: popover-down-out 145ms var(--ease) forwards;
+  pointer-events: none;
+}
+.conversation-context-menu {
+  transform-origin: top left;
+  animation: menu-pop 160ms var(--spring) both;
+}
+.conversation-context-menu[data-closing="true"] {
+  animation: menu-pop-out 135ms var(--ease) forwards;
+  pointer-events: none;
+}
+.selection-popover {
+  animation: selection-pop 170ms var(--spring) both;
+}
+.selection-popover[data-closing="true"] {
+  animation: selection-pop-out 135ms var(--ease) forwards;
+  pointer-events: none;
+}
+.drop-import-overlay { animation: panel-enter 160ms var(--ease) both; }
+.drop-import-overlay > div { animation: dialog-pop 220ms var(--spring) both; }
+
+/* Symmetric enter & exit for Toasts, Select Pickers, Backdrop, Dialogs, and Drawers. */
+.toast { animation: toast-enter var(--motion-enter) var(--spring) both; }
+.toast.is-leaving { animation: toast-leave var(--motion) var(--ease) forwards; pointer-events: none; }
+
+@supports selector(select::picker(select)) {
+  .select-control::picker(select) {
+    opacity: 0;
+    scale: 0.97;
+    translate: 0 -4px;
+    transform-origin: top center;
+    transition:
+      opacity 130ms var(--ease),
+      scale 130ms var(--ease),
+      translate 130ms var(--ease),
+      display 130ms allow-discrete,
+      overlay 130ms allow-discrete;
+  }
+  .select-control:open::picker(select) {
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+    transition:
+      opacity 180ms var(--ease),
+      scale 180ms var(--spring),
+      translate 180ms var(--spring),
+      display 180ms allow-discrete,
+      overlay 180ms allow-discrete;
+  }
+  @starting-style {
+    .select-control:open::picker(select) {
+      opacity: 0;
+      scale: 0.97;
+      translate: 0 -4px;
+    }
+  }
+}
+
+.app-dialog-backdrop {
+  opacity: 1;
+  transition: opacity var(--motion-enter) var(--ease);
+}
+@starting-style {
+  .app-dialog-backdrop { opacity: 0; }
+}
+.app-dialog-backdrop[data-closing="true"] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion) var(--ease);
+}
+
+dialog {
+  opacity: 0;
+  scale: 0.97;
+  translate: 0 6px;
+  transition:
+    opacity 150ms var(--ease),
+    scale 150ms var(--ease),
+    translate 150ms var(--ease),
+    display 150ms allow-discrete,
+    overlay 150ms allow-discrete;
+}
+dialog:is(.side-drawer, .knowledge-history-drawer, .run-drawer, .evidence-overlay) {
+  scale: 1;
+  translate: 16px 0;
+}
+dialog.mobile-sidebar {
+  scale: 1;
+  translate: -16px 0;
+}
+dialog[open] {
+  opacity: 1;
+  scale: 1;
+  translate: 0 0;
+  transition:
+    opacity var(--motion-enter) var(--ease),
+    scale var(--motion-enter) var(--spring),
+    translate var(--motion-enter) var(--spring),
+    display var(--motion-enter) allow-discrete,
+    overlay var(--motion-enter) allow-discrete;
+}
+@starting-style {
+  dialog[open] {
+    opacity: 0;
+    scale: 0.97;
+    translate: 0 6px;
+  }
+  dialog:is(.side-drawer, .knowledge-history-drawer, .run-drawer, .evidence-overlay)[open] {
+    scale: 1;
+    translate: 16px 0;
+  }
+  dialog.mobile-sidebar[open] {
+    scale: 1;
+    translate: -16px 0;
+  }
+}
+
+/* Disclosure: chevron marker rotates with spring, content height and opacity ease both ways. */
 summary { list-style: none; }
 summary::-webkit-details-marker { display: none; }
 summary::before {
-  content: ""; display: inline-block; width: 12px; height: 12px; margin-inline-end: 6px; vertical-align: -1px;
-  background: currentColor; opacity: .7;
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-inline-end: 6px;
+  vertical-align: -1px;
+  background: currentColor;
+  opacity: 0.7;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
-  transition: transform var(--motion) var(--ease);
+  transition: transform var(--motion-enter) var(--spring);
 }
 details[open] > summary::before { transform: rotate(90deg); }
 @supports selector(::details-content) {
-  :root { interpolate-size: allow-keywords; }
-  details::details-content { block-size: 0; overflow-y: clip; transition: block-size var(--motion-enter) var(--ease), content-visibility var(--motion-enter) allow-discrete; }
-  details[open]::details-content { block-size: auto; }
+  details:not(.composer-help)::details-content {
+    block-size: 0;
+    opacity: 0;
+    overflow-y: clip;
+    transition:
+      block-size var(--motion-layout) var(--spring),
+      opacity var(--motion) var(--ease),
+      content-visibility var(--motion-layout) allow-discrete;
+  }
+  details:not(.composer-help)[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
 }
 
+/* Streaming text continuity (animation name kept for contract tests). */
 .stream-fragment { animation: text-bloom 240ms var(--ease) both; }
-@keyframes text-bloom { from { opacity: .35; } to { opacity: 1; } }
-@keyframes view-enter { from { opacity: 0; } to { opacity: 1; } }
-@keyframes busy-pulse { from { opacity: 1; } to { opacity: .55; } }
-@keyframes feedback-pop { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+@keyframes text-bloom { from { opacity: 0.35; } to { opacity: 1; } }
+@keyframes vt-stage-out { from { opacity: 1; scale: 1; } to { opacity: 0; scale: 0.992; } }
+@keyframes vt-stage-in { from { opacity: 0; translate: 0 5px; scale: 0.994; } to { opacity: 1; translate: 0 0; scale: 1; } }
+@keyframes vt-detail-out { from { opacity: 1; translate: 0 0; scale: 1; } to { opacity: 0; translate: 0 -5px; scale: 0.992; } }
+@keyframes vt-detail-in { from { opacity: 0; translate: 0 7px; scale: 0.992; } to { opacity: 1; translate: 0 0; scale: 1; } }
+@keyframes stage-enter { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
+@keyframes section-enter { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+@keyframes message-enter { from { opacity: 0; translate: 0 6px; scale: 0.98; } to { opacity: 1; translate: 0 0; scale: 1; } }
+@keyframes float-bar-enter { from { opacity: 0; translate: 0 8px; scale: 0.97; } to { opacity: 1; translate: 0 0; scale: 1; } }
+@keyframes popover-up { from { opacity: 0; translate: 0 6px; scale: 0.97; } to { opacity: 1; translate: 0 0; scale: 1; } }
+@keyframes popover-down-out { from { opacity: 1; translate: 0 0; scale: 1; } to { opacity: 0; translate: 0 6px; scale: 0.97; } }
+@keyframes menu-pop { from { opacity: 0; translate: 0 -4px; scale: 0.96; } to { opacity: 1; translate: 0 0; scale: 1; } }
+@keyframes menu-pop-out { from { opacity: 1; translate: 0 0; scale: 1; } to { opacity: 0; translate: 0 -4px; scale: 0.96; } }
+@keyframes selection-pop { from { opacity: 0; scale: 0.94; } to { opacity: 1; scale: 1; } }
+@keyframes selection-pop-out { from { opacity: 1; scale: 1; } to { opacity: 0; scale: 0.94; } }
+@keyframes quickbar-panel-in { from { opacity: 0; translate: 0 -6px; } to { opacity: 1; translate: 0 0; } }
+@keyframes quickbar-panel-out { from { opacity: 1; translate: 0 0; } to { opacity: 0; translate: 0 -6px; } }
+@keyframes dialog-pop { from { opacity: 0; scale: 0.96; translate: 0 6px; } to { opacity: 1; scale: 1; translate: 0 0; } }
+@keyframes toast-enter { from { opacity: 0; translate: 0 8px; scale: 0.97; } to { opacity: 1; translate: 0 0; scale: 1; } }
+@keyframes toast-leave { from { opacity: 1; translate: 0 0; scale: 1; } to { opacity: 0; translate: 0 6px; scale: 0.97; } }
+@keyframes drawer-enter { from { opacity: 0; translate: 12px 0; } to { opacity: 1; translate: 0 0; } }
 @keyframes panel-enter { from { opacity: 0; } to { opacity: 1; } }
-@keyframes drawer-enter { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
-@media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration: .01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } .stream-fragment { filter: none !important; opacity: 1 !important; } }
-@media(forced-colors:active) { summary::before { background: CanvasText; opacity: 1; } }
+@keyframes icon-swap { from { opacity: 0; scale: 0.85; } to { opacity: 1; scale: 1; } }
+@keyframes busy-pulse { from { opacity: 1; } to { opacity: 0.55; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  :root, #main-content, .page-knowledge .knowledge-detail, .knowledge-row-title, .knowledge-detail-heading h2 {
+    view-transition-name: none !important;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  :where(.button, .icon-button, .send-button, .window-control, .toast-close):active {
+    scale: 1 !important;
+  }
+  .stream-fragment { filter: none !important; opacity: 1 !important; }
+}
+@media (forced-colors: active) {
+  summary::before { background: CanvasText; opacity: 1; }
+  .prototype-topbar .primary-navigation[data-pill-ready="true"]::before,
+  .settings-navigation[data-pill-ready="true"]::before,
+  .segmented-control[data-pill-ready="true"]::before,
+  .knowledge-list[data-pill-ready="true"]::before,
+  .sidebar-threads > .conversation-list[data-pill-ready="true"]::before {
+    border: 1px solid Highlight;
+  }
+}

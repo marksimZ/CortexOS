@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { notify } from "./components/Toast";
 import { StatusLabel } from "./components/StatusLabel";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { BookOpen, Check, Pencil, Plus, Search, User, X, ListTree, History } from "lucide-react";
 import { navigate, useNavigation } from "./navigation";
 import { errorText, type Studio } from "./studio";
@@ -48,6 +48,7 @@ export function KnowledgePage({
         }
       : undefined;
   const [listOpen, setListOpen] = useState(true);
+  const [vtSourceId, setVtSourceId] = useState<string | null>(selected);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [items, setItems] = useState<KnowledgeNode[]>([]);
   const [query, setQuery] = useState("");
@@ -245,8 +246,34 @@ export function KnowledgePage({
                   <li key={item.id}>
                     <button
                       className="knowledge-row"
+                      data-vt-source={vtSourceId === item.id ? "true" : undefined}
                       aria-current={selected === item.id ? "true" : undefined}
-                      onClick={() => onSelect(item.id)}
+                      onClick={() => {
+                        setVtSourceId(item.id);
+                        const doc = document as Document & {
+                          startViewTransition?: (cb: () => void) => { finished: Promise<unknown> };
+                        };
+                        const isNarrow = window.matchMedia("(max-width: 760px)").matches;
+                        if (
+                          isNarrow &&
+                          typeof doc.startViewTransition === "function" &&
+                          !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+                          !document.body.classList.contains("app-dialog-open")
+                        ) {
+                          flushSync(() => setVtSourceId(item.id));
+                          document.documentElement.dataset.vtScope = "knowledge-drill";
+                          const vt = doc.startViewTransition(() => {
+                            flushSync(() => onSelect(item.id));
+                          });
+                          void vt.finished.finally(() => {
+                            if (document.documentElement.dataset.vtScope === "knowledge-drill") {
+                              delete document.documentElement.dataset.vtScope;
+                            }
+                          });
+                          return;
+                        }
+                        onSelect(item.id);
+                      }}
                     >
                       <span className="knowledge-row-title">{item.title}</span>
                       <span className="knowledge-row-meta">
@@ -296,6 +323,31 @@ export function KnowledgePage({
           requestedVersion={requestedVersion}
           revision={revision + refresh}
           onBack={() => {
+            const doc = document as Document & {
+              startViewTransition?: (cb: () => void) => { finished: Promise<unknown> };
+            };
+            const isNarrow = window.matchMedia("(max-width: 760px)").matches;
+            if (
+              isNarrow &&
+              typeof doc.startViewTransition === "function" &&
+              !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+              !document.body.classList.contains("app-dialog-open")
+            ) {
+              if (selected) flushSync(() => setVtSourceId(selected));
+              document.documentElement.dataset.vtScope = "knowledge-drill";
+              const vt = doc.startViewTransition(() => {
+                flushSync(() => {
+                  setListOpen(true);
+                  onSelect(null);
+                });
+              });
+              void vt.finished.finally(() => {
+                if (document.documentElement.dataset.vtScope === "knowledge-drill") {
+                  delete document.documentElement.dataset.vtScope;
+                }
+              });
+              return;
+            }
             setListOpen(true);
             onSelect(null);
           }}
@@ -345,29 +397,79 @@ export function KnowledgeInspector({
     setSourceFocus(null);
   }, [workspace, selected]);
   const approval = useRef<HTMLDialogElement>(null);
+  const prevWorkspaceRef = useRef<string | null>(workspace);
+  const loadedNodeRef = useRef<string | null>(null);
   useEffect(() => {
     let current = true;
-    setDetail(null);
     setError(null);
-    setLoadingDetail(false);
-    if (!workspace || !selected) return;
-    setLoadingDetail(true);
+    const workspaceChanged = prevWorkspaceRef.current !== workspace;
+    prevWorkspaceRef.current = workspace;
+    if (!workspace || !selected) {
+      loadedNodeRef.current = null;
+      setDetail(null);
+      setLoadingDetail(false);
+      return;
+    }
+    if (workspaceChanged || !loadedNodeRef.current) {
+      setDetail(null);
+      setLoadingDetail(true);
+    }
+    const slowTimer = window.setTimeout(() => {
+      if (current) setLoadingDetail(true);
+    }, 140);
     void knowledge("get_knowledge", { workspaceId: workspace, nodeId: selected })
       .then((data) => {
-        if (current) {
-          setDetail(data);
+        window.clearTimeout(slowTimer);
+        if (!current) return;
+        const switchingNodes =
+          loadedNodeRef.current !== null &&
+          loadedNodeRef.current !== data.node.id &&
+          route.page === "knowledge" &&
+          !window.matchMedia("(max-width: 760px)").matches;
+        loadedNodeRef.current = data.node.id;
+        const doc = document as Document & {
+          startViewTransition?: (cb: () => void) => { finished: Promise<unknown> };
+        };
+        if (
+          switchingNodes &&
+          typeof doc.startViewTransition === "function" &&
+          document.visibilityState === "visible" &&
+          !document.body.classList.contains("app-dialog-open") &&
+          !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ) {
+          document.documentElement.dataset.vtScope = "knowledge";
+          try {
+            const vt = doc.startViewTransition(() => {
+              flushSync(() => {
+                setDetail(data);
+                setLoadingDetail(false);
+              });
+            });
+            void vt.finished.finally(() => {
+              if (document.documentElement.dataset.vtScope === "knowledge") {
+                delete document.documentElement.dataset.vtScope;
+              }
+            });
+            return;
+          } catch {
+            delete document.documentElement.dataset.vtScope;
+          }
         }
+        setDetail(data);
+        setLoadingDetail(false);
       })
       .catch((e) => {
-        if (current) setError(errorText(e));
-      })
-      .finally(() => {
-        if (current) setLoadingDetail(false);
+        window.clearTimeout(slowTimer);
+        if (current) {
+          setError(errorText(e));
+          setLoadingDetail(false);
+        }
       });
     return () => {
       current = false;
+      window.clearTimeout(slowTimer);
     };
-  }, [workspace, selected, revision, refresh]);
+  }, [workspace, selected, revision, refresh, route.page]);
   useEffect(() => {
     setVersion(requestedVersion ?? null);
     if (detail) {
@@ -495,7 +597,7 @@ export function KnowledgeInspector({
           <p role="status">正在读取版本…</p>
         ) : detail && currentVersion ? (
           <>
-            <header className="knowledge-detail-heading">
+            <header key={`head:${detail.node.id}`} className="knowledge-detail-heading">
               <div>
                 <span className="knowledge-kind">
                   {kinds[currentVersion.kind]}
@@ -557,7 +659,7 @@ export function KnowledgeInspector({
                 </button>
               </div>
             </header>
-            <div className="knowledge-prose">{currentVersion.content}</div>
+            <div key={`prose:${detail.node.id}`} className="knowledge-prose">{currentVersion.content}</div>
             {route.page === "knowledge" && (
               <button
                 className="button text-button"

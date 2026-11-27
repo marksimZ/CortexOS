@@ -110,7 +110,7 @@ dialog::backdrop { background: rgb(0 0 0 / 32%); }
 /* Reserve the global titlebar, including its drag area and window controls. */
 :root { --app-dialog-top: 76px; }
 .app-dialog-backdrop { position: fixed; inset: var(--app-dialog-top) 0 0; z-index: 79; background: rgb(0 0 0 / 32%); }
-.app-dialog-layer { position: fixed; inset: var(--app-dialog-top) 16px 16px; z-index: calc(80 + var(--dialog-order,0)); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.app-dialog-layer { position: fixed; inset: var(--app-dialog-top) 16px 16px; z-index: calc(80 + var(--dialog-order,0)); display: flex; align-items: center; justify-content: center; pointer-events: none; transition: display var(--motion) allow-discrete; }
 .app-dialog-layer:not(:has(> dialog[open])) { display: none; }
 .app-dialog-layer > dialog[open] { position: relative; inset: auto; margin: 0; max-height: 100%; max-width: 100%; pointer-events: auto; }
 .app-dialog-layer:has(> .side-drawer,> .knowledge-history-drawer,> .evidence-overlay) { justify-content: flex-end; align-items: stretch; }

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { CircleHelp, ListChecks, PanelLeft, X, Plus } from "lucide-react";
 import type { Studio } from "../studio";
-import { navigate, type PageName } from "../navigation";
+import { navigate, navigateHash, type PageName } from "../navigation";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { ModelStatus } from "./ModelStatus";
 import { ConversationList } from "./ConversationList";
@@ -66,7 +66,13 @@ export function AppShell({ studio, page, openCreateWorkspace, children }: {
   const workspace = studio.data?.workspaces.find(item => item.id === studio.workspaceId);
   const navigation = (mobile: boolean) => (
     <nav className="primary-navigation" aria-label={mobile ? "移动主导航" : "主导航"}>
-      {pages.map(({id, label}) => <a key={id} href={`#/${id}`} title={label} aria-label={label} aria-current={page === id ? "page" : undefined} onClick={() => drawer.current?.close()}><NavigationIcon page={id} /><span>{label}</span></a>)}
+      {pages.map(({id, label}) => <a key={id} href={`#/${id}`} title={label} aria-label={label} aria-current={page === id ? "page" : undefined} onClick={event => {
+        drawer.current?.close();
+        if (!mobile && !event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+          event.preventDefault();
+          navigateHash(`#/${id}`);
+        }
+      }}><NavigationIcon page={id} /><span>{label}</span></a>)}
     </nav>
   );
   const sidebar = (mobile: boolean) => <>

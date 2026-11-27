@@ -3372,3 +3372,57 @@ All five commands exited with code 0 and emitted zero errors and warnings. Verif
   - SHA256：`0B2A2396A6E0CA3AA795EF98C88AE9BC342FDEA7C73441563FFECA141AA7BE72`
   - 代码签名：`NotSigned`
 - 仍未实测项：未再次实调真实 `qwen3:4b` 在 `num_predict = 0 (-1)` 下输出思考 + 正文双内容，未实调云端模型、本地向量刷新与手动安装 `.exe`。
+
+### 2026-11-27 空间弹簧动效体系与发送图标视觉重心校准
+
+经用户确认放宽 [design.md](design.md) 硬规则第 6 条（允许 `<= 8px` 进退场位移、`0.96–0.98` 进退场缩放与 `:active` `0.94–0.98` 按压缩放，保留无玻璃、无渐变、无发光、无 hover 位移缩放及 `prefers-reduced-motion` / `forced-colors` 保护），并适配近期新增组件：
+
+- **发送按钮视觉重心校准**：[layout.css](apps/desktop/src/styles/layout.css) 为 `.send-button > svg` 增加 `translate: -1.5px 1px`，修正纸飞机图标重心偏右上导致的视觉偏移。
+- **临界阻尼弹簧与按压触感**：[tokens.css](apps/desktop/src/styles/tokens.css) 接入 CSS `linear(...)` 临界阻尼弹簧曲线（回退 `cubic-bezier(.22, 1, .36, 1)`）与四档时长（`80ms / 160ms / 220ms / 240ms`）；[motion.css](apps/desktop/src/styles/motion.css) 使用独立 `scale` 属性提供 `0.98`（常规按钮/列表/预设卡）与 `0.94`（圆形发送按钮/图标按钮）按下反馈。
+- **对称进退场动画**：[AppDialog.tsx](apps/desktop/src/components/AppDialog.tsx)、[controls.css](apps/desktop/src/styles/controls.css)、[Toast.tsx](apps/desktop/src/components/Toast.tsx) 与 [motion.css](apps/desktop/src/styles/motion.css) 基于 `@starting-style` + `transition-behavior: allow-discrete` 及退场状态，补齐对话框、侧抽屉、遮罩、原生 `base-select` 下拉面板与 Toast 的对称退场动画。
+- **跨页交叉淡化与滑动选中底色**：[navigation.ts](apps/desktop/src/navigation.ts) 与 [AppShell.tsx](apps/desktop/src/components/AppShell.tsx) 在跨页路由切换时接入 `document.startViewTransition`（仅作用于 `#main-content`，顶栏与侧栏保持实时响应，且 `::view-transition*` 设为 `pointer-events: none` 不阻断连点）；新增 [sliding-pill.ts](apps/desktop/src/sliding-pill.ts) 并在 [main.tsx](apps/desktop/src/main.tsx) 挂载，驱动顶栏主导航、设置分类与分段控件的 GPU `translate3d` 滑动选中底色；[Knowledge.tsx](apps/desktop/src/Knowledge.tsx) 切换知识条目时触发详情标题与正文空间渐入。
+- **布局与新功能组件动效**：实现桌面端会话侧栏（`margin-left` 滑入滑出不挤压文字）、对话依据分栏、知识列表分栏的弹簧宽度过渡，以及输入框 `field-sizing: content` 高度自适应与 `<details>::details-content` 高度+透明度双向过渡；同步覆盖近期新增的风格弹层（`.composer-style-popover`）、网页导入弹层（`.composer-web-popover`）、会话右键菜单（`.conversation-context-menu`）、划词操作条（`.selection-popover`）、拖拽导入遮罩与加载旋转（`.drop-import-overlay` / `.spin`）、模型思考展开区（`.thinking-body`）、网页挂载条、记忆候选栏与脑图多选浮动栏。
+
+实际验证（目录 `apps/desktop`，无模型调用）：
+
+- `npm run build`：`tsc --noEmit` 与 `vite build` 通过（Vite `479ms`，零大块告警，退出码 `0`）。
+- `npm run test:unit`：5/5 通过。
+- `npm run lint`：0 error（保持既有 24 warning，新增文件 0 warning）；`npm run format:check`：退出码 `0`；`git diff --check`：通过。
+- **浏览器预览检查**（Edge + `vite preview`，无模型调用）：
+  - 动效状态实测：顶栏主导航 `--pill-x` 从 `0px` 滑至 `210px`，设置分类 `--pill-y` 从 `33px` 滑至 `198px`；会话侧栏展开宽 `252px`、收起后 `visibility: hidden`、重展开恢复 `visible`；关闭弹窗 `40ms` 时观测到 `.app-dialog-backdrop[data-closing="true"]`，退场完成后清除为 `0`。
+  - 截图核对：`1366×768`、`1600×900`、`1920×1080` 三尺寸 × 浅/深主题 × 对话/知识/图谱/设置共 24 组截图无报错、横向溢出为 `0`，另留存 2x DPI 发送按钮浅深特写（`artifacts/ui-motion-spring/`）。
+- **未验证项**：本次为浏览器预览验证，尚未重新编译 Tauri 桌面二进制在原生 WebView2 窗口中手工体验，也未重新打包 NSIS 安装包。
+- **补充原生开发包同步（11:15）**：核对用户桌面快捷方式 `CortexOS (最新版).lnk` 指向 `apps/desktop/src-tauri/target/debug/cortexos-desktop.exe` 后，正常退出占用的旧进程（`taskkill /PID 20528`，`Exited=True`），执行 `npm run build` 与 `cargo build --features tauri/custom-protocol --offline --locked`（35.62s）将最新 `dist/` 重新内嵌至 `target/debug/cortexos-desktop.exe`，并在原生 WebView2 下运行 `npx.cmd playwright test tests/generation-style-native.spec.ts --project=desktop` 通过（1 passed, 5.1s；旧 `knowledge-layout.spec.ts` 因未适配新增首次起名引导弹窗超时），随后重新拉起新版调试桌面端供手工验收；Release NSIS 安装包仍保持上一轮未重打。
+
+### 2026-11-27 补齐 4 项局部动效细节并同步原生开发包（13:41）
+
+完成剩余 4 项精细动效并重编内嵌至桌面开发版 `target/debug/cortexos-desktop.exe`：
+
+- **条件渲染浮层退场与思考面板高度折叠**：新增 [use-presence.ts](apps/desktop/src/use-presence.ts)（`useExitPresence` / `useStickyPresence`），为 [ChatComposer.tsx](apps/desktop/src/components/ChatComposer.tsx) 的风格弹层（`.composer-style-popover`）与网页导入弹层（`.composer-web-popover`）、[ConversationList.tsx](apps/desktop/src/components/ConversationList.tsx) 的会话右键菜单（`.conversation-context-menu`）、[SelectionPopover.tsx](apps/desktop/src/components/SelectionPopover.tsx) 的划词操作条补齐 `135–150ms` 原位淡出收拢退场；[ChatMessage.tsx](apps/desktop/src/components/ChatMessage.tsx) 将模型思考区重构为 `ThinkingBlock`（`grid-template-rows: 0fr <-> 1fr` 弹簧展开/折叠并在退场后卸载 DOM，箭头平滑旋转 90°）。
+- **知识列表选中滑块与详情过渡**：[sliding-pill.ts](apps/desktop/src/sliding-pill.ts) 扩展覆盖 `.knowledge-list` 与侧栏 `.conversation-list`，实现列表项切换时的纵向弹簧滑块；[Knowledge.tsx](apps/desktop/src/Knowledge.tsx) 消除同工作区切条目时的瞬间清空闪烁，宽屏分栏下对右侧 `.knowledge-detail` 执行局部 `startViewTransition` 空间过渡，窄屏单栏下在 `.knowledge-row-title` 与详情 `h2` 间执行 `knowledge-hero-title` 共享元素变形过渡。
+- **动态列表项与输入附件条高度收拢**：[MemoryCandidatesBar.tsx](apps/desktop/src/components/MemoryCandidatesBar.tsx) 采纳/忽略记忆候选、[ConversationList.tsx](apps/desktop/src/components/ConversationList.tsx) 归档/删除会话时先执行 `.collapsible-row[data-leaving="true"]` 高度收拢再移除；[ChatComposer.tsx](apps/desktop/src/components/ChatComposer.tsx) 待发送图片栏与检测到网页链接栏支持 `.collapsible-strip` 双向高度折叠。
+- **全局随手记（`QuickBar`）平滑展开与收拢**：[QuickBar.tsx](apps/desktop/src/QuickBar.tsx) 展开时立即扩窗并播放 `.quickbar-answer-panel` 弹簧进场，清空结果时先完成 `150ms` 面板收拢动画再缩回紧凑窗口高度。
+
+实际验证（零真实模型 / 公网调用）：
+
+- 前端（目录 `apps/desktop`）：`npm run build`（Vite `733ms`）、`npm run test:unit`（5/5）、`npm run lint`（0 error）、`npm run format:check`（退出码 `0`）、`git diff --check` 全部通过。
+- 原生开发包内嵌重编与 WebView2 专项回归：`cargo build --features tauri/custom-protocol --offline --locked`（1m 01s）完成 `target/debug/cortexos-desktop.exe` 更新；运行 `$env:CORTEXOS_NATIVE_ONLY="1"; npx.cmd playwright test tests/thinking-stream-native.spec.ts tests/generation-style-native.spec.ts tests/web-url-import-native.spec.ts --project=desktop --output=../../artifacts/ui-motion-complete` -> **3 passed (18.1s), 0 failed**；随后重新启动新版 `cortexos-desktop.exe`（`PID 16932`, `Responding=True`）。
+- 仍未重打项：Release NSIS 安装包尚未重编，待用户确认全部交互手感后按需打包。
+
+
+### 2026-11-27 首次启动模型使用方式选择与右上角云端连接实时监测
+
+完成首次启动双通道模型选择（本地 / 云端 / 多选）与右上角云端状态监测：
+
+- **前端实现（零 Rust 变更，零实网/Ollama 推理调用）**：
+  - 新增 [model-usage-preference.ts](apps/desktop/src/model-usage-preference.ts)：使用 `localStorage` 持久化 `model-usage-preference`（`{ local, cloud }`，至少保留一项，默认双启用）与 `model-usage-prompted`，并通过自定义事件同步状态栏、设置页与欢迎弹窗。
+  - 更新 [App.tsx](apps/desktop/src/App.tsx)：将首次启动弹窗升级为「欢迎使用 CortexOS」，默认勾选 `本地模型（Ollama）` 与 `云端模型（DeepSeek / 百炼 / OpenAI 等）` 两张卡片（全空时阻塞提交并提示至少保留一项），保留「助手称呼（选填）」与「暂不起名」既有入口。
+  - 更新 [ModelStatus.tsx](apps/desktop/src/components/ModelStatus.tsx) 与 [CloudRuntimeSettings.tsx](apps/desktop/src/components/CloudRuntimeSettings.tsx)：按偏好在右上角并排显示本地与云端连接监测徽章（只读查询本地配置与凭据状态：`云端待建工作区` / `云端未配置` / `云端待验证` / `云端模型已就绪` / `云端连接异常`，不触发主动外部探测），云端链接直达 `#/settings?section=cloud`，增删绑定校验连接时实时刷新状态栏。
+  - 更新 [Settings.tsx](apps/desktop/src/Settings.tsx)（在「模型连接」页增加「模型使用方式偏好」开关卡片）与 [features.css](apps/desktop/src/styles/features.css)（补齐多选卡片、状态颜色与 16px 复选框对齐样式）。
+- **验证与回归**（目录 `apps/desktop`，使用本地 Ollama loopback 测试桩 + 虚拟测试连接密钥并自动清理）：
+  - `npm run build`：通过（Vite `584ms` 零大块告警）。
+  - `npm run test:unit`：5/5 通过；`npm run format:check`：退出码 `0`；`npm run lint`：0 error（26 项 warning）。
+  - `cargo build --manifest-path d:\vibecoding\CortexOS\apps\desktop\src-tauri\Cargo.toml --offline --locked --features tauri/custom-protocol --bin cortexos-desktop`：通过（28.30s）。
+  - `$env:CORTEXOS_NATIVE_ONLY="1"; npx.cmd playwright test tests/model-onboarding-status-native.spec.ts tests/generation-style-native.spec.ts tests/thinking-stream-native.spec.ts tests/web-url-import-native.spec.ts tests/chat-search-native.spec.ts tests/page-citation-native.spec.ts --project=desktop --output=../../artifacts/model-onboarding-status`：**6 passed (25.2s), 0 failed**。
+  - 已目视核对实拍截图：`artifacts/model-onboarding-status/model-onboarding-status-na-421c3--settings-toggles-sync-live-desktop/onboarding-model-choice.png`、`topbar-local-and-cloud-status.png` 与 `topbar-cloud-pending-status.png`。
+- **未执行 / 待确认项**：未发起真实云端连通探测或真实 Ollama 推理；尚未执行提交推送，也未重打 Windows `0.2.0` NSIS 安装包。

@@ -3,6 +3,7 @@ import { Archive, ArchiveRestore, HardDrive, MessageSquare, Pencil, Plus, Search
 import { chat, type ChatSearchHit } from "../api/chat";
 import { errorText, type Conversation, type Studio } from "../studio";
 import { navigate } from "../navigation";
+import { useStickyPresence } from "../use-presence";
 import { AppDialog, openDialog } from "./AppDialog";
 import { notify } from "./Toast";
 
@@ -20,6 +21,8 @@ export function ConversationList({
   onSelect?: () => void;
 }) {
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const { current: activeMenu, closing: menuClosing } = useStickyPresence(menu, 140);
+  const [leavingId, setLeavingId] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<Conversation | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -101,9 +104,14 @@ export function ConversationList({
   };
 
   const renderItem = (conversation: Conversation) => (
-    <li key={conversation.id}>
-      <button
-        className="conversation-item"
+    <li
+      key={conversation.id}
+      className="collapsible-row"
+      data-leaving={leavingId === conversation.id ? "true" : undefined}
+    >
+      <div className="collapsible-row-inner">
+        <button
+          className="conversation-item"
         aria-current={conversation.id === studio.conversationId ? "true" : undefined}
         title={`${conversation.title}（右键管理）`}
         onContextMenu={(event) => openContextMenu(event, conversation)}
@@ -122,10 +130,11 @@ export function ConversationList({
       >
         <MessageSquare size={15} aria-hidden="true" />
         <span>{conversation.title}</span>
-        {studio.activeRun?.conversationId === conversation.id && (
-          <span className="running-mark" aria-label="生成中" />
-        )}
-      </button>
+          {studio.activeRun?.conversationId === conversation.id && (
+            <span className="running-mark" aria-label="生成中" />
+          )}
+        </button>
+      </div>
     </li>
   );
 
@@ -257,19 +266,20 @@ export function ConversationList({
         {studio.desktop ? "会话自动保存在本机（右键可管理）" : "浏览器仅供界面预览"}
       </p>
 
-      {menu && (
+      {activeMenu && (
         <div
           className="conversation-context-menu"
+          data-closing={menuClosing || undefined}
           role="menu"
           aria-label="会话操作菜单"
-          style={{ left: menu.x, top: menu.y }}
+          style={{ left: activeMenu.x, top: activeMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
           <button
             type="button"
             role="menuitem"
             onClick={() => {
-              const target = menu.conversation;
+              const target = activeMenu.conversation;
               setMenu(null);
               setRenameTarget(target);
               setRenameTitle(target.title);
@@ -284,28 +294,33 @@ export function ConversationList({
             type="button"
             role="menuitem"
             onClick={() => {
-              const target = menu.conversation;
+              const target = activeMenu.conversation;
               const nextArchived = !target.archived;
               setMenu(null);
-              void studio
-                .archiveConversation(target.id, nextArchived)
-                .then(() => notify(nextArchived ? `已归档「${target.title}」` : `已取消归档「${target.title}」`))
-                .catch(studio.reportError);
+              const animate = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+              if (animate) setLeavingId(target.id);
+              window.setTimeout(() => {
+                void studio
+                  .archiveConversation(target.id, nextArchived)
+                  .then(() => notify(nextArchived ? `已归档「${target.title}」` : `已取消归档「${target.title}」`))
+                  .catch(studio.reportError)
+                  .finally(() => setLeavingId((cur) => (cur === target.id ? null : cur)));
+              }, animate ? 160 : 0);
             }}
           >
-            {menu.conversation.archived ? (
+            {activeMenu.conversation.archived ? (
               <ArchiveRestore size={14} aria-hidden="true" />
             ) : (
               <Archive size={14} aria-hidden="true" />
             )}
-            {menu.conversation.archived ? "取消归档" : "归档"}
+            {activeMenu.conversation.archived ? "取消归档" : "归档"}
           </button>
           <button
             type="button"
             role="menuitem"
             className="danger-item"
             onClick={() => {
-              const target = menu.conversation;
+              const target = activeMenu.conversation;
               setMenu(null);
               setDeleteTarget(target);
               setDeleteError(null);
@@ -400,16 +415,27 @@ export function ConversationList({
               disabled={deleting}
               onClick={() => {
                 if (!deleteTarget) return;
+                const target = deleteTarget;
                 setDeleting(true);
                 setDeleteError(null);
-                void studio
-                  .deleteConversation(deleteTarget.id)
-                  .then(() => {
-                    deleteDialog.current?.close();
-                    notify(`已删除对话「${deleteTarget.title}」`);
-                  })
-                  .catch((value) => setDeleteError(errorText(value)))
-                  .finally(() => setDeleting(false));
+                const animate = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                if (animate) setLeavingId(target.id);
+                deleteDialog.current?.close();
+                window.setTimeout(() => {
+                  void studio
+                    .deleteConversation(target.id)
+                    .then(() => {
+                      notify(`已删除对话「${target.title}」`);
+                    })
+                    .catch((value) => {
+                      setLeavingId((cur) => (cur === target.id ? null : cur));
+                      studio.reportError(value);
+                    })
+                    .finally(() => {
+                      setDeleting(false);
+                      setLeavingId((cur) => (cur === target.id ? null : cur));
+                    });
+                }, animate ? 160 : 0);
               }}
             >
               {deleting ? "正在删除…" : "确认删除"}

@@ -24,6 +24,7 @@ export function MemoryCandidatesBar({
   onResolved?: () => void;
 }) {
   const [items, setItems] = useState<MemoryCandidate[]>([]);
+  const [leavingIds, setLeavingIds] = useState<Set<string>>(() => new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -94,7 +95,20 @@ export function MemoryCandidatesBar({
         action,
         editedContent: editedContent ?? null,
       });
-      setItems((prev) => prev.filter((row) => row.id !== item.id));
+      const animate = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (animate) {
+        setLeavingIds((prev) => new Set(prev).add(item.id));
+        window.setTimeout(() => {
+          setItems((prev) => prev.filter((row) => row.id !== item.id));
+          setLeavingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(item.id);
+            return next;
+          });
+        }, 180);
+      } else {
+        setItems((prev) => prev.filter((row) => row.id !== item.id));
+      }
       if (editingId === item.id) setEditingId(null);
       onResolved?.();
       if (action === "accept") {
@@ -119,9 +133,12 @@ export function MemoryCandidatesBar({
     }
   }
 
+  const allLeaving = items.length > 0 && items.every((row) => leavingIds.has(row.id));
+
   return (
     <section
       className="memory-candidates-bar"
+      data-leaving={allLeaving ? "true" : undefined}
       aria-label="发现可记住的偏好与事实"
       style={{
         margin: "8px 0",
@@ -145,20 +162,25 @@ export function MemoryCandidatesBar({
       <ul className="task-list" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         {items.map((item) => {
           const editing = editingId === item.id;
+          const isLeaving = leavingIds.has(item.id);
           const hasConflict = Boolean(item.replacesNodeId || item.replacesValue);
           return (
             <li
               key={item.id}
-              className="task-line"
-              style={{
-                alignItems: "flex-start",
-                gap: "8px",
-                flexWrap: "wrap",
-                padding: hasConflict ? "8px 10px" : undefined,
-                borderRadius: hasConflict ? "var(--radius-inset)" : undefined,
-                background: hasConflict ? "var(--warning-bg)" : undefined,
-              }}
+              className="collapsible-row"
+              data-leaving={isLeaving ? "true" : undefined}
             >
+              <div
+                className="collapsible-row-inner task-line"
+                style={{
+                  alignItems: "flex-start",
+                  gap: "8px",
+                  flexWrap: "wrap",
+                  padding: hasConflict ? "8px 10px" : undefined,
+                  borderRadius: hasConflict ? "var(--radius-inset)" : undefined,
+                  background: hasConflict ? "var(--warning-bg)" : undefined,
+                }}
+              >
               <div style={{ flex: "1 1 260px", display: "flex", flexDirection: "column", gap: "4px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                   <StatusLabel tone={hasConflict ? "warning" : item.scope === "workspace_fact" ? "neutral" : "success"}>
@@ -234,6 +256,7 @@ export function MemoryCandidatesBar({
                   <X size={14} aria-hidden="true" />
                   忽略
                 </button>
+              </div>
               </div>
             </li>
           );

@@ -58,7 +58,16 @@ function sync() {
       element.parentElement?.style.setProperty("--dialog-order", String(index));
     });
   } else {
-    backdrop?.remove(); backdrop = null;
+    if (backdrop) {
+      const closing = backdrop;
+      backdrop = null;
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        closing.remove();
+      } else {
+        closing.dataset.closing = "true";
+        window.setTimeout(() => closing.remove(), 170);
+      }
+    }
     previousInert.forEach((inert, element) => { element.inert = inert; }); previousInert.clear();
     document.removeEventListener("keydown", keyboard);
     document.removeEventListener("focusin", keepFocus);

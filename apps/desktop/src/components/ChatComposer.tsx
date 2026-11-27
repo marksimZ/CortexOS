@@ -23,6 +23,7 @@ import { cloudPresetForAddress } from "../cloud-presets";
 import { SelectMenu } from "./SelectMenu";
 import { errorText, type MessageImage, type Studio } from "../studio";
 import { cloudConnectionLabel, type GenerationTarget, type RuntimeConnection } from "../runtime-profiles";
+import { useExitPresence, useStickyPresence } from "../use-presence";
 
 const ALLOWED_IMAGE_TYPES = new Set<MessageImage["mimeType"]>([
   "image/png",
@@ -153,12 +154,20 @@ export function ChatComposer({
   const [previewAttachment, setPreviewAttachment] = useState<MessageImage | null>(null);
   const [styleOpen, setStyleOpen] = useState(false);
   const [webImportOpen, setWebImportOpen] = useState(false);
+  const stylePresence = useExitPresence(styleOpen, 150);
+  const webPresence = useExitPresence(webImportOpen, 150);
   const [webUrlInput, setWebUrlInput] = useState("");
   const [webImporting, setWebImporting] = useState(false);
   const [webImportError, setWebImportError] = useState("");
   const styleAnchorRef = useRef<HTMLDivElement>(null);
   const webAnchorRef = useRef<HTMLDivElement>(null);
-  const detectedUrl = studio.draft.match(/https?:\/\/[^\s<>()]+/i)?.[0];
+  const detectedUrl = studio.draft.match(/https?:\/\/[^\s<>()]+/i)?.[0] ?? null;
+  const showUrlBar = Boolean(studio.desktop && studio.workspaceId && detectedUrl && !webImportOpen);
+  const urlBarPresence = useStickyPresence(showUrlBar ? detectedUrl : null, 180);
+  const imageStripPresence = useStickyPresence(
+    studio.draftImages.length > 0 ? studio.draftImages : null,
+    180,
+  );
   const attachmentDialog = useRef<HTMLDialogElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const taskPreview = taskDraft === "briefing" ? "预览新闻简报" : taskDraft === "reminder" ? "预览提醒" : undefined;
@@ -304,20 +313,25 @@ export function ChatComposer({
   return (
     <div className="composer-area">
       <div className="composer">
-        {studio.draftImages.length > 0 && (
+        {imageStripPresence.current && (
           <div
-            className="composer-image-strip"
-            aria-label="待发送图片附件"
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "8px",
-              padding: "4px 4px 8px",
-              borderBottom: "1px solid var(--line)",
-              marginBottom: "6px",
-            }}
+            className="collapsible-strip"
+            data-open={!imageStripPresence.closing ? "true" : "false"}
           >
-            {studio.draftImages.map((img, idx) => (
+            <div className="collapsible-strip-inner">
+              <div
+                className="composer-image-strip"
+                aria-label="待发送图片附件"
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                  padding: "4px 4px 8px",
+                  borderBottom: "1px solid var(--line)",
+                  marginBottom: "6px",
+                }}
+              >
+                {imageStripPresence.current.map((img, idx) => (
               <div
                 key={idx}
                 style={{
@@ -382,6 +396,8 @@ export function ChatComposer({
                 </button>
               </div>
             ))}
+              </div>
+            </div>
           </div>
         )}
         <label className="sr-only" htmlFor="message">
@@ -448,20 +464,27 @@ export function ChatComposer({
             )}
           </div>
         )}
-        {studio.desktop && studio.workspaceId && detectedUrl && !webImportOpen && (
-          <div className="composer-url-bar">
-            <span className="composer-url-bar-meta" title={detectedUrl}>
-              <Link2 size={14} aria-hidden="true" />
-              <span>检测到网页链接：{detectedUrl}</span>
-            </span>
-            <button
-              type="button"
-              className="button secondary"
-              disabled={webImporting || studio.sending || studio.loadingMessages}
-              onClick={() => void importWebUrl(detectedUrl)}
-            >
-              {webImporting ? "抓取中…" : "抓取正文并挂载"}
-            </button>
+        {urlBarPresence.current && (
+          <div
+            className="collapsible-strip"
+            data-open={!urlBarPresence.closing ? "true" : "false"}
+          >
+            <div className="collapsible-strip-inner">
+              <div className="composer-url-bar">
+                <span className="composer-url-bar-meta" title={urlBarPresence.current}>
+                  <Link2 size={14} aria-hidden="true" />
+                  <span>检测到网页链接：{urlBarPresence.current}</span>
+                </span>
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={webImporting || studio.sending || studio.loadingMessages}
+                  onClick={() => void importWebUrl(urlBarPresence.current!)}
+                >
+                  {webImporting ? "抓取中…" : "抓取正文并挂载"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
         <div className="composer-toolbar">
@@ -575,9 +598,10 @@ export function ChatComposer({
               >
                 <Link2 size={17} aria-hidden="true" />
               </button>
-              {webImportOpen && (
+              {webPresence.mounted && (
                 <div
                   className="composer-web-popover"
+                  data-closing={webPresence.closing || undefined}
                   role="dialog"
                   aria-label="导入网页正文并挂载"
                 >
@@ -665,9 +689,10 @@ export function ChatComposer({
               >
                 <SlidersHorizontal size={17} aria-hidden="true" />
               </button>
-              {styleOpen && (
+              {stylePresence.mounted && (
                 <div
                   className="composer-style-popover"
+                  data-closing={stylePresence.closing || undefined}
                   role="dialog"
                   aria-label="回答风格与生成参数设置"
                 >

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Cloud } from "lucide-react";
 import { cloudPresetForAddress, cloudPresets } from "../cloud-presets";
+import { emitCloudConnectionsChanged } from "../model-usage-preference";
 import { errorText } from "../studio";
 import { SelectMenu } from "./SelectMenu";
 import { CloudKnowledgeSettings } from "./CloudKnowledgeSettings";
@@ -99,6 +100,7 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
       await invoke("bind_runtime_cloud_key", { workspaceId, connectionId: connection.id, apiKey });
       form.reset();
       update({ ...connection, credentialAvailable: true });
+      emitCloudConnectionsChanged(workspaceId);
       setNotice("密钥已在本机绑定。可以刷新模型列表检查连接。");
     });
   }
@@ -122,6 +124,7 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
       form.reset();
       setProvider("openai");
       setAdding(false);
+      emitCloudConnectionsChanged(workspaceId);
       setNotice("已保存连接。");
     });
   }
@@ -218,6 +221,7 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
             const remaining = connections.filter(item => item.id !== connection.id);
             setConnections(remaining);
             selectConnection(remaining[0]);
+            emitCloudConnectionsChanged(workspaceId);
             setNotice("已移除连接。");
           })}>确认移除</button>
           <button type="button" className="button text-button" onClick={() => setPending(undefined)}>取消</button>
@@ -227,6 +231,7 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
           <button type="button" className="button secondary" disabled={busy || connection.credentialAvailable === false} onClick={() => void run(async () => {
             const row = await invoke<Connection>("refresh_runtime_cloud_catalog", { workspaceId, connectionId: connection.id });
             update(row);
+            emitCloudConnectionsChanged(workspaceId);
             if (model && model !== manual && !row.models.some(item => item.id === model)) { setManualModel(model); setModel(manual); }
           })}>刷新模型列表</button>
           <span>{connection.credentialAvailable === false ? "等待绑定密钥" : <>目录{connection.catalogState === "verified" ? "已读取" : stateLabel(connection.catalogState)}{connection.catalogCheckedAt && "，" + time(connection.catalogCheckedAt)}</>}</span>
@@ -274,6 +279,7 @@ export function CloudRuntimeSettings({ workspaceId }: { workspaceId: string }) {
             <p>用固定测试文本验证「{roles[pending]}」。服务商可能收费。</p>
             <button type="button" className="button secondary" disabled={busy} onClick={() => void run(async () => {
               update(await invoke<Connection>("probe_runtime_cloud_model", { workspaceId, connectionId: connection.id, model: modelId, capability: pending }));
+              emitCloudConnectionsChanged(workspaceId);
             })}>开始验证</button>
             <button type="button" className="button text-button" onClick={() => setPending(undefined)}>取消</button>
           </div>}

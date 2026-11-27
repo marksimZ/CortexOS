@@ -22,6 +22,7 @@ import { errorText } from "./frontend-error";
 import { preference, remember } from "./preferences";
 import type { CloudConsent, GenerationTarget } from "./runtime-profiles";
 import type { RunSummary, Workspace } from "./studio";
+import { useExitPresence, useStickyPresence } from "./use-presence";
 import "./styles/tokens.css";
 import "./styles/layout.css";
 import "./styles/controls.css";
@@ -138,10 +139,17 @@ export function QuickBar() {
     };
   }, [desktop, syncWorkspaces, hideWindow, answer, error]);
 
+  const wantExpanded = Boolean(asking || answer || error);
+  const answerPresence = useExitPresence(wantExpanded, 150);
+  const feedbackPresence = useStickyPresence(savedFeedback, 140);
+
   useEffect(() => {
-    const wantExpanded = Boolean(asking || answer || error);
-    setHeight(wantExpanded ? EXPANDED_HEIGHT : COMPACT_HEIGHT);
-  }, [asking, answer, error, setHeight]);
+    if (wantExpanded) {
+      setHeight(EXPANDED_HEIGHT);
+    } else if (!answerPresence.mounted) {
+      setHeight(COMPACT_HEIGHT);
+    }
+  }, [wantExpanded, answerPresence.mounted, setHeight]);
 
   const resetConversationState = () => {
     setAnswer("");
@@ -500,8 +508,10 @@ export function QuickBar() {
         )}
       </form>
 
-      {savedFeedback && (
+      {feedbackPresence.current && (
         <div
+          className="quickbar-saved-feedback"
+          data-closing={feedbackPresence.closing || undefined}
           role="status"
           style={{
             padding: "0 14px 8px",
@@ -513,12 +523,14 @@ export function QuickBar() {
           }}
         >
           <Check size={14} aria-hidden="true" />
-          {savedFeedback}
+          {feedbackPresence.current}
         </div>
       )}
 
-      {(asking || answer || error) && (
+      {answerPresence.mounted && (
         <div
+          className="quickbar-answer-panel"
+          data-closing={answerPresence.closing || undefined}
           style={{
             flex: 1,
             minHeight: 0,
